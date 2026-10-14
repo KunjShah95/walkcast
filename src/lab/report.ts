@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import type { NetworkEvent, StepEvent, TraceEvent } from "../capture/recorder.ts";
 import type { RunResult } from "./runner.ts";
 import type { CreateLeadTask } from "./task.ts";
+import { scrubText } from "../capture/secrets.ts";
 
 /** Human-readable diagnostic report: verdict, findings with cited steps, then the step timeline. */
 export function writeRunReport(result: RunResult, events: TraceEvent[], task: CreateLeadTask): string {
@@ -54,7 +55,7 @@ export function writeRunReport(result: RunResult, events: TraceEvent[], task: Cr
   lines.push("");
 
   const file = join(result.runDir, "report.md");
-  writeFileSync(file, lines.join("\n"));
+  writeFileSync(file, scrubText(lines.join("\n")));
   return file;
 }
 

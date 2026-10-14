@@ -198,6 +198,8 @@ npm run lab -- ui-export --out failure-lab.html --max-runs 40 --screenshot-runs 
 ![Overview](docs/screenshots/overview.png)
 ![Run: agent said vs app recorded, diagnosis](docs/screenshots/run.png)
 ![Timeline (dark)](docs/screenshots/timeline-dark.png)
+![Simulator](docs/screenshots/simulator.png)
+![Compare: baseline vs candidate](docs/screenshots/compare.png)
 
 - **Overview:** how many runs failed and how many claimed success anyway. An agent × fault matrix
   (latest verdict per cell). A said/recorded quadrant comparing the agent's claim with the app's
@@ -229,6 +231,14 @@ patterns follow Aceternity UI's idioms (sticky-header timeline with scroll beam,
 cursor spotlight cards), reimplemented here with Tailwind and Motion. Stack: Vite, React 19,
 Tailwind 4, Motion; built to a single file.
 
+## Secrets
+
+Credentials the harness gives an agent are registered as secrets. Before anything is written to
+disk (traces, reports, results, model cassettes), each value is replaced with a
+`{{secret:name}}` placeholder. Replay restores the real values in memory only, so a cassette never
+holds a secret and a replayed run can still sign in. Request hashes are computed on the scrubbed
+form.
+
 ## Lessons from building it (real failures of the harness itself)
 
 - **Capture changed agent timing.** Snapshotting the page after a click (`page.title()` and
@@ -246,6 +256,15 @@ Tailwind 4, Motion; built to a single file.
 - **Ignored action failures were invisible.** `act()` returned `success: false` for a dropdown, the
   agent submitted anyway and claimed success, and no rule explained it. That led to the new
   `action-failed` rule.
+- **The pairs grid exposed an oracle bug.** "Honest failure" on an impossible task passed even when
+  the agent's blind retries had left duplicate leads behind. Impossible tasks now pass only if the
+  agent leaves no collateral damage. `lab rediagnose` re-applied the fixed rules to every stored
+  run (4 verdicts changed). The grid also exposed a missing label, now `missed-success` (records
+  show success, the agent reported failure).
+- **Credentials leaked into recordings.** Redaction keyed on argument names missed a password
+  typed through a generic `value` argument or written inside a Stagehand instruction. It had
+  reached 831 files across runs, fixtures and results. Fixed with value-based scrubbing (see
+  Secrets).
 - **A retry during a pending navigation doesn't double-submit in Playwright.** Duplicates came from
   the realistic path instead: the backend commits, the gateway returns 504, and the agent retries.
 

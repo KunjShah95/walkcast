@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Stagehand, localBrowser } from "@browserbasehq/stagehand";
 import { type Scenario, normalizeScenario, scenarioTaskPossible } from "../app/faults.ts";
-import { startApp } from "../app/server.ts";
+import { CREDENTIALS, startApp } from "../app/server.ts";
+import { registerSecret, scrub } from "../capture/secrets.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
 import { runScriptedAgent } from "../agents/scripted.ts";
 import { runStagehandAgent } from "../agents/stagehand-agent.ts";
@@ -87,6 +88,8 @@ interface Session {
   browserVersion: string;
 }
 
+registerSecret("app_password", CREDENTIALS.password);
+
 export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
@@ -157,7 +160,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     browserVersion: session.browserVersion,
     runDir,
   };
-  writeFileSync(join(runDir, "result.json"), JSON.stringify({ ...result, appState: app.state }, null, 2));
+  writeFileSync(join(runDir, "result.json"), JSON.stringify(scrub({ ...result, appState: app.state }), null, 2));
   writeRunReport(result, recorder.events, task);
   return result;
 }

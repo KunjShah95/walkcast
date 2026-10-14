@@ -1,4 +1,6 @@
-import { mkdirSync, readdirSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { diagnose } from "./lab/classifier.ts";
+import { writeRunReport } from "./lab/report.ts";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { FAULTS, allScenarios, normalizeScenario } from "./app/faults.ts";
@@ -43,6 +45,7 @@ Commands:
   baseline save <runDir> --name n       Store a passing run as a baseline (baselines/n)
   check --against <baseline> --agent a --fault f
                                         Run, then diff against the baseline (workflow regression check)
+  rediagnose [dirs...]                  Re-apply the current classifier rules to stored runs (default runs/)
   providers                             List model providers and whether their API key is set
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
 
@@ -132,6 +135,39 @@ async function main(): Promise<number> {
       const report = diffDirs(against, join("runs", result.runDir.split(/[\\/]/).pop()!));
       printDiff(report);
       return report.broken.length || report.outcome.verdict[1] === "fail" ? 1 : 0;
+    }
+    case "rediagnose": {
+      // Re-apply the current classifier rules to stored recordings (trace + app state).
+      const roots = positionals.slice(1).length ? positionals.slice(1) : ["runs"];
+      let changed = 0;
+      let total = 0;
+      for (const root of roots) {
+        for (const name of existsSync(root) ? readdirSync(root) : []) {
+          const dir = join(root, name);
+          const resultPath = join(dir, "result.json");
+          if (!existsSync(resultPath)) continue;
+          const result = JSON.parse(readFileSync(resultPath, "utf8"));
+          const events = readFileSync(join(dir, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+          const before = JSON.stringify(result.diagnosis);
+          result.diagnosis = diagnose({
+            events,
+            oracle: result.oracle,
+            ledger: result.appState?.ledger ?? [],
+            leads: result.appState?.leads ?? [],
+            expectation: result.expectation,
+            requestedValues: createLeadTask().params,
+          });
+          total++;
+          if (JSON.stringify(result.diagnosis) !== before) {
+            changed++;
+            writeFileSync(resultPath, JSON.stringify(result, null, 2));
+            writeRunReport({ ...result, runDir: dir }, events, createLeadTask());
+            console.log(`${name}: ${JSON.parse(before).verdict} -> ${result.diagnosis.verdict}`);
+          }
+        }
+      }
+      console.log(`Re-diagnosed ${total} runs; ${changed} changed.`);
+      return 0;
     }
     case "providers": {
       console.log("Provider       Key        Endpoint / notes");

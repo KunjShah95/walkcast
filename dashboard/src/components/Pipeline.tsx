@@ -25,7 +25,7 @@ const NODES: NodeDef[] = [
   { id: "auth", x: 600, y: 370, title: "Session", icon: DoorClosed },
   { id: "api", x: 425, y: 370, title: "Leads API", icon: Server },
   { id: "db", x: 250, y: 370, title: "Database", icon: Database },
-  { id: "oracle", x: 775, y: 80, title: "Oracle", icon: ShieldCheck },
+  { id: "oracle", x: 80, y: 370, title: "Oracle", icon: ShieldCheck },
 ];
 
 const W = 130;
@@ -37,8 +37,7 @@ function edgePath(from: string, to: string): string | null {
   const a = pos[from];
   const b = pos[to];
   if (!a || !b) return null;
-  if (from === "agent" && to === "oracle") return `M ${a.x} ${a.y - H / 2} C ${a.x} 150, ${b.x - 160} ${b.y}, ${b.x - W / 2} ${b.y}`;
-  if (from === "db" && to === "oracle") return `M ${a.x - W / 2} ${a.y} C 120 ${a.y}, 120 20, ${b.x - 100} 20 S ${b.x} 40, ${b.x} ${b.y - H / 2}`;
+  if (from === "agent" && to === "oracle") return `M ${a.x - 30} ${a.y + H / 2} C ${a.x - 30} ${a.y + 80}, ${b.x} ${b.y - 80}, ${b.x} ${b.y - H / 2}`;
   if (from === "agent" && to === "browser") return `M ${a.x + W / 2} ${a.y + 10} C ${a.x + 120} ${a.y + 60}, ${b.x - 120} ${b.y + 60}, ${b.x - W / 2} ${b.y + 10}`;
   const horizontal = a.y === b.y;
   const sx = horizontal ? a.x + Math.sign(b.x - a.x) * (W / 2) : a.x;
@@ -122,7 +121,7 @@ export function Pipeline({
           <path d="M0,0 L8,4 L0,8 z" fill="var(--ink-3)" />
         </marker>
       </defs>
-      <text x={40} y={300} className="fill-ink-3 font-mono text-[10px] uppercase tracking-[0.08em]">
+      <text x={20} y={140} className="fill-ink-3 font-mono text-[10px] uppercase tracking-[0.08em]">
         agent side
       </text>
       <text x={700} y={432} className="fill-ink-3 font-mono text-[10px] uppercase tracking-[0.08em]">

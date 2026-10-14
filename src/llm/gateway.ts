@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClientLLM } from "@browserbasehq/stagehand";
 import type { Recorder } from "../capture/recorder.ts";
+import { scrub, unscrub } from "../capture/secrets.ts";
 
 /**
  * Every model call made during a run goes through this gateway, whichever component makes it:
@@ -121,7 +122,9 @@ export class ModelGateway {
         drift = true;
         this.status.drifted.push({ channel, seq });
       }
-      response = channel === "stagehand" ? remapElementIds(entry.request, request, entry.response) : entry.response;
+      // Cassettes hold placeholders, never secrets; restore them only in memory.
+      const recordedResponse = unscrub(entry.response);
+      response = channel === "stagehand" ? remapElementIds(unscrub(entry.request), request, recordedResponse) : recordedResponse;
       model = `replay:${entry.model}`;
     } else {
       response = await live(this.backend!);
@@ -150,7 +153,7 @@ export class ModelGateway {
   }
 
   writeCassette(path: string): void {
-    writeFileSync(path, this.entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+    writeFileSync(path, this.entries.map((e) => JSON.stringify(scrub(e))).join("\n") + "\n");
   }
 }
 
@@ -173,7 +176,7 @@ export function normalizeText(text: string): string {
 }
 
 function hashRequest(channel: Channel, request: unknown): string {
-  const normalized = normalizeText(JSON.stringify(stripVolatile(request)));
+  const normalized = normalizeText(JSON.stringify(stripVolatile(scrub(request))));
   return createHash("sha256").update(channel + normalized).digest("hex").slice(0, 16);
 }
 

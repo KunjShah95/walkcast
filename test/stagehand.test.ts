@@ -26,6 +26,13 @@ describe("Claude-style tool loop + Stagehand act()", { skip: chrome ? false : "L
     assert.equal(cassette.length, r.modelCalls);
     assert.ok(cassette.some((l) => l.includes('"channel":"stagehand"')), "Stagehand's own model calls go through the gateway");
 
+    // The app password is handed to the agent, yet never reaches disk; replay restores it in memory.
+    for (const file of ["trace.jsonl", "model-calls.jsonl", "result.json", "report.md"]) {
+      const text = readFileSync(join(r.runDir, file), "utf8");
+      assert.ok(!text.includes("demo-pass"), `${file} contains the password`);
+    }
+    assert.ok(cassette.some((l) => l.includes("{{secret:app_password}}")), "placeholder recorded instead");
+
     const fixture = await writeFixture(r, task, join(out, "fixtures"));
     const replay = await replayFixture(loadFixture(fixture.dir), "sh-p0", 2, out);
     assert.equal(replay.modelMode, "replay");

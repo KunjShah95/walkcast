@@ -29,7 +29,7 @@
 | 1 | 63–123 | goto | `{"path":"/leads/new"}` | blank `7a033d584357` → /login `46dbb23d2fc6` | GET /leads/new → 303<br>GET /login → 200 |  |
 | 2 | 123–153 | observe | `{}` | /login `46dbb23d2fc6` → /login `46dbb23d2fc6` |  |  |
 | 3 | 153–219 | fill | `{"index":0,"name":"Username","value":"demo"}` | /login `46dbb23d2fc6` → /login `46dbb23d2fc6` |  | target: observed 'Username' (step 2, 68 ms ago), at action 'Username' |
-| 4 | 219–247 | fill | `{"index":1,"name":"Password","value":"demo-pass"}` | /login `46dbb23d2fc6` → /login `46dbb23d2fc6` |  | target: observed 'Password' (step 2, 97 ms ago), at action 'Password' |
+| 4 | 219–247 | fill | `{"index":1,"name":"Password","value":"{{secret:app_password}}"}` | /login `46dbb23d2fc6` → /login `46dbb23d2fc6` |  | target: observed 'Password' (step 2, 97 ms ago), at action 'Password' |
 | 5 | 247–312 | click | `{"index":2,"name":"Sign in"}` | /login `46dbb23d2fc6` → - `-` | POST /login → 303<br>GET /leads/new → 200 | target: observed 'Sign in' (step 2, 126 ms ago), at action 'Sign in' |
 | 6 | 312–339 | waitForNavigation | `{"timeoutMs":5000}` | /login `75f3b7f4bdb8` → /leads/new `75f3b7f4bdb8` |  |  |
 | 7 | 339–353 | observe | `{}` | /leads/new `75f3b7f4bdb8` → /leads/new `75f3b7f4bdb8` |  |  |

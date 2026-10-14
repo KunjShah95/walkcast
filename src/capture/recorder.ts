@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright";
+import { scrub } from "./secrets.ts";
 
 /** Page state snapshot taken before and after every tool call. */
 export interface PageState {
@@ -166,7 +167,7 @@ export class Recorder {
 
   flush(): string {
     const path = join(this.runDir, "trace.jsonl");
-    writeFileSync(path, this.events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+    writeFileSync(path, this.events.map((e) => JSON.stringify(scrub(e))).join("\n") + "\n");
     return path;
   }
 }
