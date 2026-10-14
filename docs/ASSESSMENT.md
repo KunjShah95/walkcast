@@ -532,3 +532,23 @@ Read them before citing any as primary.
 - Momentic, QA Wolf; Octomind (reported shut down in 2026).
 - LangSmith and Braintrust trace→dataset (vendor-authored comparisons).
   https://www.braintrust.dev/articles/langsmith-vs-braintrust
+
+---
+
+## Addendum (2026-10-14): community research and the v0.1 build
+
+The team's follow-up research (Hacker News, Reddit and Product Hunt; I haven't independently opened
+these sources) adds three points to this assessment:
+
+- **Stale state after an interaction** (modals, re-renders, layout shifts) is a recurring complaint.
+  → v0.1 records page state before and after *every* action and checks target identity at action time.
+- **Authentication and session continuity** are first-order problems. → `session-expiry` fault and the
+  `auth-lost` rule.
+- **Recording-plus-report products already exist**: Replay QA, BrowserOS neo, Trainer, Ripplica and
+  "Fire Your QA Today". → Recording isn't the differentiator. Ground-truth oracles, deterministic
+  causes and failure→fixture→pass^k are. A Manifest maker on Product Hunt reportedly agreed that
+  "compare against a stored baseline and identify which locators broke" would be valuable, which
+  matches the `ui-drift` fixture path.
+
+The v0.1 harness described in the README implements §7 with **scripted** agents. Results are in
+`results/`. They validate the harness only; the LLM-agent arm of §7 is still to be run.
