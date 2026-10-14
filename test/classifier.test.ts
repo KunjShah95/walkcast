@@ -101,3 +101,18 @@ test("a failure no rule explains is flagged for review, not guessed", () => {
   assert.deepEqual(causes(d), ["unexplained"]);
   assert.equal(d.findings.find((f) => f.label === "unexplained")?.confidence, "needs-review");
 });
+
+test("an act step that reported failure and was never redone is 'action-failed'", () => {
+  const failed = step(9, "act", { args: { instruction: "select Priya Shah from the Owner dropdown" }, result: { success: false, message: "No action found" } });
+  const d = run([failed, post(10, 100, 303, { ...body, owner: "" }), claim(true)], {
+    leads: [lead(1001, "Unassigned")],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body: { ...body, owner: "" }, outcome: "committed", leadId: 1001 }],
+  });
+  assert.ok(causes(d).includes("action-failed"));
+  const redone = step(11, "act", { args: { instruction: "select Priya Shah from the Owner dropdown" }, result: { success: true, message: "ok" } });
+  const d2 = run([failed, redone, post(12, 100, 303), claim(true)], {
+    leads: [lead(1001)],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 }],
+  });
+  assert.equal(d2.verdict, "pass");
+});

@@ -11,6 +11,7 @@ export type FindingLabel =
   | "stale-observation"
   | "navigation-timeout"
   | "unsafe-retry"
+  | "action-failed"
   | "auth-lost"
   | "locator-not-found"
   | "app-dropped-field"
@@ -139,7 +140,25 @@ export function diagnose(input: ClassifierInput): Diagnosis {
     }
   }
 
-  const authRejected =ledger.filter((e) => e.outcome === "rejected-auth");
+  // The framework reported an action as failed and the agent carried on without redoing it.
+  for (const step of steps) {
+    const outcome = step.result as { success?: unknown; message?: unknown } | undefined;
+    if (step.tool !== "act" || outcome?.success !== false) continue;
+    const redone = steps.some(
+      (s) => s.stepId > step.stepId && s.tool === "act" && s.args.instruction === step.args.instruction && (s.result as { success?: unknown } | undefined)?.success === true,
+    );
+    if (!redone) {
+      findings.push({
+        label: "action-failed",
+        kind: "cause",
+        confidence: "rule",
+        explanation: `Step ${step.stepId} ("${String(step.args.instruction)}") reported failure (${String(outcome.message)}) and was never successfully retried; the agent continued anyway.`,
+        evidenceSteps: [step.stepId],
+      });
+    }
+  }
+
+  const authRejected = ledger.filter((e) => e.outcome === "rejected-auth");
   const loginRedirects = requests.filter((r) => r.redirectedTo?.startsWith("/login") && r.stepId > 1);
   if (authRejected.length > 0 || loginRedirects.length > 0) {
     findings.push({

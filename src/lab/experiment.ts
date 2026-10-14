@@ -1,10 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FAULTS, type FaultId } from "../app/faults.ts";
-import { AGENTS } from "../agents/scripted.ts";
+import { resolveAgent } from "../agents/registry.ts";
+import type { GatewayMode } from "../llm/gateway.ts";
+import type { ModelSelection } from "../llm/model-spec.ts";
 import { causes, type FindingLabel } from "./classifier.ts";
 import { replayFixture, writeFixture, type Fixture, type ReplaySummary } from "./fixture.ts";
-import { browser, runOnce, type RunResult } from "./runner.ts";
+import { runOnce, type RunResult } from "./runner.ts";
 import { createLeadTask } from "./task.ts";
 
 /** The cause each injected fault should be attributed to, and other causes that are also correct. */
@@ -24,10 +26,14 @@ export interface ExperimentOptions {
   baseline: string;
   candidates: string[];
   outDir: string;
+  /** LLM agents: model mode for new runs (default live). Fixture replays follow replayFixture's default. */
+  modelMode?: GatewayMode;
+  models?: ModelSelection;
 }
 
 export async function runExperiment(options: ExperimentOptions): Promise<string> {
   const { seeds, trials, concurrency, baseline, candidates, outDir } = options;
+  const mode = { ...(options.modelMode ? { modelMode: options.modelMode } : {}), ...(options.models ? { models: options.models } : {}) };
   const runsDir = join(outDir, "runs");
   const fixturesDir = join(outDir, "fixtures");
   mkdirSync(fixturesDir, { recursive: true });
@@ -39,7 +45,7 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   // ---- Phase 1: baseline runs, diagnosis accuracy and false positives
   log(`phase 1: ${faults.length} faults × ${seeds} seeds with baseline ${baseline}`);
   const jobs = faults.flatMap((fault) => Array.from({ length: seeds }, (_, i) => ({ fault, seed: i + 1 })));
-  const baselineRuns = await pool(jobs, concurrency, (j) => runOnce({ fault: j.fault, seed: j.seed, agent: baseline, task, outDir: runsDir }));
+  const baselineRuns = await pool(jobs, concurrency, (j) => runOnce({ fault: j.fault, seed: j.seed, agent: baseline, task, outDir: runsDir, ...mode }));
 
   const detection = faults.map((fault) => {
     const runs = baselineRuns.filter((r) => r.fault === fault);
@@ -69,11 +75,11 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const comparisons: ReplaySummary[] = [...reproduction];
   for (const agent of candidates) {
     log(`phase 3: replaying ${fixtures.length} fixtures × ${trials} trials with ${agent}`);
-    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir))));
+    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir, { ...(options.modelMode === "scripted" ? { modelMode: "scripted" as const } : {}), ...(options.models ? { models: options.models } : {}) }))));
   }
   log(`phase 3: control runs (fault=none) for ${candidates.join(", ")}`);
   const controlJobs = candidates.flatMap((agent) => Array.from({ length: seeds }, (_, i) => ({ agent, seed: i + 1 })));
-  const controls = await pool(controlJobs, concurrency, (j) => runOnce({ fault: "none", seed: j.seed, agent: j.agent, task, outDir: runsDir }));
+  const controls = await pool(controlJobs, concurrency, (j) => runOnce({ fault: "none", seed: j.seed, agent: j.agent, task, outDir: runsDir, ...mode }));
 
   const summary = {
     meta: {
@@ -84,11 +90,12 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
       concurrency,
       baseline,
       candidates,
-      agents: Object.fromEntries([baseline, ...candidates].map((a) => [a, AGENTS[a]])),
-      browserVersion: (await browser()).version(),
+      agents: Object.fromEntries([baseline, ...candidates].map((a) => [a, resolveAgent(a)])),
+      modelMode: options.modelMode ?? null,
+      models: options.models ?? null,
+      browserVersion: baselineRuns[0]?.browserVersion ?? "unknown",
       node: process.version,
-      caveat:
-        "Agents are deterministic scripts, not LLMs. These numbers validate the harness (capture, oracle, classifier, fixtures, replay); they say nothing about LLM agent behaviour.",
+      caveat: caveat([baseline, ...candidates], options.modelMode),
     },
     detection,
     falsePositives: {
@@ -108,11 +115,24 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   return join(outDir, "summary.md");
 }
 
+function caveat(agents: string[], mode: GatewayMode | undefined): string {
+  const llm = agents.map(resolveAgent).some((a) => a.kind === "stagehand");
+  if (!llm) {
+    return "Agents are deterministic scripts, not LLMs. These numbers validate the harness (capture, oracle, classifier, fixtures, replay); they say nothing about LLM agent behaviour.";
+  }
+  if (mode === "scripted") {
+    return "Stagehand agents ran against the scripted stand-in model, not Claude. These numbers validate the Stagehand integration (agent loop, act(), model gateway, record/replay); they say nothing about model behaviour.";
+  }
+  return "Stagehand agents ran against a live model for new runs; fixture replays of the same agent used recorded model calls. Model behaviour varies between runs: read pass^k over trials, not single runs.";
+}
+
 function costSummary(runs: RunResult[], replays: ReplaySummary[]) {
   const durations = [...runs.map((r) => r.durationMs), ...replays.flatMap((r) => r.trials.map((t) => t.durationMs))].sort((a, b) => a - b);
   return {
     agentRuns: durations.length,
-    modelCalls: runs.reduce((n, r) => n + r.modelCalls, 0),
+    modelCalls: runs.reduce((n, r) => n + r.modelCalls, 0) + replays.reduce((n, r) => n + r.trials.reduce((m, t) => m + t.modelCalls, 0), 0),
+    liveInputTokens: runs.reduce((n, r) => n + (r.model?.mode === "live" ? r.model.inputTokens : 0), 0),
+    liveOutputTokens: runs.reduce((n, r) => n + (r.model?.mode === "live" ? r.model.outputTokens : 0), 0),
     medianRunMs: durations[Math.floor(durations.length / 2)] ?? 0,
     p95RunMs: durations[Math.floor(durations.length * 0.95)] ?? 0,
   };
@@ -159,7 +179,7 @@ function renderSummary(s: Summary): string {
     });
     lines.push(`| ${f} | ${cells.join(" | ")} |`);
   }
-  lines.push("", "## Cost", "", `Agent runs: ${s.cost.agentRuns} · model calls: ${s.cost.modelCalls} · median run: ${s.cost.medianRunMs} ms · p95 run: ${s.cost.p95RunMs} ms`, "");
+  lines.push("", "## Cost", "", `Agent runs: ${s.cost.agentRuns} · model calls: ${s.cost.modelCalls} (live tokens in/out: ${s.cost.liveInputTokens}/${s.cost.liveOutputTokens}) · median run: ${s.cost.medianRunMs} ms · p95 run: ${s.cost.p95RunMs} ms`, "");
   return lines.join("\n");
 }
 

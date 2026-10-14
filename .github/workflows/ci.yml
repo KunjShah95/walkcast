@@ -16,6 +16,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # Stagehand v4 loads its runtime as an extension over CDP, which needs a recent Chrome.
+      - name: Install Chrome for Testing
+        run: |
+          npx -y @puppeteer/browsers install chrome@stable --path "$HOME/cft" | tail -1 > cft.txt
+          echo "LAB_CHROME_PATH=$(awk '{print $2}' cft.txt)" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm test
 

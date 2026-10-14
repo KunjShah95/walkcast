@@ -39,14 +39,14 @@ export class BrowserTools {
   ) {}
 
   async goto(path: string): Promise<PageState | null> {
-    return this.step("goto", { path }, async () => {
+    return this.record("goto", { path }, async () => {
       await this.page.goto(new URL(path, this.baseUrl).toString(), { waitUntil: "load" });
       return this.state();
     });
   }
 
   async observe(): Promise<Observation> {
-    return this.step("observe", {}, async (stepId) => {
+    return this.record("observe", {}, async (stepId) => {
       const snapshot = await this.page.evaluate(observeInPage);
       const observation: Observation = {
         stepId,
@@ -63,9 +63,42 @@ export class BrowserTools {
     }, (o) => ({ elements: o.elements.length, fingerprint: o.fingerprint }));
   }
 
+  /**
+   * Wait until no requests are in flight and the URL has not changed for `quietMs`. Unlike
+   * "networkidle", this also covers a navigation that a click has scheduled but not yet started.
+   */
+  async waitForQuiet(quietMs = 300, timeoutMs = 8000): Promise<{ quiet: boolean; waitedMs: number }> {
+    let pending = 0;
+    const onRequest = () => pending++;
+    const onDone = () => (pending = Math.max(0, pending - 1));
+    this.page.on("request", onRequest);
+    this.page.on("requestfinished", onDone);
+    this.page.on("requestfailed", onDone);
+    const start = Date.now();
+    try {
+      let url = this.page.url();
+      let quietSince = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, 50));
+        if (pending > 0 || this.page.url() !== url) {
+          url = this.page.url();
+          quietSince = Date.now();
+        } else if (Date.now() - quietSince >= quietMs) {
+          await this.page.waitForLoadState("load", { timeout: Math.max(1, timeoutMs - (Date.now() - start)) }).catch(() => undefined);
+          return { quiet: true, waitedMs: Date.now() - start };
+        }
+      }
+      return { quiet: false, waitedMs: Date.now() - start };
+    } finally {
+      this.page.off("request", onRequest);
+      this.page.off("requestfinished", onDone);
+      this.page.off("requestfailed", onDone);
+    }
+  }
+
   /** Wait until the interactive DOM stops changing for `quietMs` (or `timeoutMs` passes). */
   async waitForSettle(quietMs: number, timeoutMs: number): Promise<{ settled: boolean; waitedMs: number }> {
-    return this.step("waitForSettle", { quietMs, timeoutMs }, async () => {
+    return this.record("waitForSettle", { quietMs, timeoutMs }, async () => {
       const start = Date.now();
       let last = await this.currentFingerprint();
       let lastChange = Date.now();
@@ -85,21 +118,21 @@ export class BrowserTools {
 
   async fill(index: number, value: string, from?: Observation): Promise<void> {
     const element = this.element(index, from);
-    await this.step("fill", { index, name: element.name, value }, async () => {
+    await this.record("fill", { index, name: element.name, value }, async () => {
       await this.page.fill(element.selector, value, { timeout: 2000 });
     }, undefined, () => this.checkTarget(element, from));
   }
 
   async click(index: number, from?: Observation): Promise<void> {
     const element = this.element(index, from);
-    await this.step("click", { index, name: element.name }, async () => {
+    await this.record("click", { index, name: element.name }, async () => {
       await this.page.click(element.selector, { timeout: 2000, noWaitAfter: true });
     }, undefined, () => this.checkTarget(element, from));
   }
 
   /** Click a CSS selector directly (e.g. one cached from an earlier run). */
   async clickSelector(selector: string, timeoutMs = 2000): Promise<void> {
-    await this.step("clickSelector", { selector }, async () => {
+    await this.record("clickSelector", { selector }, async () => {
       await this.page.click(selector, { timeout: timeoutMs, noWaitAfter: true });
     });
   }
@@ -108,7 +141,7 @@ export class BrowserTools {
   async selectOptionAt(index: number, optionIndex: number, from?: Observation): Promise<string> {
     const element = this.element(index, from);
     const observedLabel = element.options?.[optionIndex]?.label ?? "";
-    return this.step(
+    return this.record(
       "selectOptionAt",
       { index, optionIndex, observedLabel },
       async () => {
@@ -131,14 +164,14 @@ export class BrowserTools {
 
   async selectByLabel(index: number, label: string, from?: Observation): Promise<string> {
     const element = this.element(index, from);
-    return this.step("selectByLabel", { index, label }, async () => {
+    return this.record("selectByLabel", { index, label }, async () => {
       await this.page.selectOption(element.selector, { label }, { timeout: 2000 });
       return label;
     });
   }
 
   async readValue(selector: string): Promise<string | null> {
-    return this.step("readValue", { selector }, async () =>
+    return this.record("readValue", { selector }, async () =>
       this.page.$eval(selector, (el) => {
         if (el instanceof HTMLSelectElement) return el.options[el.selectedIndex]?.label ?? "";
         if (el instanceof HTMLInputElement) return el.value;
@@ -149,7 +182,7 @@ export class BrowserTools {
 
   /** Wait for the URL to change after an action that should navigate. Throws on timeout. */
   async waitForNavigation(fromUrl: string, timeoutMs: number): Promise<string> {
-    return this.step("waitForNavigation", { timeoutMs }, async () => {
+    return this.record("waitForNavigation", { timeoutMs }, async () => {
       await this.page.waitForURL((u) => u.toString() !== fromUrl, { timeout: timeoutMs, waitUntil: "load" });
       return this.page.url();
     });
@@ -157,7 +190,7 @@ export class BrowserTools {
 
   /** Read a page with the session's cookies without navigating the tab (used for read-back checks). */
   async fetchText(path: string): Promise<string> {
-    return this.step("fetchText", { path }, async () => {
+    return this.record("fetchText", { path }, async () => {
       const res = await this.page.request.get(new URL(path, this.baseUrl).toString());
       return res.text();
     }, (text) => ({ length: text.length }));
@@ -236,7 +269,8 @@ export class BrowserTools {
     return Promise.race([snapshot, pending]);
   }
 
-  private async step<T>(
+  /** Wrap any browser-affecting operation as one recorded step (state before/after, network, errors). */
+  async record<T>(
     tool: string,
     args: Record<string, unknown>,
     run: (stepId: number) => Promise<T>,

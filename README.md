@@ -14,10 +14,10 @@ This is not another browser agent, recorder or dashboard. The ecosystem already 
    `unexplained` for review rather than guessed.
 4. **Failure → fixture → replay → pass^k across versions**, runnable as a CI release gate.
 
-> **Status: v0.1, harness validated on scripted agents only.** The agents in `src/agents/` are
-> deterministic scripts that reproduce known agent failure behaviours. They exist to prove that the
-> capture, oracle, classifier and fixture loop work before spending tokens on an LLM agent. No claim
-> about LLM agents is made yet.
+> **Status: v0.2.** The harness is validated on deterministic scripted agents (`results/`). The
+> Stagehand v4 LLM agent and the multi-provider gateway are built and tested end to end against a
+> scripted stand-in model and a mock provider server. **No live-model experiment has been run yet**
+> (no API keys in the build environment), so no claim about any model's behaviour is made.
 
 ## Quick start
 
@@ -69,7 +69,7 @@ npm test                                               # unit + end-to-end tests
 | Kind | Labels | Basis |
 |---|---|---|
 | Symptom | `false-success`, `wrong-outcome`, `duplicate-action` | Application state (oracle) |
-| Cause | `stale-observation`, `navigation-timeout`, `unsafe-retry`, `auth-lost`, `locator-not-found`, `app-dropped-field`, `app-error` | Deterministic trace rules |
+| Cause | `stale-observation`, `navigation-timeout`, `unsafe-retry`, `action-failed`, `auth-lost`, `locator-not-found`, `app-dropped-field`, `app-error` | Deterministic trace rules |
 | Cause | `unexplained` | No rule fired; needs human or LLM review |
 | Incident | Any cause on a run that still passed | The agent recovered |
 
@@ -91,7 +91,73 @@ npm test                                               # unit + end-to-end tests
 | Reproducible test cases | ✅ Fixtures re-create the app, seed, fault and timings (controlled simulation, not network replay) |
 | Before/after evaluation | ✅ `compare` / `experiment`: pass^k, duration, causes per agent version |
 | Video narration | ⏸ Deferred, as agreed. When added, generate it from recorded events only. |
-| LLM agent integration | ⏭ Next: record model I/O (`ModelCallEvent` is already in the trace schema) and replay recorded outputs |
+| LLM agent integration | ✅ Model-driven tool loop + Stagehand v4 `act()`; record/replay of every model call; 15 provider routes |
+
+## LLM agent: Claude-style tool loop + Stagehand v4
+
+`sh-p0` / `sh-p1` are real LLM agents in the shape Browserbase recommends for Stagehand v4
+(v4 removed `agent()`): a model runs the loop and picks a tool (`navigate`, `read_page`, `act`,
+`done`); `act("type Jane Roe into the Contact name field")` is executed by Stagehand, whose own
+element-resolution calls also go through the lab via Stagehand's `ClientLLM` hook.
+
+| Agent | Prompt |
+|---|---|
+| `sh-p0` | Neutral baseline prompt |
+| `sh-p1` | Adds verification and safe-retry guidance (the "prompt fix" to regression-test) |
+
+**Every model call goes through one gateway** (`src/llm/gateway.ts`), in one of three modes:
+
+| Mode | What happens | Use |
+|---|---|---|
+| `live` | Calls the selected provider(s); records request and response to `model-calls.jsonl` | New runs; pass^k for prompt or model changes |
+| `replay` | Returns the recorded responses in order; Stagehand element ids are remapped by accessibility-tree line; prompt drift is detected and reported | Exact, $0 reproduction of a failure (default when re-running the fixture's own agent) |
+| `scripted` | Deterministic stand-in model | Testing the plumbing without keys (not evidence about any model) |
+
+```sh
+export LAB_CHROME_PATH=/path/to/chrome-for-testing/chrome   # Stagehand v4 needs a recent Chrome
+npx @puppeteer/browsers install chrome@stable                # one way to get it
+export ANTHROPIC_API_KEY=...                                 # or any provider below
+npm run lab -- run --fault silent-owner-drop --agent sh-p0             # live, writes a fixture on failure
+npm run lab -- replay fixtures/<id> --agent sh-p0 --trials 3           # replays recorded model calls: $0, exact
+npm run lab -- replay fixtures/<id> --agent sh-p1 --trials 10          # live pass^k for the prompt fix
+```
+
+## Model providers
+
+Pick models as `provider:model`, separately for the agent loop and for Stagehand's element
+resolution, optionally as a comma-separated fallback chain:
+
+```sh
+npm run lab -- providers                                   # which keys are set
+npm run lab -- check-model groq:openai/gpt-oss-120b        # smoke test: tool call + JSON schema
+npm run lab -- run --fault gateway-timeout --agent sh-p0 \
+  --agent-model anthropic:claude-opus-5-5 \
+  --stagehand-model "groq:openai/gpt-oss-120b,openrouter:openai/gpt-oss-120b"
+# or: LAB_AGENT_MODEL / LAB_STAGEHAND_MODEL
+```
+
+| Provider | id (aliases) | Key | Route |
+|---|---|---|---|
+| Anthropic Claude | `anthropic` (`claude`) | `ANTHROPIC_API_KEY` | Native Anthropic SDK, refusal fallbacks on (default model `claude-opus-5-5`) |
+| OpenAI | `openai` | `OPENAI_API_KEY` | Chat Completions |
+| Vercel AI Gateway | `vercel` (`ai-gateway`) | `AI_GATEWAY_API_KEY` | `https://ai-gateway.vercel.sh/v1`, models as `creator/model` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` |
+| Google Gemini | `gemini` (`google`) | `GEMINI_API_KEY` | OpenAI-compatibility endpoint |
+| Groq | `groq` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | `https://api.mistral.ai/v1` |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | JSON mode (no json_schema) |
+| Hugging Face | `huggingface` (`hf`) | `HF_TOKEN` | Inference Providers router |
+| xAI | `xai` (`grok`) | `XAI_API_KEY` | `https://api.x.ai/v1` |
+| Together, Fireworks, Cerebras | `together`, `fireworks`, `cerebras` | `TOGETHER_API_KEY`, `FIREWORKS_API_KEY`, `CEREBRAS_API_KEY` | OpenAI-compatible |
+| Ollama (local) | `ollama` | none | `http://localhost:11434/v1` |
+| Anything else | `custom` (`litellm`) | `LAB_CUSTOM_API_KEY` | `LAB_CUSTOM_BASE_URL` (LiteLLM, vLLM, Azure OpenAI v1, ...) |
+
+Any base URL can be overridden with `LAB_<PROVIDER>_BASE_URL`. The cassette format is the same
+whatever the provider (Anthropic-shaped content blocks), so a fixture recorded with one model can
+be replayed, or re-run live against another model to see whether it fixes the failure.
+Structured output: `json_schema` first; if a model rejects it, the backend falls back to JSON mode
+with the schema in the prompt and remembers that for later calls. The example model ids are
+examples, not defaults; check each provider's model list.
 
 ## Lessons from building it (real failures of the harness itself)
 
@@ -101,6 +167,15 @@ npm test                                               # unit + end-to-end tests
 - **Playwright's `click` waits for the navigation it triggers.** A slow submit surfaced as a click
   timeout and was misdiagnosed as "locator not found". Clicks now return immediately, and
   "locator not found" requires that the action had no network or DOM effect.
+- **Replay drift detection found a race in the agent's own tool.** Stagehand's `act()` can return
+  before the navigation it triggered has even started, so the tool reported `/login` on one run
+  and `/leads/new` on the next. The agent saw different observations from identical actions.
+  `act` now waits for no requests in flight and a stable URL (`waitForQuiet`) before reporting.
+- **Stagehand v4 needs a recent Chrome.** It loads its runtime with `Extensions.loadUnpacked` over a
+  CDP port, which Playwright 1.56's Chromium 141 rejects. Chrome for Testing 155 works.
+- **Ignored action failures were invisible.** `act()` returned `success: false` for a dropdown, the
+  agent submitted anyway and claimed success, and no rule explained it. That led to the new
+  `action-failed` rule.
 - **A retry during a pending navigation doesn't double-submit in Playwright.** Duplicates came from
   the realistic path instead: the backend commits, the gateway returns 504, and the agent retries.
 

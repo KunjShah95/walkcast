@@ -3,9 +3,11 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAULTS, type FaultId } from "../app/faults.ts";
-import { agentConfig, type AgentConfig } from "../agents/scripted.ts";
+import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
+import type { GatewayMode } from "../llm/gateway.ts";
+import type { ModelSelection } from "../llm/model-spec.ts";
 import { causes, symptoms, type FindingLabel } from "./classifier.ts";
-import { browser, runOnce, type RunResult } from "./runner.ts";
+import { runOnce, type RunResult } from "./runner.ts";
 import type { CreateLeadTask } from "./task.ts";
 
 /**
@@ -31,7 +33,16 @@ export interface FixtureManifest {
   assertions: string[];
   original: {
     runId: string;
-    agent: AgentConfig;
+    agent: AgentSpec;
+    /** LLM agents: how the original run's model calls were produced, and the recorded cassette. */
+    model: {
+      mode: GatewayMode;
+      selection: ModelSelection | null;
+      calls: number;
+      inputTokens: number;
+      outputTokens: number;
+      cassette: string;
+    } | null;
     verdict: "pass" | "fail";
     symptoms: FindingLabel[];
     causes: FindingLabel[];
@@ -61,7 +72,6 @@ export async function writeFixture(result: RunResult, task: CreateLeadTask, fixt
   const dir = join(fixturesDir, id);
   if (existsSync(dir)) throw new Error(`Fixture ${dir} already exists; refusing to overwrite.`);
   mkdirSync(dir, { recursive: true });
-  const b = await browser();
   const manifest: FixtureManifest = {
     schemaVersion: 1,
     id,
@@ -74,13 +84,16 @@ export async function writeFixture(result: RunResult, task: CreateLeadTask, fixt
       timings: result.timings,
       appVersion: appVersion(),
       playwrightVersion: playwrightVersion(),
-      browserVersion: b.version(),
+      browserVersion: result.browserVersion,
     },
     expectation: result.expectation,
     assertions: result.oracle.checks.map((c) => c.name),
     original: {
       runId: result.runId,
-      agent: agentConfig(result.agent),
+      agent: result.agentSpec,
+      model: result.model
+        ? { mode: result.model.mode, selection: result.model.selection, calls: result.model.calls, inputTokens: result.model.inputTokens, outputTokens: result.model.outputTokens, cassette: "model-calls.jsonl" }
+        : null,
       verdict: result.diagnosis.verdict,
       symptoms: symptoms(result.diagnosis),
       causes: diagnosisCauses,
@@ -92,26 +105,40 @@ export async function writeFixture(result: RunResult, task: CreateLeadTask, fixt
       notes: [
         "The application, its seed data and the injected fault are rebuilt from this manifest; the original network traffic is not replayed.",
         "Fault timings are derived from the seed, so the race is re-created rather than recorded.",
-        "Scripted agents are deterministic; an LLM agent must be replayed with its recorded model outputs or judged over repeated trials (pass^k).",
+        "Scripted agents are deterministic. LLM agents replay their recorded model outputs (model-calls.jsonl) for an exact, zero-cost re-run, or run live over repeated trials (pass^k) to judge a prompt or model change.",
       ],
     },
   };
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
   copyFileSync(join(result.runDir, "trace.jsonl"), join(dir, "original-trace.jsonl"));
   copyFileSync(join(result.runDir, "report.md"), join(dir, "original-report.md"));
+  if (result.model) copyFileSync(join(result.runDir, "model-calls.jsonl"), join(dir, "model-calls.jsonl"));
   return { dir, manifest };
 }
 
 export function loadFixture(dir: string): Fixture {
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as FixtureManifest;
   if (manifest.schemaVersion !== 1) throw new Error(`Unsupported fixture schema ${String(manifest.schemaVersion)}`);
+  // Fixtures written before LLM agents existed: scripted agent, no model calls.
+  if (!("kind" in manifest.original.agent)) manifest.original.agent = { ...(manifest.original.agent as object), kind: "scripted" } as AgentSpec;
+  manifest.original.model ??= null;
   return { dir, manifest };
 }
 
 export interface ReplaySummary {
   fixture: string;
   agent: string;
-  trials: { verdict: "pass" | "fail"; causes: FindingLabel[]; symptoms: FindingLabel[]; durationMs: number; runDir: string }[];
+  modelMode: GatewayMode | null;
+  trials: {
+    verdict: "pass" | "fail";
+    causes: FindingLabel[];
+    symptoms: FindingLabel[];
+    durationMs: number;
+    runDir: string;
+    modelCalls: number;
+    replayDrift: number;
+    replayExhausted: boolean;
+  }[];
   passes: number;
   /** pass^k: the agent met the fixture's expectation in every trial. */
   passAll: boolean;
@@ -120,21 +147,47 @@ export interface ReplaySummary {
   environmentDrift: string[];
 }
 
+export interface ReplayOptions {
+  /**
+   * LLM agents only. Default: replay the recorded model outputs when re-running the agent that
+   * produced the fixture, otherwise call the model live.
+   */
+  modelMode?: GatewayMode;
+  /** Live mode: models to use (e.g. to test whether another model fixes the failure). */
+  models?: ModelSelection;
+}
+
 export async function replayFixture(
   fixture: Fixture,
-  agent: string | AgentConfig,
+  agent: string | AgentSpec,
   trials: number,
   outDir: string,
+  options: ReplayOptions = {},
 ): Promise<ReplaySummary> {
   const { manifest } = fixture;
+  const spec = resolveAgent(agent);
   const drift: string[] = [];
   if (manifest.environment.appVersion !== appVersion()) drift.push(`app changed (${manifest.environment.appVersion} → ${appVersion()})`);
   if (manifest.environment.playwrightVersion !== playwrightVersion()) drift.push(`playwright ${manifest.environment.playwrightVersion} → ${playwrightVersion()}`);
+  const cassette = manifest.original.model ? join(fixture.dir, manifest.original.model.cassette) : undefined;
+  const sameAgent = spec.id === manifest.original.agent.id;
+  const modelMode: GatewayMode | undefined =
+    spec.kind === "scripted" ? undefined : (options.modelMode ?? (sameAgent && cassette && existsSync(cassette) ? "replay" : "live"));
+  if (modelMode === "replay" && !sameAgent) drift.push(`replaying ${manifest.original.agent.id}'s model calls with agent ${spec.id}`);
 
   const results: RunResult[] = [];
   for (let i = 0; i < trials; i++) {
     results.push(
-      await runOnce({ fault: manifest.environment.fault, seed: manifest.environment.seed, agent, task: manifest.task, outDir }),
+      await runOnce({
+        fault: manifest.environment.fault,
+        seed: manifest.environment.seed,
+        agent: spec,
+        task: manifest.task,
+        outDir,
+        ...(modelMode ? { modelMode } : {}),
+        ...(modelMode === "replay" ? { cassette } : {}),
+        ...(options.models ? { models: options.models } : {}),
+      }),
     );
   }
   const summaries = results.map((r) => ({
@@ -143,19 +196,27 @@ export async function replayFixture(
     symptoms: symptoms(r.diagnosis),
     durationMs: r.durationMs,
     runDir: r.runDir,
+    modelCalls: r.modelCalls,
+    replayDrift: r.model?.drifted.length ?? 0,
+    replayExhausted: r.model?.exhausted ?? false,
   }));
+  for (const s of summaries) {
+    if (s.replayExhausted) drift.push("model replay ran past the recording (the run diverged)");
+    else if (s.replayDrift) drift.push(`${s.replayDrift} model request(s) differed from the recording`);
+  }
   const reproduced = summaries.filter(
     (s) => s.verdict === "fail" && manifest.original.causes.every((c) => s.causes.includes(c)),
   ).length;
   const passes = summaries.filter((s) => s.verdict === "pass").length;
   return {
     fixture: manifest.id,
-    agent: typeof agent === "string" ? agent : agent.id,
+    agent: spec.id,
+    modelMode: modelMode ?? null,
     trials: summaries,
     passes,
     passAll: passes === trials,
     reproduced,
-    environmentDrift: drift,
+    environmentDrift: [...new Set(drift)],
   };
 }
 
