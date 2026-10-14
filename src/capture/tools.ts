@@ -60,7 +60,12 @@ export class BrowserTools {
       this.observations.set(stepId, observation);
       this.lastObservation = observation;
       return observation;
-    }, (o) => ({ elements: o.elements.length, fingerprint: o.fingerprint }));
+    }, (o) => ({
+      elements: o.elements.length,
+      fingerprint: o.fingerprint,
+      // Compact control inventory (no values) so runs can be diffed against a baseline.
+      controls: o.elements.map((e) => ({ role: e.role, name: e.name, selector: e.selector })),
+    }));
   }
 
   /**

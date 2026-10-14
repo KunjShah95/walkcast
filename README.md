@@ -90,7 +90,9 @@ npm test                                               # unit + end-to-end tests
 | Failure classifier with evidence | ✅ Deterministic rules; every finding cites steps |
 | Reproducible test cases | ✅ Fixtures re-create the app, seed, fault and timings (controlled simulation, not network replay) |
 | Before/after evaluation | ✅ `compare` / `experiment`: pass^k, duration, causes per agent version |
-| Video narration | ⏸ Deferred, as agreed. When added, generate it from recorded events only. |
+| Video narration | ✅ Event-based narration in the simulator (captions and optional speech), synced to playback; generated only from recorded events |
+| Workflow regression / change detection | ✅ `baseline save`, `check`, `diff`; Compare view |
+| Benchmark of controlled tasks | 🟡 16 fault scenarios on one task (create lead); more tasks are next |
 | LLM agent integration | ✅ Model-driven tool loop + Stagehand v4 `act()`; record/replay of every model call; 15 provider routes |
 
 ## LLM agent: Claude-style tool loop + Stagehand v4
@@ -159,6 +161,32 @@ Structured output: `json_schema` first; if a model rejects it, the backend falls
 with the schema in the prompt and remembers that for later calls. The example model ids are
 examples, not defaults; check each provider's model list.
 
+## Composable faults: the benchmark grid
+
+Faults combine with `+`: `--fault stale-owners+session-expiry`. The grid is the control, the
+5 single faults and all 10 pairs: 16 scenarios per task.
+
+```sh
+npm run lab -- run --fault gateway-timeout+ui-drift --agent v0
+npm run lab -- experiment --scenarios pairs --seeds 3 --trials 2
+```
+
+## Workflow regression and change detection
+
+Store a known-good run as a baseline. Later, after a site change or an agent change, diff a new
+run against it: where the action sequences diverge, which actions broke, how each page's controls
+changed, and the most likely replacement for each broken element.
+
+```sh
+npm run lab -- baseline save runs/<passing-run> --name create-lead
+npm run lab -- check --against baselines/create-lead --agent v0 --fault ui-drift
+#   Step 11 (#save-lead) broke on button “Save lead” (#save-lead);
+#   likely replacement: the first button on the page, now “Create” (#create-lead-v2).
+npm run lab -- diff <baselineRun> <candidateRun>         # exits 1 when something broke
+```
+
+The same diff runs in the dashboard (Compare), including in exported snapshots.
+
 ## Dashboard and timeline viewer
 
 ```sh
@@ -180,6 +208,18 @@ npm run lab -- ui-export --out failure-lab.html --max-runs 40 --screenshot-runs 
   before/after page state, target identity checks, network and screenshots. Agent decisions are
   interleaved, and Stagehand's element resolution sits inside the `act()` step that asked for it.
   A scroll beam tracks your place in the run.
+- **Simulator** (after [SystemForge](https://github.com/vijaygupta18/system-design-simulator)'s
+  "wire it, run it, get scored" loop):
+  - Pick an agent and up to two faults; each fault is pinned to the node where it lives
+    (page, gateway, session, API).
+  - Play the run across the pipeline (agent, model, Stagehand, browser, page, gateway, session,
+    API, database, oracle) with packets and node health driven by the recorded trace.
+  - Event-based narration, optionally spoken. Every sentence comes from a recorded event.
+  - A 5 × 20-point reliability scorecard: Outcome, Honesty, Idempotency, Resilience, Efficiency,
+    graded Brittle / Fragile / Dependable / Robust / Production-ready.
+  - On the local server, "Run this scenario" starts a real run.
+- **Compare:** baseline vs candidate outcome, broken elements with replacements, page changes and
+  the action alignment.
 - **Fixtures** with copyable replay commands, and **Experiments** with detection, reproduction
   and the regression (pass^k) matrix.
 

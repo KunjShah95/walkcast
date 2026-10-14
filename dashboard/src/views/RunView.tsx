@@ -48,7 +48,19 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
         <button type="button" onClick={() => go({ view: "runs" })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-signal">
           <ArrowLeft className="size-3.5" /> Runs
         </button>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(() => {
+            const clean = index.runs.find((r) => r.agent === index.runs[position]?.agent && r.fault === "none" && r.verdict === "pass" && r.dir !== dir);
+            return clean ? (
+              <button
+                type="button"
+                onClick={() => go({ view: "compare", base: clean.dir, cand: dir })}
+                className="rounded-lg border border-signal/50 px-2.5 py-1 text-[12.5px] text-signal hover:bg-signal-soft"
+              >
+                Compare with a clean run
+              </button>
+            ) : null;
+          })()}
           {prev && (
             <button type="button" onClick={() => go({ view: "run", dir: prev.dir })} className="rounded-lg border border-line px-2.5 py-1 text-[12.5px] text-ink-2 hover:border-signal hover:text-signal">
               Older

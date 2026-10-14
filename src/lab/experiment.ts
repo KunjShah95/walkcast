@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FAULTS, type FaultId } from "../app/faults.ts";
+import { type FaultId, type Scenario, allScenarios, parseScenario } from "../app/faults.ts";
 import { resolveAgent } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
@@ -10,6 +10,15 @@ import { runOnce, type RunResult } from "./runner.ts";
 import { createLeadTask } from "./task.ts";
 
 /** The cause each injected fault should be attributed to, and other causes that are also correct. */
+/** Expected causes for a scenario: the union over its faults. A clean scenario expects none. */
+export function expectedCauses(scenario: Scenario): { primary: FindingLabel[]; alsoValid: FindingLabel[] } {
+  const faults = parseScenario(scenario);
+  return {
+    primary: faults.map((f) => EXPECTED_CAUSES[f].primary).filter((c): c is FindingLabel => c !== null),
+    alsoValid: faults.flatMap((f) => EXPECTED_CAUSES[f].alsoValid),
+  };
+}
+
 export const EXPECTED_CAUSES: Record<FaultId, { primary: FindingLabel | null; alsoValid: FindingLabel[] }> = {
   none: { primary: null, alsoValid: [] },
   "stale-owners": { primary: "stale-observation", alsoValid: [] },
@@ -26,6 +35,8 @@ export interface ExperimentOptions {
   baseline: string;
   candidates: string[];
   outDir: string;
+  /** Single faults only (default) or also every pair of faults. */
+  scenarios?: "singles" | "pairs";
   /** LLM agents: model mode for new runs (default live). Fixture replays follow replayFixture's default. */
   modelMode?: GatewayMode;
   models?: ModelSelection;
@@ -38,23 +49,23 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const fixturesDir = join(outDir, "fixtures");
   mkdirSync(fixturesDir, { recursive: true });
   const task = createLeadTask();
-  const faults = Object.keys(FAULTS) as FaultId[];
+  const faults = allScenarios(options.scenarios ?? "singles");
   const startedAt = new Date();
   const log = (msg: string) => console.log(`[${((Date.now() - startedAt.getTime()) / 1000).toFixed(0)}s] ${msg}`);
 
   // ---- Phase 1: baseline runs, diagnosis accuracy and false positives
-  log(`phase 1: ${faults.length} faults × ${seeds} seeds with baseline ${baseline}`);
+  log(`phase 1: ${faults.length} scenarios × ${seeds} seeds with baseline ${baseline}`);
   const jobs = faults.flatMap((fault) => Array.from({ length: seeds }, (_, i) => ({ fault, seed: i + 1 })));
   const baselineRuns = await pool(jobs, concurrency, (j) => runOnce({ fault: j.fault, seed: j.seed, agent: baseline, task, outDir: runsDir, ...mode }));
 
   const detection = faults.map((fault) => {
     const runs = baselineRuns.filter((r) => r.fault === fault);
     const failing = runs.filter((r) => r.diagnosis.verdict === "fail");
-    const expected = EXPECTED_CAUSES[fault];
-    const correct = failing.filter((r) => expected.primary !== null && causes(r.diagnosis).includes(expected.primary));
-    const spurious = failing.flatMap((r) =>
-      causes(r.diagnosis).filter((c) => c !== expected.primary && !expected.alsoValid.includes(c)),
-    );
+    const expected = expectedCauses(fault);
+    // A failing run is attributed correctly when at least one of the injected faults' causes is
+    // found; with two faults the agent may fail on the first before ever meeting the second.
+    const correct = failing.filter((r) => expected.primary.some((c) => causes(r.diagnosis).includes(c)));
+    const spurious = failing.flatMap((r) => causes(r.diagnosis).filter((c) => !expected.primary.includes(c) && !expected.alsoValid.includes(c)));
     return {
       fault,
       runs: runs.length,

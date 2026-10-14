@@ -55,3 +55,47 @@ export function seededRandom(seed: number): () => number {
 export function seededInt(seed: number, min: number, max: number): number {
   return min + Math.floor(seededRandom(seed)() * (max - min + 1));
 }
+
+/**
+ * A scenario is one or more faults active together, written canonically as "none" or as fault
+ * ids joined by "+" in sorted order (e.g. "session-expiry+stale-owners").
+ */
+export type Scenario = string;
+
+export function parseScenario(scenario: string): FaultId[] {
+  if (scenario === "none" || scenario === "") return [];
+  const parts = scenario.split("+").map((s) => s.trim());
+  for (const p of parts) {
+    if (!isFaultId(p) || p === "none") throw new Error(`Unknown fault '${p}' in scenario '${scenario}'. Faults: ${Object.keys(FAULTS).filter((f) => f !== "none").join(", ")}`);
+  }
+  return [...new Set(parts as FaultId[])].sort();
+}
+
+export function scenarioId(faults: FaultId[]): Scenario {
+  const real = [...new Set(faults.filter((f) => f !== "none"))].sort();
+  return real.length ? real.join("+") : "none";
+}
+
+export function normalizeScenario(scenario: string): Scenario {
+  return scenarioId(parseScenario(scenario));
+}
+
+/** A task is achievable only if every active fault leaves it achievable. */
+export function scenarioTaskPossible(scenario: Scenario): boolean {
+  return parseScenario(scenario).every((f) => FAULTS[f].taskPossible);
+}
+
+export function describeScenario(scenario: Scenario): string {
+  const faults = parseScenario(scenario);
+  return faults.length ? faults.map((f) => FAULTS[f].description).join(" ") : FAULTS.none.description;
+}
+
+/** The control, each single fault, and every pair of faults: the benchmark grid. */
+export function allScenarios(include: "singles" | "pairs" = "pairs"): Scenario[] {
+  const singles = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none");
+  const out: Scenario[] = ["none", ...singles];
+  if (include === "pairs") {
+    for (let i = 0; i < singles.length; i++) for (let j = i + 1; j < singles.length; j++) out.push(scenarioId([singles[i]!, singles[j]!]));
+  }
+  return out;
+}

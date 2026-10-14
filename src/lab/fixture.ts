@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FAULTS, type FaultId } from "../app/faults.ts";
+import { type Scenario, describeScenario } from "../app/faults.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
@@ -20,7 +20,7 @@ export interface FixtureManifest {
   createdAt: string;
   task: CreateLeadTask;
   environment: {
-    fault: FaultId;
+    fault: Scenario;
     faultDescription: string;
     seed: number;
     timings: RunResult["timings"];
@@ -79,7 +79,7 @@ export async function writeFixture(result: RunResult, task: CreateLeadTask, fixt
     task,
     environment: {
       fault: result.fault,
-      faultDescription: FAULTS[result.fault].description,
+      faultDescription: describeScenario(result.fault),
       seed: result.seed,
       timings: result.timings,
       appVersion: appVersion(),

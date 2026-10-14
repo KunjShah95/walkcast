@@ -8,22 +8,38 @@ import { Fixtures } from "./views/Fixtures.tsx";
 import { Overview } from "./views/Overview.tsx";
 import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
+import { Compare } from "./views/Compare.tsx";
+import { Simulator } from "./views/Simulator.tsx";
 
-export type Route = { view: "overview" } | { view: "runs" } | { view: "fixtures" } | { view: "experiments" } | { view: "run"; dir: string };
+export type Route =
+  | { view: "overview" }
+  | { view: "simulator" }
+  | { view: "runs" }
+  | { view: "fixtures" }
+  | { view: "experiments" }
+  | { view: "run"; dir: string }
+  | { view: "compare"; base: string; cand: string };
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
   if (h.startsWith("run/")) return { view: "run", dir: decodeURIComponent(h.slice(4)) };
-  if (h === "runs" || h === "fixtures" || h === "experiments") return { view: h };
+  if (h.startsWith("compare/")) {
+    const [base = "", cand = ""] = h.slice(8).split("|").map(decodeURIComponent);
+    return { view: "compare", base, cand };
+  }
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator") return { view: h };
   return { view: "overview" };
 }
 
 function toHash(route: Route): string {
-  return route.view === "run" ? `#run/${encodeURIComponent(route.dir)}` : route.view === "overview" ? "#" : `#${route.view}`;
+  if (route.view === "run") return `#run/${encodeURIComponent(route.dir)}`;
+  if (route.view === "compare") return `#compare/${encodeURIComponent(route.base)}|${encodeURIComponent(route.cand)}`;
+  return route.view === "overview" ? "#" : `#${route.view}`;
 }
 
 const NAV: { view: Route["view"]; label: string }[] = [
   { view: "overview", label: "Overview" },
+  { view: "simulator", label: "Simulator" },
   { view: "runs", label: "Runs" },
   { view: "fixtures", label: "Fixtures" },
   { view: "experiments", label: "Experiments" },
@@ -48,7 +64,12 @@ export function App() {
     window.scrollTo({ top: 0 });
   };
 
-  const active = route.view === "run" ? "runs" : route.view;
+  const active = route.view === "run" || route.view === "compare" ? "runs" : route.view;
+  const refresh = async () => {
+    const next = await loadIndex();
+    setIndex(next);
+    return next;
+  };
 
   return (
     <div className="min-h-full">
@@ -102,6 +123,8 @@ export function App() {
         {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
         {index && route.view === "experiments" && <Experiments index={index} />}
         {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
+        {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
+        {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
       </main>
     </div>
   );

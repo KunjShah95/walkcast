@@ -42,3 +42,28 @@ export function fileUrl(runDir: string, absolutePath: string): string | undefine
   if (baked) return baked.files[rel];
   return `/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }
+
+export interface Capabilities {
+  live: boolean;
+  running?: string | null;
+  stagehand?: boolean;
+  providers?: string[];
+}
+
+export async function loadCapabilities(): Promise<Capabilities> {
+  if (baked) return { live: false };
+  try {
+    const res = await fetch("/api/capabilities");
+    return res.ok ? ((await res.json()) as Capabilities) : { live: false };
+  } catch {
+    return { live: false };
+  }
+}
+
+/** Starts a real run on the local server and resolves with its directory when it finishes. */
+export async function startRun(input: { agent: string; fault: string; seed: number; modelMode?: string }): Promise<string> {
+  const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const body = (await res.json()) as { dir?: string; error?: string };
+  if (!res.ok || !body.dir) throw new Error(body.error ?? `Run failed (${res.status}).`);
+  return body.dir;
+}

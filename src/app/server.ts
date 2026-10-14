@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { type FaultId, seededInt } from "./faults.ts";
+import { type FaultId, type Scenario, normalizeScenario, parseScenario, seededInt } from "./faults.ts";
 
 /**
  * MiniCRM: a deliberately small CRM used as the controlled application under test.
@@ -38,7 +38,8 @@ export interface AppState {
 }
 
 export interface AppOptions {
-  fault: FaultId;
+  /** One fault id, or several joined with "+". */
+  fault: Scenario;
   seed: number;
   port?: number;
 }
@@ -46,7 +47,7 @@ export interface AppOptions {
 export interface RunningApp {
   url: string;
   state: AppState;
-  fault: FaultId;
+  fault: Scenario;
   seed: number;
   /** Fault timings derived from the seed, recorded in fixtures. */
   timings: { ownersRefreshMs: number; submitDelayMs: number };
@@ -61,7 +62,9 @@ interface Session {
 }
 
 export async function startApp(options: AppOptions): Promise<RunningApp> {
-  const { fault, seed } = options;
+  const { seed } = options;
+  const fault = normalizeScenario(options.fault);
+  const active = new Set<FaultId>(parseScenario(fault));
   const state: AppState = { leads: [], ledger: [] };
   const sessions = new Map<string, Session>();
   const timings = {
@@ -116,12 +119,12 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
 
     if (path === "/leads/new" && req.method === "GET") {
       session.formServed = true;
-      return send(res, 200, newLeadPage(fault, timings.ownersRefreshMs));
+      return send(res, 200, newLeadPage(active, timings.ownersRefreshMs));
     }
 
     if (path === "/leads" && req.method === "POST") {
       const body = await readForm(req);
-      if (fault === "session-expiry" && session.formServed && !session.reauthenticated) {
+      if (active.has("session-expiry") && session.formServed && !session.reauthenticated) {
         sessions.delete(sid);
         recordRejected(req, path, body, "rejected-auth");
         return redirect(res, `/login?next=${encodeURIComponent("/leads/new")}&expired=1`);
@@ -130,14 +133,14 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
       const company = (body.company ?? "").trim();
       if (!contact || !company) {
         recordRejected(req, path, body, "rejected-invalid");
-        return send(res, 400, newLeadPage(fault, timings.ownersRefreshMs, "Contact and company are required"));
+        return send(res, 400, newLeadPage(active, timings.ownersRefreshMs, "Contact and company are required"));
       }
       // silent-owner-drop: the form posts `ownerId`, the server only reads `owner`.
       const owner = (body.owner ?? "").trim() || DEFAULT_OWNER;
       const lead: Lead = { id: nextId++, contact, company, owner, createdAt: Date.now() };
       state.leads.push(lead);
       state.ledger.push({ at: Date.now(), method: "POST", path, body, outcome: "committed", leadId: lead.id });
-      if (fault === "gateway-timeout") {
+      if (active.has("gateway-timeout")) {
         await delay(timings.submitDelayMs);
         return send(res, 504, page("Gateway timeout", `<p role="alert">The server took too long to respond. Please try again.</p><p><a href="/leads/new">Back to form</a></p>`));
       }
@@ -181,15 +184,15 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
 
 // ---------------------------------------------------------------- pages
 
-function newLeadPage(fault: FaultId, ownersRefreshMs: number, error?: string): string {
-  const ownerField = fault === "silent-owner-drop" ? "ownerId" : "owner";
+function newLeadPage(active: Set<FaultId>, ownersRefreshMs: number, error?: string): string {
+  const ownerField = active.has("silent-owner-drop") ? "ownerId" : "owner";
   const submit =
-    fault === "ui-drift"
+    active.has("ui-drift")
       ? `<button id="create-lead-v2" class="btn-primary" type="submit">Create</button>`
       : `<button id="save-lead" type="submit">Save lead</button>`;
   const options = OWNERS_ALPHABETICAL.map((o) => `<option value="${o}">${o}</option>`).join("");
   const refresh =
-    fault === "stale-owners"
+    active.has("stale-owners")
       ? `<script>
   setTimeout(async () => {
     const res = await fetch('/api/owners?order=workload');

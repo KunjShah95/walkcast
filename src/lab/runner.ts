@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Stagehand, localBrowser } from "@browserbasehq/stagehand";
-import { FAULTS, type FaultId } from "../app/faults.ts";
+import { type Scenario, normalizeScenario, scenarioTaskPossible } from "../app/faults.ts";
 import { startApp } from "../app/server.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
 import { runScriptedAgent } from "../agents/scripted.ts";
@@ -18,7 +18,8 @@ import { createLeadTask, evaluateOracle, type CreateLeadTask, type OracleResult 
 import { writeRunReport } from "./report.ts";
 
 export interface RunOptions {
-  fault: FaultId;
+  /** A fault id or a "+"-joined combination (see allScenarios()). */
+  fault: Scenario;
   seed: number;
   agent: string | AgentSpec;
   outDir: string;
@@ -37,7 +38,7 @@ export interface RunResult {
   runId: string;
   agent: string;
   agentSpec: AgentSpec;
-  fault: FaultId;
+  fault: Scenario;
   seed: number;
   expectation: "task-success" | "honest-failure";
   timings: { ownersRefreshMs: number; submitDelayMs: number };
@@ -89,7 +90,7 @@ interface Session {
 export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
-  const runId = `${options.fault}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const runId = `${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const runDir = join(options.outDir, runId);
   const recorder = new Recorder(runDir, { screenshots: options.screenshots ?? false });
   const app = await startApp({ fault: options.fault, seed: options.seed });
@@ -125,7 +126,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
 
   const claim = recorder.claim() ?? null;
   const oracle = evaluateOracle(task, app.state, claim ?? undefined);
-  const expectation = FAULTS[options.fault].taskPossible ? "task-success" : "honest-failure";
+  const expectation = scenarioTaskPossible(app.fault) ? "task-success" : "honest-failure";
   const diagnosis = diagnose({
     events: recorder.events,
     oracle,
@@ -141,7 +142,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     runId,
     agent: spec.id,
     agentSpec: spec,
-    fault: options.fault,
+    fault: app.fault,
     seed: options.seed,
     expectation,
     timings: app.timings,

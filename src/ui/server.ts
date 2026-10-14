@@ -3,6 +3,10 @@ import { createServer } from "node:http";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RunDetail } from "./data.ts";
+import { allScenarios, normalizeScenario } from "../app/faults.ts";
+import { allAgents } from "../agents/registry.ts";
+import { runOnce } from "../lab/runner.ts";
+import { configuredProviders } from "../llm/providers.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "dashboard", "dist", "index.html");
 const TYPES: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webm": "video/webm" };
@@ -16,6 +20,7 @@ function dashboardHtml(): string {
 export async function serveDashboard(port: number, root = process.cwd()): Promise<string> {
   const data = new LabData(root);
   const html = dashboardHtml();
+  let running: string | null = null;
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const json = (status: number, value: unknown) => {
@@ -24,6 +29,52 @@ export async function serveDashboard(port: number, root = process.cwd()): Promis
     };
     try {
       if (url.pathname === "/api/index") return json(200, data.index());
+      if (url.pathname === "/api/capabilities") {
+        return json(200, {
+          live: true,
+          running,
+          stagehand: Boolean(process.env.LAB_CHROME_PATH && existsSync(process.env.LAB_CHROME_PATH)),
+          providers: configuredProviders().map((p) => p.id),
+          agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description })),
+          scenarios: allScenarios("pairs"),
+        });
+      }
+      if (url.pathname === "/api/run" && req.method === "POST") {
+        // Starts a real run. Local-only server; one run at a time.
+        if (running) return json(409, { error: `A run is already in progress (${running}).` });
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          let input: { agent?: string; fault?: string; seed?: number; modelMode?: "live" | "replay" | "scripted" };
+          try {
+            input = JSON.parse(body || "{}");
+            const fault = normalizeScenario(input.fault ?? "none");
+            const agent = String(input.agent ?? "v0");
+            running = `${agent} on ${fault}`;
+            runOnce({
+              fault,
+              seed: Number(input.seed ?? 1),
+              agent,
+              outDir: join(data.root, "runs"),
+              screenshots: true,
+              ...(input.modelMode ? { modelMode: input.modelMode } : {}),
+            }).then(
+              (r) => {
+                running = null;
+                json(200, { dir: join("runs", basename(r.runDir)) });
+              },
+              (e: unknown) => {
+                running = null;
+                json(500, { error: e instanceof Error ? e.message : String(e) });
+              },
+            );
+          } catch (e) {
+            running = null;
+            json(400, { error: e instanceof Error ? e.message : String(e) });
+          }
+        });
+        return;
+      }
       if (url.pathname === "/api/run") {
         const detail = data.run(url.searchParams.get("dir") ?? "");
         return detail ? json(200, detail) : json(404, { error: "run not found" });

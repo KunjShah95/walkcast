@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { FAULTS, isFaultId } from "./app/faults.ts";
+import { FAULTS, allScenarios, normalizeScenario } from "./app/faults.ts";
 import { startApp } from "./app/server.ts";
 import { allAgents } from "./agents/registry.ts";
 import type { GatewayMode } from "./llm/gateway.ts";
@@ -12,6 +12,9 @@ import { runExperiment } from "./lab/experiment.ts";
 import { loadFixture, replayFixture, writeFixture } from "./lab/fixture.ts";
 import { closeBrowser, runOnce } from "./lab/runner.ts";
 import { exportDashboard, serveDashboard } from "./ui/server.ts";
+import { LabData } from "./ui/data.ts";
+import { compareRuns, type DiffReport } from "./lab/diff.ts";
+import { cpSync } from "node:fs";
 import { createLeadTask } from "./lab/task.ts";
 
 const HELP = `Browser Agent Failure Lab
@@ -35,6 +38,11 @@ Commands:
                                         (build first: npm run ui:build, or just npm run ui)
   ui-export [--out file.html] [--max-runs n] [--lean]
                                         One self-contained HTML file with the data baked in
+  diff <baselineRun> <candidateRun>     Align two runs' actions, find what broke, how pages changed, and
+                                        the likely replacement for each broken element; exits 1 on breakage
+  baseline save <runDir> --name n       Store a passing run as a baseline (baselines/n)
+  check --against <baseline> --agent a --fault f
+                                        Run, then diff against the baseline (workflow regression check)
   providers                             List model providers and whether their API key is set
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
 
@@ -69,6 +77,9 @@ const { positionals, values } = parseArgs({
     lean: { type: "boolean", default: false },
     fragment: { type: "boolean", default: false },
     "screenshot-runs": { type: "string" },
+    scenarios: { type: "string", default: "singles" },
+    name: { type: "string" },
+    "against": { type: "string" },
     fixtures: { type: "string", default: "fixtures" },
     out: { type: "string" },
     screenshots: { type: "boolean", default: false },
@@ -87,11 +98,40 @@ async function main(): Promise<number> {
   }
   switch (command) {
     case "list": {
-      console.log("Faults:");
+      console.log("Faults (combine with +, e.g. --fault stale-owners+session-expiry):");
       for (const [id, f] of Object.entries(FAULTS)) console.log(`  ${id.padEnd(18)} ${f.description}`);
+      console.log(`\nBenchmark grid: ${allScenarios("pairs").length} scenarios (control, ${allScenarios("singles").length - 1} single faults, every pair).`);
       console.log("\nAgents:");
       for (const a of allAgents()) console.log(`  ${a.id.padEnd(6)} [${a.kind}] ${a.description}`);
       return 0;
+    }
+    case "diff": {
+      const [, a, b] = positionals;
+      if (!a || !b) throw new Error("diff needs two run directories: diff <baseline> <candidate>");
+      const report = diffDirs(a, b);
+      printDiff(report);
+      return report.broken.length || report.outcome.verdict[1] === "fail" ? 1 : 0;
+    }
+    case "baseline": {
+      const [, sub, runDir] = positionals;
+      if (sub !== "save" || !runDir || !values.name) throw new Error("usage: baseline save <runDir> --name <name>");
+      const detail = new LabData().run(runDir);
+      if (!detail) throw new Error(`No run at ${runDir}`);
+      if (detail.summary.verdict !== "pass") throw new Error("A baseline must be a passing run.");
+      const dest = join("baselines", values.name);
+      if (existsSync(dest)) throw new Error(`${dest} already exists; choose another --name or delete it first.`);
+      cpSync(runDir, dest, { recursive: true });
+      console.log(`Saved baseline ${dest} (${detail.summary.agent} on ${detail.summary.fault}, ${detail.summary.steps} steps)`);
+      return 0;
+    }
+    case "check": {
+      const against = values.against;
+      if (!against) throw new Error("check needs --against <baselineDir>, plus --agent and --fault for the new run");
+      const fault = requireFault();
+      const result = await runOnce({ fault, seed: Number(values.seed), agent: values.agent!, outDir: runsDir, ...(modelMode() ? { modelMode: modelMode() } : {}), ...(models() ? { models: models() } : {}) });
+      const report = diffDirs(against, join("runs", result.runDir.split(/[\\/]/).pop()!));
+      printDiff(report);
+      return report.broken.length || report.outcome.verdict[1] === "fail" ? 1 : 0;
     }
     case "providers": {
       console.log("Provider       Key        Endpoint / notes");
@@ -182,6 +222,7 @@ async function main(): Promise<number> {
         seeds: Number(values.seeds),
         trials: Number(values.trials),
         concurrency: Number(values.concurrency),
+        scenarios: values.scenarios === "pairs" ? "pairs" : "singles",
         baseline: values.baseline!,
         candidates: values.candidates!.split(","),
         ...(modelMode() ? { modelMode: modelMode() } : {}),
@@ -255,10 +296,35 @@ async function checkModel(spec: string): Promise<number> {
   return ok ? 0 : 1;
 }
 
+function diffDirs(a: string, b: string): DiffReport {
+  const data = new LabData();
+  const base = data.run(a);
+  const cand = data.run(b);
+  if (!base) throw new Error(`No run at ${a}`);
+  if (!cand) throw new Error(`No run at ${b}`);
+  return compareRuns({ result: base.result, events: base.events }, { result: cand.result, events: cand.events });
+}
+
+function printDiff(r: DiffReport): void {
+  console.log(`baseline  ${r.baseline.agent} on ${r.baseline.fault}: ${r.baseline.verdict}`);
+  console.log(`candidate ${r.candidate.agent} on ${r.candidate.fault}: ${r.candidate.verdict}`);
+  console.log(`\n${r.summary}\n`);
+  for (const b of r.broken) {
+    console.log(`BROKEN step ${b.stepId}: ${b.target}${b.error ? `  (${b.error})` : ""}`);
+    if (b.was) console.log(`  was:        ${b.was.role} "${b.was.name}" ${b.was.selector}`);
+    if (b.suggestion) console.log(`  try:        ${b.suggestion.control.role} "${b.suggestion.control.name}" ${b.suggestion.control.selector}  (${b.suggestion.reason})`);
+  }
+  for (const p of r.pages) {
+    console.log(`PAGE ${p.path}`);
+    for (const x of p.renamed) console.log(`  ~ ${x.from.role} "${x.from.name}" ${x.from.selector}  ->  "${x.to.name}" ${x.to.selector}  [by ${x.by}]`);
+    for (const x of p.removed) console.log(`  - ${x.role} "${x.name}" ${x.selector}`);
+    for (const x of p.added) console.log(`  + ${x.role} "${x.name}" ${x.selector}`);
+  }
+}
+
 function requireFault() {
-  const fault = values.fault ?? "";
-  if (!isFaultId(fault)) throw new Error(`--fault must be one of: ${Object.keys(FAULTS).join(", ")}`);
-  return fault;
+  if (!values.fault) throw new Error(`--fault is required: one of ${Object.keys(FAULTS).join(", ")}, or several joined with "+"`);
+  return normalizeScenario(values.fault);
 }
 
 function printReplay(s: Awaited<ReturnType<typeof replayFixture>>): void {

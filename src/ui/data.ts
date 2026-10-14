@@ -76,7 +76,7 @@ export class LabData {
     const fixtures: FixtureSummary[] = [];
     const experiments: ExperimentSummary[] = [];
 
-    const runRoots: [string, string][] = [["runs", "runs"]];
+    const runRoots: [string, string][] = [["runs", "runs"], ["baselines", "baseline"]];
     const fixtureRoots: [string, string][] = [["fixtures", "fixtures"], [join("runs", "_fixtures"), "runs"]];
     for (const exp of this.dirs("results")) {
       const expDir = join("results", exp);
@@ -124,7 +124,7 @@ export class LabData {
   /** Resolve a workspace-relative path, refusing anything outside the lab's output folders. */
   safe(path: string): string | null {
     const abs = resolve(this.root, path);
-    const allowed = ["runs", "results", "fixtures"].map((d) => join(this.root, d) + sep);
+    const allowed = ["runs", "results", "fixtures", "baselines"].map((d) => join(this.root, d) + sep);
     return allowed.some((prefix) => abs.startsWith(prefix)) ? abs : null;
   }
 
