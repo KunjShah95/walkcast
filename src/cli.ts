@@ -11,6 +11,7 @@ import { causes, symptoms } from "./lab/classifier.ts";
 import { runExperiment } from "./lab/experiment.ts";
 import { loadFixture, replayFixture, writeFixture } from "./lab/fixture.ts";
 import { closeBrowser, runOnce } from "./lab/runner.ts";
+import { exportDashboard, serveDashboard } from "./ui/server.ts";
 import { createLeadTask } from "./lab/task.ts";
 
 const HELP = `Browser Agent Failure Lab
@@ -30,6 +31,10 @@ Commands:
   experiment [--baseline id] [--candidates a,b] [--seeds n] [--trials k] [--concurrency c] [--model-mode m] [--out dir]
                                         Full validation experiment (docs/ASSESSMENT.md §7)
 
+  ui [--port 4320]                      Dashboard and timeline viewer over runs/, fixtures/, results/
+                                        (build first: npm run ui:build, or just npm run ui)
+  ui-export [--out file.html] [--max-runs n] [--lean]
+                                        One self-contained HTML file with the data baked in
   providers                             List model providers and whether their API key is set
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
 
@@ -59,7 +64,11 @@ const { positionals, values } = parseArgs({
     seeds: { type: "string", default: "5" },
     trials: { type: "string", default: "3" },
     concurrency: { type: "string", default: "3" },
-    port: { type: "string", default: "4310" },
+    port: { type: "string" },
+    "max-runs": { type: "string", default: "80" },
+    lean: { type: "boolean", default: false },
+    fragment: { type: "boolean", default: false },
+    "screenshot-runs": { type: "string" },
     fixtures: { type: "string", default: "fixtures" },
     out: { type: "string" },
     screenshots: { type: "boolean", default: false },
@@ -98,9 +107,27 @@ async function main(): Promise<number> {
       if (!target) throw new Error("check-model needs a spec, e.g. groq:openai/gpt-oss-120b");
       return checkModel(target);
     }
+    case "ui": {
+      const url = await serveDashboard(Number(values.port ?? 4320));
+      console.log(`Failure Lab dashboard: ${url}  (read-only view of runs/, fixtures/, results/)`);
+      await new Promise(() => undefined);
+      return 0;
+    }
+    case "ui-export": {
+      const out = resolve(values.out ?? "failure-lab.html");
+      const r = exportDashboard({
+        out,
+        maxRuns: Number(values["max-runs"]),
+        screenshots: !values.lean,
+        fragment: values.fragment,
+        ...(values["screenshot-runs"] ? { screenshotRuns: Number(values["screenshot-runs"]) } : {}),
+      });
+      console.log(`Wrote ${r.path}: ${r.runs} runs, ${(r.bytes / 1024 / 1024).toFixed(1)} MB`);
+      return 0;
+    }
     case "app": {
       const fault = requireFault();
-      const app = await startApp({ fault, seed: Number(values.seed), port: Number(values.port) });
+      const app = await startApp({ fault, seed: Number(values.seed), port: Number(values.port ?? 4310) });
       console.log(`MiniCRM (fault=${fault}, seed=${values.seed}) at ${app.url}  — login demo / demo-pass`);
       await new Promise(() => undefined);
       return 0;

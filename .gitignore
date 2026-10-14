@@ -1,3 +1,5 @@
 node_modules/
 runs/
 results/*/runs/
+dashboard/dist/
+failure-lab.html

@@ -159,6 +159,36 @@ Structured output: `json_schema` first; if a model rejects it, the backend falls
 with the schema in the prompt and remembers that for later calls. The example model ids are
 examples, not defaults; check each provider's model list.
 
+## Dashboard and timeline viewer
+
+```sh
+npm run ui                       # builds, then serves http://127.0.0.1:4320 (read-only, local only)
+npm run lab -- ui-export --out failure-lab.html --max-runs 40 --screenshot-runs 10
+                                 # one self-contained HTML file with the data baked in (CI uploads one per run)
+```
+
+![Overview](docs/screenshots/overview.png)
+![Run: agent said vs app recorded, diagnosis](docs/screenshots/run.png)
+![Timeline (dark)](docs/screenshots/timeline-dark.png)
+
+- **Overview:** how many runs failed and how many claimed success anyway. An agent × fault matrix
+  (latest verdict per cell). A said/recorded quadrant comparing the agent's claim with the app's
+  records. Cause frequencies, and recent runs.
+- **Run timeline:** the agent's report beside the application's records and write ledger. The
+  diagnosis, with each finding linking to its evidence steps. A flight strip drawing the whole run
+  (steps, model calls, network, errors) on one time scale. Then the recording: every tool step with
+  before/after page state, target identity checks, network and screenshots. Agent decisions are
+  interleaved, and Stagehand's element resolution sits inside the `act()` step that asked for it.
+  A scroll beam tracks your place in the run.
+- **Fixtures** with copyable replay commands, and **Experiments** with detection, reproduction
+  and the regression (pass^k) matrix.
+
+The look is an instrument report on engineering graph paper: highlighter for evidence, red only for
+failure, condensed display type, mono for data. Light and dark themes are both supported. Interaction
+patterns follow Aceternity UI's idioms (sticky-header timeline with scroll beam, bento overview,
+cursor spotlight cards), reimplemented here with Tailwind and Motion. Stack: Vite, React 19,
+Tailwind 4, Motion; built to a single file.
+
 ## Lessons from building it (real failures of the harness itself)
 
 - **Capture changed agent timing.** Snapshotting the page after a click (`page.title()` and
@@ -188,6 +218,7 @@ src/agents/     Scripted agent versions v0/v1/v2
 src/lab/        Task + oracle, classifier, runner, report, fixtures/replay, experiment
 fixtures/       Committed regression fixtures (CI release gate)
 results/        Experiment outputs (summary.md / summary.json; per-run traces are not committed)
+dashboard/      Dashboard and timeline viewer (React); src/ui/ serves and exports it
 docs/           Research assessment
 ```
 

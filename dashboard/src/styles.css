@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource/ibm-plex-sans-condensed/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/600.css";
+
+/*
+  Layout: a forensic instrument report on engineering graph paper. Summary tiles first,
+  then the run as a time-ordered recording; evidence is marked with a highlighter.
+  Light = instrument paper, dark = oscilloscope.
+*/
+:root {
+  --paper: #f2f5f3;
+  --panel: #fbfcfb;
+  --panel-2: #eef2f0;
+  --grid: rgb(19 70 78 / 0.065);
+  --grid-major: rgb(19 70 78 / 0.11);
+  --ink: #13232b;
+  --ink-2: #566a70;
+  --ink-3: #8a9ba0;
+  --line: #d3dcd9;
+  --signal: #0e6b77;
+  --signal-soft: rgb(14 107 119 / 0.1);
+  --highlight: #ffe57a;
+  --highlight-ink: #3d3200;
+  --fail: #c2342c;
+  --fail-soft: rgb(194 52 44 / 0.09);
+  --pass: #2c7a4c;
+  --pass-soft: rgb(44 122 76 / 0.1);
+  --warn: #a26400;
+  --warn-soft: rgb(162 100 0 / 0.1);
+  --shadow: 0 1px 0 rgb(19 35 43 / 0.04), 0 8px 24px -16px rgb(19 35 43 / 0.25);
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0c1413;
+    --panel: #111b19;
+    --panel-2: #16221f;
+    --grid: rgb(110 220 190 / 0.045);
+    --grid-major: rgb(110 220 190 / 0.085);
+    --ink: #dbe6e2;
+    --ink-2: #93a7a1;
+    --ink-3: #64776f;
+    --line: #22302c;
+    --signal: #62d0bd;
+    --signal-soft: rgb(98 208 189 / 0.12);
+    --highlight: rgb(244 207 92 / 0.2);
+    --highlight-ink: #f6d777;
+    --fail: #ff7b6f;
+    --fail-soft: rgb(255 123 111 / 0.12);
+    --pass: #71d29b;
+    --pass-soft: rgb(113 210 155 / 0.12);
+    --warn: #ecb34d;
+    --warn-soft: rgb(236 179 77 / 0.12);
+    --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.8);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0c1413;
+  --panel: #111b19;
+  --panel-2: #16221f;
+  --grid: rgb(110 220 190 / 0.045);
+  --grid-major: rgb(110 220 190 / 0.085);
+  --ink: #dbe6e2;
+  --ink-2: #93a7a1;
+  --ink-3: #64776f;
+  --line: #22302c;
+  --signal: #62d0bd;
+  --signal-soft: rgb(98 208 189 / 0.12);
+  --highlight: rgb(244 207 92 / 0.2);
+  --highlight-ink: #f6d777;
+  --fail: #ff7b6f;
+  --fail-soft: rgb(255 123 111 / 0.12);
+  --pass: #71d29b;
+  --pass-soft: rgb(113 210 155 / 0.12);
+  --warn: #ecb34d;
+  --warn-soft: rgb(236 179 77 / 0.12);
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.8);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-highlight: var(--highlight);
+  --color-highlight-ink: var(--highlight-ink);
+  --color-fail: var(--fail);
+  --color-fail-soft: var(--fail-soft);
+  --color-pass: var(--pass);
+  --color-pass-soft: var(--pass-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --shadow-card: var(--shadow);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--paper);
+  /* engineering graph paper: 8px minor, 40px major */
+  background-image:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* highlighter mark for evidence */
+.evidence {
+  background: linear-gradient(transparent 12%, var(--highlight) 12%, var(--highlight) 88%, transparent 88%);
+  color: var(--highlight-ink);
+  padding-inline: 2px;
+  border-radius: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
