@@ -73,7 +73,7 @@ export function SpotlightCard({ children, className, onClick }: { children: Reac
       }}
       onMouseLeave={() => setPos(null)}
       className={cn(
-        "group relative w-full overflow-hidden rounded-xl border border-line bg-panel text-left shadow-card transition-colors hover:border-signal/50",
+        "group relative w-full overflow-hidden rounded-xl border border-line bg-panel text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-signal/50 hover:shadow-hover",
         className,
       )}
     >

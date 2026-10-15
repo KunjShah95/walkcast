@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { Auth, AuthError, safeNext } from "../src/site/auth.ts";
 import { FileStore } from "../src/store/index.ts";
-import { authPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../src/site/pages.ts";
+import { authPage, landingPage, llmsTxt, pricingMd, robotsTxt, sitemapXml } from "../src/site/pages.ts";
 import { serveDashboard } from "../src/ui/server.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "lab-site-"));
@@ -90,17 +90,27 @@ test("crawlers: the landing page carries full content and structured data", () =
   const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]!);
   assert.deepEqual(
     ld["@graph"].map((n: { "@type": string }) => n["@type"]),
-    ["WebSite", "SoftwareApplication", "VideoObject", "HowTo", "FAQPage"],
+    ["Organization", "WebSite", "WebPage", "SoftwareApplication", "VideoObject", "HowTo", "ItemList", "FAQPage"],
   );
-  const faq = ld["@graph"][4].mainEntity as { name: string }[];
+  const faq = ld["@graph"].find((n: { "@type": string }) => n["@type"] === "FAQPage").mainEntity as { name: string }[];
   for (const q of faq) assert.ok(html.includes(q.name.replace(/"/g, "&quot;")), `FAQ answer visible on the page: ${q.name}`);
+  assert.match(html, /id="what-is"/);
+  assert.match(html, /id="compare"/);
+  assert.match(html, /id="sources"/);
+  assert.match(html, /https:\/\/www\.w3\.org\/TR\/webvtt1\//);
+  assert.match(html, /Walkcast vs recording it yourself/);
 
   const robots = robotsTxt("https://lab.example");
-  for (const bot of ["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended", "Googlebot", "Bingbot"]) assert.match(robots, new RegExp(`User-agent: ${bot}\\nAllow: /`));
+  for (const bot of ["GPTBot", "ClaudeBot", "anthropic-ai", "PerplexityBot", "Google-Extended", "Googlebot", "Bingbot"]) assert.match(robots, new RegExp(`User-agent: ${bot}\\nAllow: /`));
+  assert.match(robots, /User-agent: CCBot\nDisallow: \//);
   assert.match(robots, /Disallow: \/api\//);
   assert.match(robots, /Sitemap: https:\/\/lab.example\/sitemap.xml/);
   assert.match(sitemapXml("https://lab.example"), /<video:content_loc>https:\/\/lab.example\/assets\/demo.mp4<\/video:content_loc>/);
+  assert.match(sitemapXml("https://lab.example"), /<loc>https:\/\/lab.example\/pricing.md<\/loc>/);
   assert.match(llmsTxt("https://lab.example"), /^# Walkcast\n\n> /);
+  assert.match(llmsTxt("https://lab.example"), /pricing\.md/);
+  assert.match(pricingMd("https://lab.example"), /^# Pricing — Walkcast\n/);
+  assert.match(pricingMd("https://lab.example"), /Price: \$0/);
 });
 
 test("server: public pages, protected actions, sign-up then record", async () => {
@@ -109,9 +119,10 @@ test("server: public pages, protected actions, sign-up then record", async () =>
   const srv = await serveDashboard(port, { root, unref: true, worker: false });
   const base = srv.url;
   try {
-    for (const path of ["/", "/robots.txt", "/sitemap.xml", "/llms.txt", "/signup", "/app", "/assets/og.png"]) {
+    for (const path of ["/", "/how", "/lab", "/safety", "/pricing", "/robots.txt", "/sitemap.xml", "/llms.txt", "/pricing.md", "/signup", "/app", "/assets/og.png"]) {
       assert.equal((await fetch(base + path)).status, 200, path);
     }
+    assert.equal((await fetch(base + "/app")).headers.get("x-robots-tag"), "noindex, nofollow");
     assert.equal((await fetch(`${base}/api/record`, { method: "POST", body: "{}" })).status, 401);
     const crossSite = await fetch(`${base}/auth/login`, { method: "POST", headers: { Origin: "https://evil.example" }, body: "{}" });
     assert.equal(crossSite.status, 403);

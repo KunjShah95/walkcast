@@ -13,7 +13,7 @@ import { createMedia, type MediaStore } from "../media/store.ts";
 import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
-import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../site/pages.ts";
+import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
 import { createStore, type Job, type Store } from "../store/index.ts";
 
@@ -162,6 +162,10 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
 
     // ---------------------------------------------------------------- public site
     if (url.pathname === "/" && req.method === "GET") return send(200, "text/html; charset=utf-8", landingPage(siteUrl, user));
+    if (url.pathname === "/how") return send(200, "text/html; charset=utf-8", howPage(siteUrl, user));
+    if (url.pathname === "/lab") return send(200, "text/html; charset=utf-8", labPage(siteUrl, user));
+    if (url.pathname === "/safety") return send(200, "text/html; charset=utf-8", safetyPage(siteUrl, user));
+    if (url.pathname === "/pricing") return send(200, "text/html; charset=utf-8", pricingPage(siteUrl, user));
     if (url.pathname === "/guides" || url.pathname === "/guides/") return send(200, "text/html; charset=utf-8", guidesIndexPage(siteUrl, user));
     if (url.pathname.startsWith("/guides/")) {
       const guide = guideBySlug(url.pathname.slice("/guides/".length).replace(/\/$/, ""));
@@ -170,6 +174,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     if (url.pathname === "/robots.txt") return send(200, "text/plain; charset=utf-8", robotsTxt(siteUrl), "max-age=3600");
     if (url.pathname === "/sitemap.xml") return send(200, "application/xml; charset=utf-8", sitemapXml(siteUrl), "max-age=3600");
     if (url.pathname === "/llms.txt") return send(200, "text/plain; charset=utf-8", llmsTxt(siteUrl), "max-age=3600");
+    if (url.pathname === "/pricing.md") return send(200, "text/markdown; charset=utf-8", pricingMd(siteUrl), "max-age=3600");
     if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") return send(200, "image/svg+xml", FAVICON, "max-age=86400");
     if (url.pathname.startsWith("/assets/")) {
       const asset = assetPath(url.pathname.slice("/assets/".length));
@@ -351,7 +356,16 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       if (!abs || !type || !existsSync(abs) || inRecordings) return json(404, { error: "not found" });
       return streamFile(req, res, abs, type, "private, max-age=3600");
     }
-    if (url.pathname === "/app" || url.pathname === "/app/") return send(200, "text/html; charset=utf-8", html);
+    if (url.pathname === "/app" || url.pathname === "/app/") {
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Robots-Tag": "noindex, nofollow",
+      });
+      return void res.end(html);
+    }
     return send(404, "text/html; charset=utf-8", `<!doctype html><meta charset="utf-8"><title>Not found</title><p style="font-family:system-ui;padding:40px">Page not found. <a href="/">Home</a> · <a href="/app">Dashboard</a></p>`);
   }
 

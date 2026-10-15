@@ -62,6 +62,45 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
+    slug: "walkcast-vs-screen-recording",
+    label: "Walkcast vs screen recording",
+    title: "Walkcast vs Screen Recording for Website Walkthroughs",
+    h1: "Walkcast versus recording a website walkthrough yourself",
+    description:
+      "When to use Walkcast and when to record a website walkthrough yourself: login, captions, re-recording after a release, and what each method actually produces.",
+    audience: "People choosing between a URL-based walkthrough and a screen recorder such as Loom, OBS, or the one built into their OS.",
+    intro: [
+      "A website video walkthrough is a recording that moves through a site while a voice explains the screen. Walkcast makes that from a link: a browser signs in, visits up to 30 pages on the same site, and returns an MP4, WebVTT captions and a transcript. A screen recorder captures whatever is on your display while you click and talk.",
+      "Use Walkcast when the subject is a website you may test and the narration should describe what the browser did. Use a screen recorder when the video has to include a meeting, a desktop app, a mobile device, or commentary only you can give.",
+    ],
+    steps: [
+      ["Name the subject", "If it is a website you can open in a browser, Walkcast can record it. If it is a desktop app, a phone, or a live call, use a screen recorder."],
+      ["Decide who speaks", "Walkcast writes each line from recorded events: the page opened, the field filled, the control clicked. A screen recorder uses your voice, so you need a script or the confidence to improvise."],
+      ["Check the sign-in", "Walkcast signs in with a username and password you provide, then stops at CAPTCHA and two-factor prompts. A screen recorder has you sign in yourself, including those prompts."],
+      ["Plan the next release", "Walkcast re-records from the same link. A screen recording has to be clicked through again, or it goes stale."],
+    ],
+    settings: [
+      ["Walkcast", "A URL, an optional demo login, about two minutes. Output: MP4 with voice-over, WebVTT captions, WAV narration, page list."],
+      ["Screen recorder", "You drive the site and talk. Output: a video file. Captions and a transcript are a separate job, if you make them."],
+      ["Choose Walkcast", "Product tours, onboarding, handover, QA evidence and help articles for a website."],
+      ["Choose a screen recorder", "Desktop software, live meetings, mobile apps, or a video that needs your judgement in the voice-over."],
+    ],
+    afterwards: [
+      "If you used Walkcast, embed the MP4 with the VTT caption track and paste the transcript under it so the page is readable without pressing play.",
+      "If you used a screen recorder, add captions before you publish. A video with no text is invisible to search and to anyone who cannot hear it.",
+    ],
+    pitfalls: [
+      "Treating the tools as rivals for every video. They record different things.",
+      "Using a production account in either tool. Use a demo account with sample data.",
+      "Publishing a screen recording of a site that changes every week and never re-recording it.",
+    ],
+    faq: [
+      ["Is Walkcast a replacement for Loom or OBS?", "For a narrated tour of a website, yes, it replaces the record-and-talk step. For a meeting, a desktop app, or a video that needs your own commentary, keep the screen recorder."],
+      ["Which one is better for a product demo of a web app?", "Walkcast, when the demo is the product itself and you want it re-recorded after each release. A screen recorder is better when a person has to explain a judgement the browser cannot see."],
+      ["Can I add my own voice to a Walkcast video?", "Yes. Use the transcript as the script and record over the MP4, or replace the narration WAV. The captions stay timed to the original speech, so re-time them if the new voice has a different pace."],
+    ],
+  },
+  {
     slug: "product-demo-video",
     label: "Product demo videos",
     title: "How to Make a Product Demo Video of Your Web App",

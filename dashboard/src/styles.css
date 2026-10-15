@@ -115,6 +115,29 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-mono);
   --shadow-card: var(--shadow);
+  /*
+    shadcn/v0 component vocabulary (used by the primitives in src/components/ui).
+    These ALIAS the tokens above, so shadcn components inherit this app's palette and
+    its light/dark switching instead of shipping a second, conflicting set of colors.
+  */
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--paper);
+  --color-secondary: var(--panel-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--panel-2);
+  --color-muted-foreground: var(--ink-2);
+  --color-accent: var(--panel-2);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--fail);
+  --color-destructive-foreground: var(--paper);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--signal);
 }
 
 html,
@@ -200,6 +223,64 @@ h3 {
   to {
     offset-distance: 100%;
     opacity: 0.15;
+  }
+}
+
+/* ---- polish: motion + interaction tokens ---------------------------------- */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
+  --shadow-hover: 0 2px 4px rgb(28 25 23 / 0.06), 0 28px 64px -22px rgb(28 25 23 / 0.42);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --shadow-hover: 0 1px 0 rgb(0 0 0 / 0.45), 0 28px 70px -24px rgb(0 0 0 / 0.95); }
+}
+:root[data-theme="dark"] { --shadow-hover: 0 1px 0 rgb(0 0 0 / 0.45), 0 28px 70px -24px rgb(0 0 0 / 0.95); }
+
+/* selection + scrollbar */
+::selection { background: color-mix(in srgb, var(--signal) 28%, transparent); color: var(--ink); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink-3) 35%, transparent); border-radius: 999px; border: 2px solid var(--paper); }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink-3) 55%, transparent); }
+
+/* premium focus */
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 6px; box-shadow: 0 0 0 4px var(--signal-soft); }
+
+/* press + hover lift utilities */
+.press { transition: transform var(--dur-fast) var(--ease-in-out); }
+.press:active, .press[data-pressed] { transform: translateY(1px) scale(0.985); }
+.elevate { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out); }
+.elevate:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+
+/* Panel polish: subtle top highlight + hover elevation */
+.rounded-xl { transition: box-shadow var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out); }
+
+/* animated entrance that views can opt into */
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.animate-rise { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+
+/* smoother chip / button hover color */
+button, a { transition-timing-function: var(--ease-in-out); }
+
+/* record-light pulse (brand mark) */
+@keyframes rec-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.25); opacity: 0.55; } }
+.rec-light { animation: rec-pulse 1.6s var(--ease-in-out) infinite; transform-origin: center; }
+
+/*
+  shadcn base: give a bare `border` a real color (components/ui uses `border` with no
+  color suffix). In @layer base it stays below `border-line`/`border-signal`/... in the
+  utilities layer, so existing elements that name a color are unaffected.
+*/
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--color-border);
   }
 }
 

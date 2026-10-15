@@ -12,6 +12,7 @@ import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
 import { Simulator } from "./views/Simulator.tsx";
+import { Pricing } from "./views/Pricing.tsx";
 import { Record } from "./views/Record.tsx";
 
 export type Route =
@@ -22,7 +23,8 @@ export type Route =
   | { view: "fixtures" }
   | { view: "experiments" }
   | { view: "run"; dir: string }
-  | { view: "compare"; base: string; cand: string };
+  | { view: "compare"; base: string; cand: string }
+  | { view: "pricing" };
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
@@ -32,7 +34,7 @@ function parse(hash: string): Route {
     return { view: "compare", base, cand };
   }
   if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record") return { view: h };
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "pricing") return { view: h };
   return { view: "overview" };
 }
 
@@ -49,6 +51,7 @@ const NAV: { view: Route["view"]; label: string }[] = [
   { view: "runs", label: "Runs" },
   { view: "fixtures", label: "Fixtures" },
   { view: "experiments", label: "Experiments" },
+  { view: "pricing", label: "Pricing" },
 ];
 
 export function App() {
@@ -155,6 +158,7 @@ export function App() {
         {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
         {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} />}
         {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
+        {route.view === "pricing" && <Pricing />}
       </main>
 
 {animations && <FilmGrain />}
