@@ -8,7 +8,7 @@ import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
 import { causes, symptoms, type FindingLabel } from "./classifier.ts";
 import { runOnce, type RunResult } from "./runner.ts";
-import type { CreateLeadTask } from "./task.ts";
+import type { Task } from "./task.ts";
 
 /**
  * A regression fixture: everything needed to put a failed run's environment back together
@@ -18,7 +18,7 @@ export interface FixtureManifest {
   schemaVersion: 1;
   id: string;
   createdAt: string;
-  task: CreateLeadTask;
+  task: Task;
   environment: {
     fault: Scenario;
     faultDescription: string;
@@ -66,9 +66,9 @@ export function appVersion(): string {
   return hash.digest("hex").slice(0, 12);
 }
 
-export async function writeFixture(result: RunResult, task: CreateLeadTask, fixturesDir: string): Promise<Fixture> {
+export async function writeFixture(result: RunResult, task: Task, fixturesDir: string): Promise<Fixture> {
   const diagnosisCauses = causes(result.diagnosis);
-  const id = `${result.fault}-s${result.seed}-${diagnosisCauses[0] ?? "unexplained"}`;
+  const id = `${task.id === "create-lead" ? "" : `${task.id}.`}${result.fault}-s${result.seed}-${diagnosisCauses[0] ?? "unexplained"}`;
   const dir = join(fixturesDir, id);
   if (existsSync(dir)) throw new Error(`Fixture ${dir} already exists; refusing to overwrite.`);
   mkdirSync(dir, { recursive: true });

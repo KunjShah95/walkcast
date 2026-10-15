@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Stagehand, localBrowser } from "@browserbasehq/stagehand";
-import { type Scenario, normalizeScenario, scenarioTaskPossible } from "../app/faults.ts";
+import { type Scenario, assertApplicable, normalizeScenario, scenarioTaskPossible } from "../app/faults.ts";
 import { CREDENTIALS, startApp } from "../app/server.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
@@ -15,7 +15,7 @@ import { ModelGateway, readCassette, type GatewayMode, type GatewayStatus } from
 import { ScriptedModel } from "../llm/scripted-model.ts";
 import { backendForSelection, defaultSelection, type ModelSelection } from "../llm/model-spec.ts";
 import { type Diagnosis, diagnose } from "./classifier.ts";
-import { createLeadTask, evaluateOracle, type CreateLeadTask, type OracleResult } from "./task.ts";
+import { createLeadTask, evaluateOracle, requestedValues, seedFor, type OracleResult, type Task } from "./task.ts";
 import { writeRunReport } from "./report.ts";
 
 export interface RunOptions {
@@ -24,7 +24,7 @@ export interface RunOptions {
   seed: number;
   agent: string | AgentSpec;
   outDir: string;
-  task?: CreateLeadTask;
+  task?: Task;
   screenshots?: boolean;
   video?: boolean;
   /** LLM agents only. Defaults to live. */
@@ -39,6 +39,7 @@ export interface RunResult {
   runId: string;
   agent: string;
   agentSpec: AgentSpec;
+  task: Task;
   fault: Scenario;
   seed: number;
   expectation: "task-success" | "honest-failure";
@@ -83,7 +84,7 @@ export function chromePath(): string {
 interface Session {
   context: BrowserContext;
   page: Page;
-  run(tools: BrowserTools, task: CreateLeadTask): Promise<void>;
+  run(tools: BrowserTools, task: Task): Promise<void>;
   close(): Promise<void>;
   browserVersion: string;
 }
@@ -93,23 +94,32 @@ registerSecret("app_password", CREDENTIALS.password);
 export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
-  const runId = `${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const runId = `${task.id === "create-lead" ? "" : `${task.id}.`}${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const runDir = join(options.outDir, runId);
   const recorder = new Recorder(runDir, { screenshots: options.screenshots ?? false });
-  const app = await startApp({ fault: options.fault, seed: options.seed });
+  assertApplicable(normalizeScenario(options.fault), task.id);
+  const app = await startApp({ fault: options.fault, seed: options.seed, task: task.id, seedLeads: seedFor(task) });
 
-  let gateway: ModelGateway | null = null;
-  let selection: ModelSelection | null = null;
+  let gateway = null as ModelGateway | null;
+  let selection = null as ModelSelection | null;
   let session: Session;
+  try {
+    session = await openSession();
+  } catch (error) {
+    await app.close(); // never leave the test app running when the browser could not start
+    throw error;
+  }
+  async function openSession(): Promise<Session> {
   if (spec.kind === "scripted") {
-    session = await scriptedSession(spec, runDir, options.video ?? false);
+    return scriptedSession(spec, runDir, options.video ?? false);
   } else {
     const mode = options.modelMode ?? "live";
     selection = mode === "live" ? (options.models ?? defaultSelection()) : null;
     const backend = mode === "live" ? backendForSelection(selection!) : mode === "scripted" ? new ScriptedModel() : null;
     const cassette = mode === "replay" ? readCassette(options.cassette ?? "") : undefined;
     gateway = new ModelGateway(mode, backend, recorder, cassette);
-    session = await stagehandSession(spec, gateway);
+    return stagehandSession(spec, gateway);
+  }
   }
   await session.context.addInitScript("window.__name = (fn) => fn;");
   recorder.attach(session.context, session.page);
@@ -129,14 +139,14 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
 
   const claim = recorder.claim() ?? null;
   const oracle = evaluateOracle(task, app.state, claim ?? undefined);
-  const expectation = scenarioTaskPossible(app.fault) ? "task-success" : "honest-failure";
+  const expectation = scenarioTaskPossible(app.fault, task.id) ? "task-success" : "honest-failure";
   const diagnosis = diagnose({
     events: recorder.events,
     oracle,
     ledger: app.state.ledger,
     leads: app.state.leads,
     expectation,
-    requestedValues: task.params,
+    requestedValues: requestedValues(task),
   });
 
   recorder.flush();
@@ -145,6 +155,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     runId,
     agent: spec.id,
     agentSpec: spec,
+    task,
     fault: app.fault,
     seed: options.seed,
     expectation,

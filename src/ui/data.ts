@@ -17,6 +17,7 @@ export interface RunSummary {
   source: string;
   agent: string;
   agentKind: "scripted" | "stagehand";
+  task: string;
   fault: string;
   seed: number;
   expectation: string;
@@ -146,6 +147,7 @@ export class LabData {
       source,
       agent: r.agent,
       agentKind: (r.agentSpec?.kind as RunSummary["agentKind"]) ?? "scripted",
+      task: r.task?.id ?? "create-lead",
       fault: r.fault,
       seed: r.seed,
       expectation: r.expectation,

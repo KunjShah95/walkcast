@@ -187,6 +187,17 @@ export function diagnose(input: ClassifierInput): Diagnosis {
       requests.some((r) => r.stepId === step.stepId) ||
       (step.before !== null && step.after !== null && step.before.fingerprint !== step.after.fingerprint);
     // A timed-out action that still sent a request or changed the page found its target.
+    const emptyRead = step.tool === "readValue" && step.result === null && typeof step.args.selector === "string";
+    if (emptyRead) {
+      findings.push({
+        label: "locator-not-found",
+        kind: "cause",
+        confidence: "rule",
+        explanation: `Step ${step.stepId} read ${String(step.args.selector)}, which no longer exists on the page; the agent got nothing back.`,
+        evidenceSteps: [step.stepId],
+      });
+      continue;
+    }
     if (step.error && !hadEffect && /(click|fill|select)/i.test(step.tool) && /timeout|waiting for|no element/i.test(step.error)) {
       findings.push({
         label: "locator-not-found",
@@ -198,7 +209,7 @@ export function diagnose(input: ClassifierInput): Diagnosis {
     }
   }
 
-  for (const entry of committed) {
+  for (const entry of ledger.filter((e) => e.outcome === "committed" || e.outcome === "updated")) {
     const lead = leads.find((l) => l.id === entry.leadId);
     if (!lead) continue;
     for (const [field, requested] of Object.entries(requestedValues)) {

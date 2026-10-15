@@ -10,6 +10,8 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
   const [verdict, setVerdict] = useState<VerdictFilter>("all");
   const [agent, setAgent] = useState("all");
   const [fault, setFault] = useState("all");
+  const [task, setTask] = useState("all");
+  const tasks = useMemo(() => [...new Set(index.runs.map((r) => r.task))], [index]);
   const agents = useMemo(() => [...new Set(index.runs.map((r) => r.agent))].sort(), [index]);
   const faults = useMemo(() => [...new Set(index.runs.map((r) => r.fault))], [index]);
 
@@ -17,7 +19,8 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
     (r) =>
       (verdict === "all" || (verdict === "false-success" ? r.symptoms.includes("false-success") : r.verdict === verdict)) &&
       (agent === "all" || r.agent === agent) &&
-      (fault === "all" || r.fault === fault),
+      (fault === "all" || r.fault === fault) &&
+      (task === "all" || r.task === task),
   );
 
   return (
@@ -38,6 +41,7 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
               ["pass", "Passed"],
             ]}
           />
+          <Select id="task-filter" label="Task" value={task} onChange={setTask} options={tasks} />
           <Select id="agent-filter" label="Agent" value={agent} onChange={setAgent} options={agents} />
           <Select id="fault-filter" label="Fault" value={fault} onChange={setFault} options={faults} format={(f) => FAULT_LABEL[f] ?? f} />
         </div>
@@ -67,7 +71,7 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
                   </span>
                   <span className="font-mono text-[12.5px] font-medium">{r.agent}</span>
                   <span className="col-span-2 truncate text-[13px] md:col-span-1">
-                    {FAULT_LABEL[r.fault] ?? r.fault} <span className="font-mono text-[11px] text-ink-3">s{r.seed}</span>
+                    {FAULT_LABEL[r.fault] ?? r.fault} <span className="font-mono text-[11px] text-ink-3">{r.task !== "create-lead" ? `${r.task} · ` : ""}s{r.seed}</span>
                   </span>
                   <span className="col-span-2 flex flex-wrap gap-1 md:col-span-1">
                     {r.symptoms.map((s) => (

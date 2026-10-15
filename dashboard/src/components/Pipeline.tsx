@@ -83,6 +83,7 @@ export interface Packet {
 }
 
 export function Pipeline({
+  taskLabel,
   agentLabel,
   modelLabel,
   stagehand,
@@ -92,6 +93,7 @@ export function Pipeline({
   highlight,
   onToggleFault,
 }: {
+  taskLabel: string;
   agentLabel: string;
   modelLabel: string;
   stagehand: boolean;
@@ -102,15 +104,15 @@ export function Pipeline({
   onToggleFault: (fault: string) => void;
 }) {
   const subtitle: Record<string, string> = {
-    task: "create a lead",
+    task: taskLabel,
     model: modelLabel,
     agent: agentLabel,
     stagehand: stagehand ? "resolves elements" : "not used",
     browser: "Chrome",
-    page: "/leads/new",
+    page: "MiniCRM pages",
     gateway: "edge proxy",
     auth: "cookie session",
-    api: "POST /leads",
+    api: "leads endpoints",
     db: "leads + write ledger",
     oracle: "checks the records",
   };

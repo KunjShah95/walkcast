@@ -201,9 +201,9 @@ export class BrowserTools {
     }, (text) => ({ length: text.length }));
   }
 
-  async done(success: boolean, summary: string, leadId?: number): Promise<void> {
+  async done(success: boolean, summary: string, leadId?: number, answer?: string): Promise<void> {
     const stepId = ++this.recorder.currentStep;
-    this.recorder.push({ type: "claim", stepId, at: this.recorder.now(), success, summary, leadId });
+    this.recorder.push({ type: "claim", stepId, at: this.recorder.now(), success, summary, leadId, ...(answer !== undefined ? { answer } : {}) });
   }
 
   // ------------------------------------------------------------ internals

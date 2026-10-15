@@ -80,9 +80,30 @@ export function normalizeScenario(scenario: string): Scenario {
   return scenarioId(parseScenario(scenario));
 }
 
+export type TaskId = "create-lead" | "reassign-lead" | "lookup-owner";
+export const TASK_IDS: TaskId[] = ["create-lead", "reassign-lead", "lookup-owner"];
+
+/** Faults that mean something for each task. Lookup is read-only: no owner dropdown, no write. */
+export const TASK_FAULTS: Record<TaskId, FaultId[]> = {
+  "create-lead": ["stale-owners", "gateway-timeout", "silent-owner-drop", "session-expiry", "ui-drift"],
+  "reassign-lead": ["stale-owners", "gateway-timeout", "silent-owner-drop", "session-expiry", "ui-drift"],
+  "lookup-owner": ["gateway-timeout", "session-expiry", "ui-drift"],
+};
+
+export function isTaskId(value: string): value is TaskId {
+  return (TASK_IDS as string[]).includes(value);
+}
+
 /** A task is achievable only if every active fault leaves it achievable. */
-export function scenarioTaskPossible(scenario: Scenario): boolean {
+export function scenarioTaskPossible(scenario: Scenario, task: TaskId = "create-lead"): boolean {
+  if (task === "lookup-owner") return true;
   return parseScenario(scenario).every((f) => FAULTS[f].taskPossible);
+}
+
+export function assertApplicable(scenario: Scenario, task: TaskId): void {
+  for (const f of parseScenario(scenario)) {
+    if (!TASK_FAULTS[task].includes(f)) throw new Error(`Fault '${f}' does not apply to task '${task}'. Applicable: ${TASK_FAULTS[task].join(", ")}`);
+  }
 }
 
 export function describeScenario(scenario: Scenario): string {
@@ -91,8 +112,8 @@ export function describeScenario(scenario: Scenario): string {
 }
 
 /** The control, each single fault, and every pair of faults: the benchmark grid. */
-export function allScenarios(include: "singles" | "pairs" = "pairs"): Scenario[] {
-  const singles = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none");
+export function allScenarios(include: "singles" | "pairs" = "pairs", task?: TaskId): Scenario[] {
+  const singles = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none" && (!task || TASK_FAULTS[task].includes(f)));
   const out: Scenario[] = ["none", ...singles];
   if (include === "pairs") {
     for (let i = 0; i < singles.length; i++) for (let j = i + 1; j < singles.length; j++) out.push(scenarioId([singles[i]!, singles[j]!]));

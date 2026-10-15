@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { type NodeStatus, type Packet, Pipeline } from "../components/Pipeline.tsx";
 import { CopyButton, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
-import { AGENT_INFO, FAULT_INFO, FAULT_NODE } from "../lib/agents.ts";
+import { AGENT_INFO, FAULT_INFO, FAULT_NODE, TASKS } from "../lib/agents.ts";
 import { type Capabilities, loadCapabilities, loadRun, startRun } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
 import { type Caption, narrate } from "../lib/narrate.ts";
@@ -21,6 +21,8 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
   const autoplay = useRef(false);
   const [agent, setAgent] = useState(() => (index.runs.some((r) => r.agent === "sh-p0") ? "sh-p0" : "v0"));
   const [faults, setFaults] = useState<string[]>(["gateway-timeout"]);
+  const [task, setTask] = useState("create-lead");
+  const taskInfo = TASKS.find((t) => t.id === task) ?? TASKS[0]!;
   const [hoverFault, setHoverFault] = useState<string | null>(null);
   const [caps, setCaps] = useState<Capabilities>({ live: false });
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -33,8 +35,8 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
   }, []);
 
   const key = scenarioKey(faults);
-  const recorded = useMemo(() => lab.runs.find((r) => r.agent === agent && r.fault === key), [lab, agent, key]);
-  const cleanBaseline = useMemo(() => lab.runs.find((r) => r.agent === agent && r.fault === "none" && r.verdict === "pass"), [lab, agent]);
+  const recorded = useMemo(() => lab.runs.find((r) => r.agent === agent && r.fault === key && r.task === task), [lab, agent, key, task]);
+  const cleanBaseline = useMemo(() => lab.runs.find((r) => r.agent === agent && r.fault === "none" && r.task === task && r.verdict === "pass"), [lab, agent, task]);
 
   // Load the recorded run for the chosen scenario, if there is one.
   useEffect(() => {
@@ -69,7 +71,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
     setState("running");
     setError(null);
     try {
-      await startRun({ agent, fault: key, seed: 1, ...(AGENT_INFO[agent]?.kind === "stagehand" && !caps.providers?.length ? { modelMode: "scripted" } : {}) });
+      await startRun({ agent, fault: key, seed: 1, task, ...(AGENT_INFO[agent]?.kind === "stagehand" && !caps.providers?.length ? { modelMode: "scripted" } : {}) });
       autoplay.current = true;
       setLab(await refresh()); // the newest run for this scenario loads and plays
     } catch (e) {
@@ -107,7 +109,28 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
       <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="grid gap-4">
           <Panel>
-            <PanelHeader eyebrow="1 · who drives the browser" title="Agent" />
+            <PanelHeader eyebrow="1 · what the agent is asked to do" title="Task" />
+            <div className="grid gap-1.5 p-3" role="radiogroup" aria-label="Task">
+              {TASKS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={task === t.id}
+                  onClick={() => {
+                    setTask(t.id);
+                    setFaults((cur) => cur.filter((f) => t.faults.includes(f)));
+                  }}
+                  className={cn("rounded-lg border px-3 py-2 text-left transition-colors", task === t.id ? "border-signal bg-signal-soft" : "border-line hover:border-ink-3")}
+                >
+                  <div className="text-[13px] font-medium">{t.name}</div>
+                  <div className="text-[12px] text-ink-2">{t.goal}</div>
+                </button>
+              ))}
+            </div>
+          </Panel>
+          <Panel>
+            <PanelHeader eyebrow="2 · who drives the browser" title="Agent" />
             <div className="grid gap-1.5 p-3" role="radiogroup" aria-label="Agent">
               {agents.map((a) => {
                 const info = AGENT_INFO[a]!;
@@ -131,9 +154,9 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
             </div>
           </Panel>
           <Panel>
-            <PanelHeader eyebrow="2 · what goes wrong (max two)" title="Fault injectors" />
+            <PanelHeader eyebrow="3 · what goes wrong (max two)" title="Fault injectors" />
             <div className="grid gap-1.5 p-3">
-              {FAULT_ORDER.map((f) => {
+              {FAULT_ORDER.filter((f) => taskInfo.faults.includes(f)).map((f) => {
                 const on = faults.includes(f);
                 return (
                   <label
@@ -165,7 +188,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
               <div className="min-w-0">
                 <div className="eyebrow">Scenario</div>
                 <div className="font-mono text-[13px]">
-                  {agent} · {key}
+                  {task} · {agent} · {key}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -189,6 +212,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
             </div>
             <div className="overflow-x-auto px-2 py-3">
               <Pipeline
+                taskLabel={taskInfo.name.toLowerCase()}
                 agentLabel={agent}
                 modelLabel={detail?.result.model ? (detail.result.model.selection?.agent ?? detail.result.model.mode) : viaStagehand ? "model" : "none (scripted)"}
                 stagehand={viaStagehand}
@@ -205,7 +229,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
                 <span className="text-ink-2">
                   {caps.live ? "This scenario has not been run yet. Run it above." : "This scenario isn't in the snapshot. Run it locally:"}
                 </span>
-                {!caps.live && <CopyButton text={`npm run lab -- run --agent ${agent} --fault ${key}${viaStagehand ? " --model-mode scripted" : ""}`} />}
+                {!caps.live && <CopyButton text={`npm run lab -- run --task ${task} --agent ${agent} --fault ${key}${viaStagehand ? " --model-mode scripted" : ""}`} />}
               </div>
             )}
             {error && <p className="border-t border-line px-4 py-3 text-[13px] text-fail">{error}</p>}

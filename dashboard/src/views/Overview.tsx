@@ -3,6 +3,8 @@ import type { Route } from "../App.tsx";
 import { Empty, FindingChip, Panel, PanelHeader, SpotlightCard, Verdict } from "../components/ui.tsx";
 import { FAULT_LABEL, ago, cn, label, ms } from "../lib/format.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
+import { TASKS } from "../lib/agents.ts";
+import { useState } from "react";
 
 export function Overview({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
   const runs = index.runs;
@@ -43,7 +45,7 @@ export function Overview({ index, go }: { index: LabIndex; go: (r: Route) => voi
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <Panel className="min-w-0 lg:col-span-8">
           <PanelHeader eyebrow="Latest verdict per agent and fault" title="Agent × fault" aside={<Legend />} />
-          <AgentFaultMatrix runs={runs} go={go} />
+          <TaskMatrix runs={runs} go={go} />
         </Panel>
         <Panel className="min-w-0 lg:col-span-4">
           <PanelHeader eyebrow="What the agent said vs. what the app recorded" title="Said / recorded" />
@@ -100,6 +102,32 @@ function Legend() {
       <span className="inline-flex items-center gap-1">
         <span className="size-2.5 rounded-sm border border-dashed border-ink-3" /> not run
       </span>
+    </div>
+  );
+}
+
+function TaskMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => void }) {
+  const present = TASKS.filter((t) => runs.some((r) => r.task === t.id));
+  const [task, setTask] = useState(present[0]?.id ?? "create-lead");
+  return (
+    <div>
+      {present.length > 1 && (
+        <div className="flex flex-wrap gap-1 px-3 pt-3" role="tablist" aria-label="Task">
+          {present.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={task === t.id}
+              onClick={() => setTask(t.id)}
+              className={cn("rounded-md px-2.5 py-1 text-[12.5px]", task === t.id ? "bg-ink text-paper" : "text-ink-2 hover:bg-panel-2")}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <AgentFaultMatrix runs={runs.filter((r) => r.task === task)} go={go} />
     </div>
   );
 }

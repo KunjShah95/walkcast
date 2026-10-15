@@ -7,6 +7,12 @@ export const AGENT_INFO: Record<string, { name: string; kind: "scripted" | "stag
   "sh-p1": { name: "sh-p1 · Stagehand", kind: "stagehand", note: "Same loop; prompt adds verification and safe-retry guidance." },
 };
 
+export const TASKS: { id: string; name: string; goal: string; faults: string[] }[] = [
+  { id: "create-lead", name: "Create a lead", goal: "Create Acme Corp (Jane Roe), owner Priya Shah", faults: ["stale-owners", "ui-drift", "gateway-timeout", "session-expiry", "silent-owner-drop"] },
+  { id: "reassign-lead", name: "Reassign a lead", goal: "Move the Globex lead to Priya Shah", faults: ["stale-owners", "ui-drift", "gateway-timeout", "session-expiry", "silent-owner-drop"] },
+  { id: "lookup-owner", name: "Look up an owner", goal: "Report who owns the Initech lead", faults: ["ui-drift", "gateway-timeout", "session-expiry"] },
+];
+
 /** Where each fault lives in the pipeline. */
 export const FAULT_NODE: Record<string, string> = {
   "stale-owners": "page",

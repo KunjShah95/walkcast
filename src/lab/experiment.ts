@@ -1,23 +1,34 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type FaultId, type Scenario, allScenarios, parseScenario } from "../app/faults.ts";
+import { type FaultId, type Scenario, type TaskId, allScenarios, parseScenario } from "../app/faults.ts";
 import { resolveAgent } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
 import { causes, type FindingLabel } from "./classifier.ts";
 import { replayFixture, writeFixture, type Fixture, type ReplaySummary } from "./fixture.ts";
 import { runOnce, type RunResult } from "./runner.ts";
-import { createLeadTask } from "./task.ts";
+import { taskById } from "./task.ts";
 
 /** The cause each injected fault should be attributed to, and other causes that are also correct. */
 /** Expected causes for a scenario: the union over its faults. A clean scenario expects none. */
-export function expectedCauses(scenario: Scenario): { primary: FindingLabel[]; alsoValid: FindingLabel[] } {
+export function expectedCauses(scenario: Scenario, task: TaskId = "create-lead"): { primary: FindingLabel[]; alsoValid: FindingLabel[] } {
   const faults = parseScenario(scenario);
+  const table = task === "lookup-owner" ? LOOKUP_CAUSES : EXPECTED_CAUSES;
   return {
-    primary: faults.map((f) => EXPECTED_CAUSES[f].primary).filter((c): c is FindingLabel => c !== null),
-    alsoValid: faults.flatMap((f) => EXPECTED_CAUSES[f].alsoValid),
+    primary: faults.map((f) => table[f].primary).filter((c): c is FindingLabel => c !== null),
+    alsoValid: faults.flatMap((f) => table[f].alsoValid),
   };
 }
+
+/** On the read-only lookup task a 504 is a failed read, and a renamed label breaks a cached read. */
+const LOOKUP_CAUSES: typeof EXPECTED_CAUSES = {
+  none: { primary: null, alsoValid: [] },
+  "stale-owners": { primary: null, alsoValid: [] },
+  "silent-owner-drop": { primary: null, alsoValid: [] },
+  "gateway-timeout": { primary: "app-error", alsoValid: [] },
+  "session-expiry": { primary: "auth-lost", alsoValid: [] },
+  "ui-drift": { primary: "locator-not-found", alsoValid: [] },
+};
 
 export const EXPECTED_CAUSES: Record<FaultId, { primary: FindingLabel | null; alsoValid: FindingLabel[] }> = {
   none: { primary: null, alsoValid: [] },
@@ -35,6 +46,8 @@ export interface ExperimentOptions {
   baseline: string;
   candidates: string[];
   outDir: string;
+  /** Which task to run (default create-lead). */
+  task?: TaskId;
   /** Single faults only (default) or also every pair of faults. */
   scenarios?: "singles" | "pairs";
   /** LLM agents: model mode for new runs (default live). Fixture replays follow replayFixture's default. */
@@ -48,8 +61,8 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const runsDir = join(outDir, "runs");
   const fixturesDir = join(outDir, "fixtures");
   mkdirSync(fixturesDir, { recursive: true });
-  const task = createLeadTask();
-  const faults = allScenarios(options.scenarios ?? "singles");
+  const task = taskById(options.task ?? "create-lead");
+  const faults = allScenarios(options.scenarios ?? "singles", task.id);
   const startedAt = new Date();
   const log = (msg: string) => console.log(`[${((Date.now() - startedAt.getTime()) / 1000).toFixed(0)}s] ${msg}`);
 
@@ -61,7 +74,7 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const detection = faults.map((fault) => {
     const runs = baselineRuns.filter((r) => r.fault === fault);
     const failing = runs.filter((r) => r.diagnosis.verdict === "fail");
-    const expected = expectedCauses(fault);
+    const expected = expectedCauses(fault, task.id);
     // A failing run is attributed correctly when at least one of the injected faults' causes is
     // found; with two faults the agent may fail on the first before ever meeting the second.
     const correct = failing.filter((r) => expected.primary.some((c) => causes(r.diagnosis).includes(c)));

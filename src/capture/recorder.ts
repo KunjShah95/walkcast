@@ -76,6 +76,8 @@ export interface ClaimEvent {
   success: boolean;
   summary: string;
   leadId?: number;
+  /** For question-answering tasks: the agent's answer. */
+  answer?: string;
 }
 
 export type TraceEvent = StepEvent | NetworkEvent | ConsoleEvent | ModelCallEvent | ClaimEvent;

@@ -3,7 +3,8 @@ import { createServer } from "node:http";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RunDetail } from "./data.ts";
-import { allScenarios, normalizeScenario } from "../app/faults.ts";
+import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../app/faults.ts";
+import { taskById } from "../lab/task.ts";
 import { allAgents } from "../agents/registry.ts";
 import { runOnce } from "../lab/runner.ts";
 import { configuredProviders } from "../llm/providers.ts";
@@ -45,7 +46,7 @@ export async function serveDashboard(port: number, root = process.cwd()): Promis
         let body = "";
         req.on("data", (c) => (body += c));
         req.on("end", () => {
-          let input: { agent?: string; fault?: string; seed?: number; modelMode?: "live" | "replay" | "scripted" };
+          let input: { agent?: string; fault?: string; seed?: number; task?: string; modelMode?: "live" | "replay" | "scripted" };
           try {
             input = JSON.parse(body || "{}");
             const fault = normalizeScenario(input.fault ?? "none");
@@ -55,6 +56,7 @@ export async function serveDashboard(port: number, root = process.cwd()): Promis
               fault,
               seed: Number(input.seed ?? 1),
               agent,
+              task: taskById(isTaskId(input.task ?? "") ? (input.task as TaskId) : "create-lead"),
               outDir: join(data.root, "runs"),
               screenshots: true,
               ...(input.modelMode ? { modelMode: input.modelMode } : {}),

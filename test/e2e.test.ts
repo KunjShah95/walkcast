@@ -8,7 +8,7 @@ import { causes } from "../src/lab/classifier.ts";
 import { EXPECTED_CAUSES } from "../src/lab/experiment.ts";
 import { loadFixture, replayFixture, writeFixture } from "../src/lab/fixture.ts";
 import { closeBrowser, runOnce } from "../src/lab/runner.ts";
-import { createLeadTask } from "../src/lab/task.ts";
+import { createLeadTask, taskById } from "../src/lab/task.ts";
 
 const out = mkdtempSync(join(tmpdir(), "failure-lab-"));
 const faults = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none");
@@ -41,5 +41,35 @@ describe("end to end against MiniCRM", { concurrency: 3 }, () => {
     assert.ok(causes(r.diagnosis).includes("unsafe-retry"));
     const clean = await runOnce({ fault: "stale-owners", seed: 1, agent: "v2", outDir: out });
     assert.equal(clean.diagnosis.verdict, "pass");
+  });
+});
+
+describe("reassign-lead and lookup-owner tasks", { concurrency: 3 }, () => {
+  const cases: [string, "reassign-lead" | "lookup-owner", string, string][] = [
+    ["reassign under a stale owner list", "reassign-lead", "stale-owners", "stale-observation"],
+    ["reassign when the app drops the owner", "reassign-lead", "silent-owner-drop", "app-dropped-field"],
+    ["reassign after a redesign", "reassign-lead", "ui-drift", "locator-not-found"],
+    ["lookup when the first read times out", "lookup-owner", "gateway-timeout", "app-error"],
+    ["lookup after the owner label is renamed", "lookup-owner", "ui-drift", "locator-not-found"],
+  ];
+  for (const [name, taskId, fault, cause] of cases) {
+    test(`${name}: v0 fails with ${cause}, v1 passes`, async () => {
+      const task = taskById(taskId);
+      const v0 = await runOnce({ fault, seed: 1, agent: "v0", task, outDir: out });
+      assert.equal(v0.diagnosis.verdict, "fail");
+      assert.ok(causes(v0.diagnosis).includes(cause as never), causes(v0.diagnosis).join(", "));
+      const v1 = await runOnce({ fault, seed: 1, agent: "v1", task, outDir: out });
+      assert.equal(v1.diagnosis.verdict, "pass", JSON.stringify(v1.oracle.checks));
+    });
+  }
+
+  test("lookup answers are checked against the database, not judged", async () => {
+    const r = await runOnce({ fault: "none", seed: 1, agent: "v1", task: taskById("lookup-owner"), outDir: out });
+    assert.equal(r.claim?.answer, "Sam Carter");
+    assert.ok(r.oracle.checks.find((c) => c.name === "answer-correct")?.passed);
+  });
+
+  test("a fault that does not apply to a task is refused", async () => {
+    await assert.rejects(runOnce({ fault: "stale-owners", seed: 1, agent: "v0", task: taskById("lookup-owner"), outDir: out }), /does not apply/);
   });
 });

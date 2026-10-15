@@ -61,7 +61,7 @@ export async function loadCapabilities(): Promise<Capabilities> {
 }
 
 /** Starts a real run on the local server and resolves with its directory when it finishes. */
-export async function startRun(input: { agent: string; fault: string; seed: number; modelMode?: string }): Promise<string> {
+export async function startRun(input: { agent: string; fault: string; seed: number; task?: string; modelMode?: string }): Promise<string> {
   const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   const body = (await res.json()) as { dir?: string; error?: string };
   if (!res.ok || !body.dir) throw new Error(body.error ?? `Run failed (${res.status}).`);

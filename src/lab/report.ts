@@ -2,11 +2,11 @@ import { writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { NetworkEvent, StepEvent, TraceEvent } from "../capture/recorder.ts";
 import type { RunResult } from "./runner.ts";
-import type { CreateLeadTask } from "./task.ts";
+import type { Task } from "./task.ts";
 import { scrubText } from "../capture/secrets.ts";
 
 /** Human-readable diagnostic report: verdict, findings with cited steps, then the step timeline. */
-export function writeRunReport(result: RunResult, events: TraceEvent[], task: CreateLeadTask): string {
+export function writeRunReport(result: RunResult, events: TraceEvent[], task: Task): string {
   const steps = events.filter((e): e is StepEvent => e.type === "step");
   const requests = events.filter((e): e is NetworkEvent => e.type === "request");
   const cited = new Set(result.diagnosis.findings.flatMap((f) => f.evidenceSteps));

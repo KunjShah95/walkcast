@@ -3,7 +3,7 @@ import { diagnose } from "./lab/classifier.ts";
 import { writeRunReport } from "./lab/report.ts";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { FAULTS, allScenarios, normalizeScenario } from "./app/faults.ts";
+import { FAULTS, TASK_FAULTS, TASK_IDS, allScenarios, isTaskId, normalizeScenario } from "./app/faults.ts";
 import { startApp } from "./app/server.ts";
 import { allAgents } from "./agents/registry.ts";
 import type { GatewayMode } from "./llm/gateway.ts";
@@ -17,7 +17,7 @@ import { exportDashboard, serveDashboard } from "./ui/server.ts";
 import { LabData } from "./ui/data.ts";
 import { compareRuns, type DiffReport } from "./lab/diff.ts";
 import { cpSync } from "node:fs";
-import { createLeadTask } from "./lab/task.ts";
+import { createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
 
 const HELP = `Browser Agent Failure Lab
 
@@ -81,6 +81,7 @@ const { positionals, values } = parseArgs({
     fragment: { type: "boolean", default: false },
     "screenshot-runs": { type: "string" },
     scenarios: { type: "string", default: "singles" },
+    task: { type: "string", default: "create-lead" },
     name: { type: "string" },
     "against": { type: "string" },
     fixtures: { type: "string", default: "fixtures" },
@@ -103,7 +104,9 @@ async function main(): Promise<number> {
     case "list": {
       console.log("Faults (combine with +, e.g. --fault stale-owners+session-expiry):");
       for (const [id, f] of Object.entries(FAULTS)) console.log(`  ${id.padEnd(18)} ${f.description}`);
-      console.log(`\nBenchmark grid: ${allScenarios("pairs").length} scenarios (control, ${allScenarios("singles").length - 1} single faults, every pair).`);
+      console.log("\nTasks (--task):");
+      for (const id of TASK_IDS) console.log(`  ${id.padEnd(14)} ${taskById(id).goal}  [faults: ${TASK_FAULTS[id].join(", ")}; ${allScenarios("pairs", id).length} scenarios]`);
+      console.log(`\nBenchmark grid: ${TASK_IDS.reduce((n, id) => n + allScenarios("pairs", id).length, 0)} scenarios across ${TASK_IDS.length} tasks (control, single faults, every pair).`);
       console.log("\nAgents:");
       for (const a of allAgents()) console.log(`  ${a.id.padEnd(6)} [${a.kind}] ${a.description}`);
       return 0;
@@ -131,7 +134,7 @@ async function main(): Promise<number> {
       const against = values.against;
       if (!against) throw new Error("check needs --against <baselineDir>, plus --agent and --fault for the new run");
       const fault = requireFault();
-      const result = await runOnce({ fault, seed: Number(values.seed), agent: values.agent!, outDir: runsDir, ...(modelMode() ? { modelMode: modelMode() } : {}), ...(models() ? { models: models() } : {}) });
+      const result = await runOnce({ fault, seed: Number(values.seed), agent: values.agent!, task: requireTask(), outDir: runsDir, ...(modelMode() ? { modelMode: modelMode() } : {}), ...(models() ? { models: models() } : {}) });
       const report = diffDirs(against, join("runs", result.runDir.split(/[\\/]/).pop()!));
       printDiff(report);
       return report.broken.length || report.outcome.verdict[1] === "fail" ? 1 : 0;
@@ -149,19 +152,20 @@ async function main(): Promise<number> {
           const result = JSON.parse(readFileSync(resultPath, "utf8"));
           const events = readFileSync(join(dir, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
           const before = JSON.stringify(result.diagnosis);
+          const task: Task = result.task ?? createLeadTask();
           result.diagnosis = diagnose({
             events,
             oracle: result.oracle,
             ledger: result.appState?.ledger ?? [],
             leads: result.appState?.leads ?? [],
             expectation: result.expectation,
-            requestedValues: createLeadTask().params,
+            requestedValues: requestedValues(task),
           });
           total++;
           if (JSON.stringify(result.diagnosis) !== before) {
             changed++;
             writeFileSync(resultPath, JSON.stringify(result, null, 2));
-            writeRunReport({ ...result, runDir: dir }, events, createLeadTask());
+            writeRunReport({ ...result, runDir: dir }, events, task);
             console.log(`${name}: ${JSON.parse(before).verdict} -> ${result.diagnosis.verdict}`);
           }
         }
@@ -210,7 +214,7 @@ async function main(): Promise<number> {
     }
     case "run": {
       const fault = requireFault();
-      const task = createLeadTask();
+      const task = requireTask();
       const result = await runOnce({
         fault,
         seed: Number(values.seed),
@@ -259,6 +263,7 @@ async function main(): Promise<number> {
         trials: Number(values.trials),
         concurrency: Number(values.concurrency),
         scenarios: values.scenarios === "pairs" ? "pairs" : "singles",
+        task: requireTask().id,
         baseline: values.baseline!,
         candidates: values.candidates!.split(","),
         ...(modelMode() ? { modelMode: modelMode() } : {}),
@@ -356,6 +361,12 @@ function printDiff(r: DiffReport): void {
     for (const x of p.removed) console.log(`  - ${x.role} "${x.name}" ${x.selector}`);
     for (const x of p.added) console.log(`  + ${x.role} "${x.name}" ${x.selector}`);
   }
+}
+
+function requireTask(): Task {
+  const id = values.task ?? "create-lead";
+  if (!isTaskId(id)) throw new Error(`--task must be one of: ${TASK_IDS.join(", ")}`);
+  return taskById(id);
 }
 
 function requireFault() {

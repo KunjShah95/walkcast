@@ -19,6 +19,11 @@ export class ScriptedModel implements ModelBackend {
 
   async agent(request: AgentRequest): Promise<AgentResponse> {
     const careful = request.system.includes("Before reporting success, open the saved record");
+    const first = typeof request.messages[0]?.content === "string" ? request.messages[0].content : "";
+    const reassign = first.match(/Reassign the (.+) lead to (.+)\./);
+    if (reassign) return this.reassign(request, careful, reassign[1]!, reassign[2]!);
+    const lookup = first.match(/Find out who owns the (.+) lead/);
+    if (lookup) return this.lookup(request, careful, lookup[1]!);
     const results = toolResults(request.messages);
     const last = results.at(-1) ?? "";
     const task = taskParams(request.messages);
@@ -111,13 +116,95 @@ export class ScriptedModel implements ModelBackend {
     };
   }
 
+  /** Reassign: list -> edit page -> choose owner -> save; careful reads before choosing and checks after. */
+  private reassign(request: AgentRequest, careful: boolean, company: string, owner: string): AgentResponse {
+    const results = toolResults(request.messages);
+    const last = results.at(-1) ?? "";
+    const url = last.match(/URL: (\S+)/)?.[1] ?? last.match(/Now at (\S+)/)?.[1] ?? "";
+    const errors = results.filter((r) => /Gateway timeout/.test(r)).length;
+    if (results.length === 0) return this.tools([["navigate", { path: "/leads" }]]);
+    if (!last.startsWith("URL:")) return this.tools([["read_page", {}]]);
+    if (url.startsWith("/login")) return this.signIn();
+    const id = leadIdFor(results, company);
+    if (/Gateway timeout/.test(last)) {
+      if (careful && id) return this.tools([["navigate", { path: `/leads/${id}` }], ["read_page", {}]]);
+      if (errors >= 2 || !id) return this.done(false, "The server returned an error twice.", null);
+      return this.tools([["navigate", { path: `/leads/${id}/edit` }], ["read_page", {}]]);
+    }
+    if (url === "/leads") {
+      return id ? this.tools([["navigate", { path: `/leads/${id}/edit` }], ["read_page", {}]]) : this.done(false, `No ${company} lead in the list.`, null);
+    }
+    if (/^\/leads\/\d+\/edit/.test(url)) {
+      const readTwice = results.filter((r) => r.startsWith(`URL: ${url}`)).length >= 2;
+      if (careful && !readTwice) return this.tools([["read_page", {}]]);
+      return this.tools([
+        ["act", { instruction: `select ${owner} from the Owner dropdown` }],
+        ["act", { instruction: "click the Save changes button" }],
+        ["read_page", {}],
+      ]);
+    }
+    const detail = url.match(/^\/leads\/(\d+)/);
+    if (detail) {
+      const leadId = Number(detail[1]);
+      const shown = ownerOnPage(last);
+      if (!careful) {
+        const toast = last.includes("Lead updated");
+        return this.done(toast, toast ? `Reassigned ${company} to ${owner}.` : "No confirmation was shown.", leadId);
+      }
+      if (shown === owner) return this.done(true, `Reassigned ${company} to ${owner} (checked on the record).`, leadId);
+      if (errors > 0 && results.filter((r) => /^URL: \/leads\/\d+\/edit/.test(r)).length < 3) {
+        return this.tools([["navigate", { path: `/leads/${leadId}/edit` }], ["read_page", {}]]);
+      }
+      return this.done(false, `Lead ${leadId} still shows owner '${shown ?? "unknown"}', not '${owner}'.`, leadId);
+    }
+    return this.done(false, `Unexpected page ${url}.`, null);
+  }
+
+  /** Lookup: list -> lead page -> read the owner; careful retries a failed read and reads by meaning. */
+  private lookup(request: AgentRequest, careful: boolean, company: string): AgentResponse {
+    const results = toolResults(request.messages);
+    const last = results.at(-1) ?? "";
+    const url = last.match(/URL: (\S+)/)?.[1] ?? last.match(/Now at (\S+)/)?.[1] ?? "";
+    if (results.length === 0) return this.tools([["navigate", { path: "/leads" }]]);
+    if (!last.startsWith("URL:")) return this.tools([["read_page", {}]]);
+    if (url.startsWith("/login")) return this.signIn();
+    const id = leadIdFor(results, company);
+    if (url === "/leads") return id ? this.tools([["navigate", { path: `/leads/${id}` }], ["read_page", {}]]) : this.done(false, `No ${company} lead in the list.`, null);
+    if (/Gateway timeout/.test(last)) {
+      const errors = results.filter((r) => /Gateway timeout/.test(r)).length;
+      if (careful && id && errors < 3) return this.tools([["navigate", { path: `/leads/${id}` }], ["read_page", {}]]);
+      return this.done(false, `The ${company} lead page did not load.`, null);
+    }
+    if (/^\/leads\/\d+/.test(url)) {
+      const strict = last.match(/\bOwner\s*\n\s*([^\n]+)/)?.[1]?.trim();
+      const anyLabel = ownerOnPage(last);
+      if (careful) return anyLabel ? this.answer(true, `${company} is owned by ${anyLabel}.`, anyLabel) : this.answer(false, "No owner shown.", null);
+      // The naive policy looks for the word "Owner" only, and reports whatever it found.
+      return this.answer(true, `${company} is owned by ${strict ?? "(not shown)"}.`, strict ?? "");
+    }
+    return this.done(false, `Unexpected page ${url}.`, null);
+  }
+
+  private signIn(): AgentResponse {
+    return this.tools([
+      ["act", { instruction: `type ${CREDENTIALS.username} into the Username field` }],
+      ["act", { instruction: `type ${CREDENTIALS.password} into the Password field` }],
+      ["act", { instruction: "click the Sign in button" }],
+      ["read_page", {}],
+    ]);
+  }
+
+  private answer(success: boolean, summary: string, answer: string | null): AgentResponse {
+    return this.tools([["done", { success, summary, lead_id: null, answer }]]);
+  }
+
   private tools(calls: [string, Record<string, unknown>][]): AgentResponse {
     const content = calls.map(([name, input]) => ({ type: "tool_use", id: `toolu_scripted_${this.nextId++}`, name, input }));
     return { content: content as unknown as AgentResponse["content"], stop_reason: "tool_use", model: this.name, usage: { input_tokens: 0, output_tokens: 0 } };
   }
 
   private done(success: boolean, summary: string, leadId: number | null): AgentResponse {
-    return this.tools([["done", { success, summary, lead_id: leadId }]]);
+    return this.tools([["done", { success, summary, lead_id: leadId, answer: null }]]);
   }
 }
 
@@ -140,6 +227,20 @@ function resolve(instruction: string, prompt: string): { elementId: string; desc
     return id ? { elementId: id, description: `${m[2]} dropdown`, method: "selectOptionFromDropdown", arguments: [m[1]!] } : null;
   }
   return null;
+}
+
+/** The lead id for a company, from a leads-list page read earlier ("1002\tHank Scorpio\tGlobex"). */
+function leadIdFor(results: string[], company: string): number | undefined {
+  for (const r of results) {
+    const line = r.split("\n").find((l) => l.includes(company) && /\b\d{4}\b/.test(l));
+    const id = line?.match(/\b(\d{4})\b/)?.[1];
+    if (id) return Number(id);
+  }
+  return undefined;
+}
+
+function ownerOnPage(text: string): string | undefined {
+  return text.match(/\b(?:Owner|Account manager|Assigned to)\s*\n\s*([^\n]+)/)?.[1]?.trim();
 }
 
 function toolResults(messages: Anthropic.Beta.BetaMessageParam[]): string[] {

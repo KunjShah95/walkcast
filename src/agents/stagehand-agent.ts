@@ -3,7 +3,7 @@ import type { Page as StagehandPage, Stagehand } from "@browserbasehq/stagehand"
 import { CREDENTIALS } from "../app/server.ts";
 import type { BrowserTools, Observation } from "../capture/tools.ts";
 import type { ModelGateway } from "../llm/gateway.ts";
-import type { CreateLeadTask } from "../lab/task.ts";
+import type { Task } from "../lab/task.ts";
 
 /**
  * An LLM browser agent in the shape Browserbase recommends for Stagehand v4 ("tool calling"):
@@ -62,15 +62,16 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: "done",
-    description: "Finish the task. success=true only if the task was completed. Include the lead ID if one was created.",
+    description: "Finish the task. success=true only if the task was completed. Include the lead ID if one was involved, and the answer if the task asked a question.",
     input_schema: {
       type: "object",
       properties: {
         success: { type: "boolean" },
         summary: { type: "string" },
         lead_id: { type: ["integer", "null"] },
+        answer: { type: ["string", "null"], description: "The answer, when the task asks a question." },
       },
-      required: ["success", "summary", "lead_id"],
+      required: ["success", "summary", "lead_id", "answer"],
       additionalProperties: false,
     },
     strict: true,
@@ -84,7 +85,7 @@ export interface StagehandAgentContext {
   gateway: ModelGateway;
 }
 
-export async function runStagehandAgent(ctx: StagehandAgentContext, task: CreateLeadTask, spec: StagehandAgentSpec): Promise<void> {
+export async function runStagehandAgent(ctx: StagehandAgentContext, task: Task, spec: StagehandAgentSpec): Promise<void> {
   const { tools, stagehand, page, gateway } = ctx;
   const system = SYSTEM_PROMPTS[spec.prompt];
   const messages: Anthropic.Beta.BetaMessageParam[] = [
@@ -109,7 +110,8 @@ export async function runStagehandAgent(ctx: StagehandAgentContext, task: Create
       const input = call.input as Record<string, unknown>;
       if (call.name === "done") {
         const leadId = typeof input.lead_id === "number" ? input.lead_id : undefined;
-        return tools.done(Boolean(input.success), String(input.summary ?? ""), leadId);
+        const answer = typeof input.answer === "string" ? input.answer : undefined;
+        return tools.done(Boolean(input.success), String(input.summary ?? ""), leadId, answer);
       }
       try {
         const output = await execute(call.name, input);
