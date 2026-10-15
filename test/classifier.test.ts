@@ -164,6 +164,69 @@ test("a fetchText read-back between the writes is not an unsafe retry", () => {
   assert.ok(!causes(d).includes("unsafe-retry"));
 });
 
+test("a completed task with no claim is a missed success, not an honest pass", () => {
+  const d = run([post(5, 50, 303)], {
+    leads: [lead(1001)],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 }],
+  });
+  assert.equal(d.verdict, "fail");
+  assert.deepEqual(symptoms(d), ["missed-success"]);
+});
+
+test("a failed task with no claim is a wrong outcome and stays unexplained", () => {
+  const d = run([], { leads: [], ledger: [] });
+  assert.equal(d.verdict, "fail");
+  assert.deepEqual(symptoms(d), ["wrong-outcome"]);
+  assert.deepEqual(causes(d), ["unexplained"]);
+});
+
+test("two unrelated writes are not a duplicate action", () => {
+  const other = { contact: "Ada Lovelace", company: "Other Co", owner: "Priya Shah" };
+  const d = run([post(10, 100, 303), post(12, 200, 303, other), claim(true)], {
+    leads: [lead(1001)],
+    ledger: [
+      { at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 },
+      { at: 1, method: "POST", path: "/leads", body: other, outcome: "committed", leadId: 1002 },
+    ],
+  });
+  assert.ok(!symptoms(d).includes("duplicate-action"));
+});
+
+test("an overlapping resubmit is a duplicate, not an unsafe retry", () => {
+  const first = post(11, 100, 504);
+  first.respondedAt = 500;
+  const second = post(12, 150, 504);
+  const d = run([first, second, claim(false)], {
+    leads: [lead(1001), lead(1002)],
+    ledger: [1001, 1002].map((leadId) => ({ at: 0, method: "POST", path: "/leads", body, outcome: "committed" as const, leadId })),
+  });
+  assert.ok(symptoms(d).includes("duplicate-action"));
+  assert.ok(!causes(d).includes("unsafe-retry"));
+});
+
+test("a 400 followed by the same write is not an unsafe retry", () => {
+  const d = run([post(11, 100, 400), post(20, 400, 303), claim(true)], {
+    leads: [lead(1001)],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 }],
+  });
+  assert.ok(!causes(d).includes("unsafe-retry"));
+});
+
+test("a different body after a 504 is not an unsafe retry", () => {
+  const d = run([post(11, 100, 504), post(20, 400, 303, { ...body, owner: "Alex Kim" }), claim(false)], {
+    leads: [lead(1001, "Alex Kim")],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body: { ...body, owner: "Alex Kim" }, outcome: "committed", leadId: 1001 }],
+  });
+  assert.ok(!causes(d).includes("unsafe-retry"));
+});
+
+test("a login redirect after a successful sign-in is auth-lost", () => {
+  const signIn: NetworkEvent = { type: "request", stepId: 4, at: 40, method: "POST", url: "http://x/login", status: 303, postData: { username: "demo" } };
+  const expired: NetworkEvent = { type: "request", stepId: 12, at: 200, method: "POST", url: "http://x/leads", status: 303, redirectedTo: "/login", postData: body };
+  const d = run([signIn, expired, claim(false)], { leads: [], ledger: [] });
+  assert.ok(causes(d).includes("auth-lost"));
+});
+
 test("the first trip to the login page is not auth-lost, whichever step it happens in", () => {
   const toLogin: NetworkEvent = { type: "request", stepId: 2, at: 20, method: "GET", url: "http://x/leads/new", status: 303, redirectedTo: "/login?next=%2Fleads%2Fnew" };
   const signIn: NetworkEvent = { type: "request", stepId: 4, at: 40, method: "POST", url: "http://x/login", status: 303, postData: { username: "demo" } };

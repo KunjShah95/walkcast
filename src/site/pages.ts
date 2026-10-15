@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatInterval } from "../lab/stats.ts";
+import { siteFacts, type ExperimentFacts, type SiteFacts } from "./facts.ts";
 import { GUIDES, GUIDES_UPDATED, type Guide } from "./guides.ts";
 
 /**
@@ -9,6 +11,8 @@ import { GUIDES, GUIDES_UPDATED, type Guide } from "./guides.ts";
  * and the crawler files (robots.txt, sitemap.xml, llms.txt). Every URL is absolute from siteUrl.
  */
 export const SITE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "site");
+/** Repo root: the pages read the published experiment from results/ under here. */
+const REPO_ROOT = resolve(SITE_DIR, "..");
 const NAME = "Walkcast";
 const TAGLINE = "Narrated video walkthroughs of any website, from a link";
 const DESCRIPTION =
@@ -149,7 +153,7 @@ section.band .intro{color:var(--ink-2);max-width:60ch;margin:18px 0 0;font-size:
 .steps .card::before{counter-increment:s;content:counter(s,decimal-leading-zero);display:block;font:italic 480 44px/1 var(--display);color:var(--ember);margin-bottom:22px}
 .card h3{font-size:24px;margin-bottom:8px}.card p{margin:0;color:var(--ink-2);font-size:15.5px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:44px}
-.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;margin-top:44px}
+.gridstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px;margin-top:44px}
 .file{display:inline-block;font:500 12.5px var(--mono);color:var(--paper);background:var(--ink);padding:4px 10px;border-radius:999px;margin-bottom:18px}
 .checks{list-style:none;padding:0;margin:36px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 36px}
 .checks li{padding-left:30px;position:relative;color:var(--ink-2);font-size:16.5px}.checks li strong{color:var(--ink);font-weight:600}
@@ -183,7 +187,7 @@ footer{padding:36px 0 48px;color:var(--ink-3);font-size:14px}footer .wrap{displa
 .guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:40px}
 a.card{text-decoration:none;display:block;transition:transform .2s,box-shadow .2s}a.card:hover{transform:translateY(-3px);box-shadow:0 28px 56px -30px rgb(28 25 23/.45),inset 0 0 0 1px var(--line)}
 a.card .more{font:500 13px var(--mono);color:var(--ember);margin-top:16px;display:block}
-@media (max-width:900px){.stage{grid-template-columns:1fr}.transcript{border-left:0;border-top:1px solid rgb(255 255 255/.06)}.transcript ol{max-height:260px}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.article{grid-template-columns:minmax(0,1fr)}.side{position:static}.guide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){.stage{grid-template-columns:1fr}.transcript{border-left:0;border-top:1px solid rgb(255 255 255/.06)}.transcript ol{max-height:260px}.gridstats{grid-template-columns:repeat(2,minmax(0,1fr))}.article{grid-template-columns:minmax(0,1fr)}.side{position:static}.guide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:680px){.hero{padding-top:56px}.urlform{flex-direction:column;border-radius:22px}.urlform .btn{width:100%}.steps,.grid2,.checks,.guide-grid{grid-template-columns:1fr}header nav a.hide-sm{display:none}section.band{padding:72px 0}}
 @media (max-width:400px){header nav a:not(.btn){display:none}.brand{font-size:19px}.auth .card{padding:24px 20px}.auth h1{font-size:34px}}
 @media (prefers-reduced-motion:no-preference){.hero h1,.hero .lede,.urlform{animation:rise .8s cubic-bezier(.2,.7,.2,1) both}.hero .lede{animation-delay:.08s}.urlform{animation-delay:.16s}@keyframes rise{from{opacity:0;transform:translateY(12px)}}}
@@ -238,7 +242,50 @@ ${o.head ?? ""}
 
 // --------------------------------------------------------------------------------- landing
 
-export function landingPage(siteUrl: string, user: { email: string } | null): string {
+/**
+ * The lab numbers the public pages quote. With a published experiment they come from data —
+ * `results/<id>/summary.json`, with Wilson 95% intervals; without one (a fresh checkout, a
+ * trimmed image) the committed copy below stands in.
+ */
+const LAB_FALLBACK: { detected: [string, string]; falseAlarms: [string, string] } = {
+  detected: ["25/25", "injected faults diagnosed with the right cause (scripted agents)"],
+  falseAlarms: ["0/15", "false alarms on runs with no fault injected"],
+};
+
+function agentWord(e: ExperimentFacts): string {
+  return e.scripted ? "scripted agents" : `agents ${e.agents.join(", ")}`;
+}
+
+/** `; 95% CI 87–100%`, or nothing when there are no trials to put an interval on. */
+function interval(k: number, n: number): string {
+  const ci = formatInterval(k, n);
+  return ci ? `; ${ci}` : "";
+}
+
+function labCards(facts: SiteFacts): string {
+  const e = facts.experiment;
+  const cards: [string, string][] = [[String(facts.scenarios), "scenarios across three CRM tasks and composable faults"]];
+  cards.push(
+    e
+      ? [`${e.detected.k}/${e.detected.n}`, `injected faults diagnosed with the right cause (${agentWord(e)}${interval(e.detected.k, e.detected.n)})`]
+      : LAB_FALLBACK.detected,
+  );
+  cards.push(
+    e
+      ? [`${e.falseAlarms.k}/${e.falseAlarms.n}`, `false alarms on runs with no fault injected${interval(e.falseAlarms.k, e.falseAlarms.n)}`]
+      : LAB_FALLBACK.falseAlarms,
+  );
+  if (e?.falseSuccess) {
+    cards.push([
+      `${e.falseSuccess.k}/${e.falseSuccess.n}`,
+      `success claims the application's records disagreed with (${agentWord(e)}${interval(e.falseSuccess.k, e.falseSuccess.n)})`,
+    ]);
+  }
+  cards.push([String(facts.providers), "model providers through one gateway"]);
+  return cards.map(([value, note]) => `<div class="card"><div class="stat">${value}<small>${note}</small></div></div>`).join("\n    ");
+}
+
+export function landingPage(siteUrl: string, user: { email: string } | null, facts: SiteFacts = siteFacts(REPO_ROOT)): string {
   const d = demo();
   const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const iso = (s: number) => `PT${Math.floor(s / 60)}M${Math.round(s % 60)}S`;
@@ -363,11 +410,7 @@ export function landingPage(siteUrl: string, user: { email: string } | null): st
   <p class="eyebrow">Walkcast Lab · for teams building browser agents</p>
   <h2>Turn an agent's failure into a regression test.</h2>
   <p class="intro">The same recorder powers a lab for browser AI agents: it captures a run, explains why it failed with deterministic rules checked against the app's real state, and saves the failure as a replayable test.</p>
-  <div class="grid4">
-    <div class="card"><div class="stat">39<small>scenarios across three CRM tasks and composable faults</small></div></div>
-    <div class="card"><div class="stat">25/25<small>injected faults diagnosed with the right cause (scripted agents)</small></div></div>
-    <div class="card"><div class="stat">0/15<small>false alarms on runs with no fault injected</small></div></div>
-    <div class="card"><div class="stat">15<small>model providers through one gateway</small></div></div>
+  <div class="gridstats">${labCards(facts)}
   </div>
 </div></section>
 
@@ -622,8 +665,30 @@ ${GUIDES.map((g) => `  <url><loc>${siteUrl}/guides/${g.slug}</loc><lastmod>${GUI
 `;
 }
 
+/** The lab numbers in prose, for llms.txt: measured with intervals, or the committed copy. */
+function labSummarySentence(facts: SiteFacts): string {
+  const e = facts.experiment;
+  if (!e) {
+    return `Its benchmark has ${facts.scenarios} scenarios across three CRM tasks; in its validation experiment with scripted agents it named the right cause for 25 of 25 injected faults and raised 0 false alarms on 15 fault-free runs.`;
+  }
+  const ci = (k: number, n: number) => {
+    const text = formatInterval(k, n);
+    return text ? ` (${text})` : "";
+  };
+  let sentence =
+    `Its benchmark has ${facts.scenarios} scenarios across three CRM tasks; in its validation experiment with ${agentWord(e)}${e.at ? ` (${e.at})` : ""} ` +
+    `it named the right cause for ${e.detected.k} of ${e.detected.n} injected faults${ci(e.detected.k, e.detected.n)} ` +
+    `and raised ${e.falseAlarms.k} false alarms on ${e.falseAlarms.n} fault-free runs${ci(e.falseAlarms.k, e.falseAlarms.n)}.`;
+  if (e.falseSuccess) {
+    sentence +=
+      ` Of the runs that claimed success, ${e.falseSuccess.k} of ${e.falseSuccess.n} were false: ` +
+      `the agent reported the task worked while the application's records disagreed${ci(e.falseSuccess.k, e.falseSuccess.n)}.`;
+  }
+  return sentence;
+}
+
 /** llms.txt (llmstxt.org): a plain-language summary that AI assistants can quote accurately. */
-export function llmsTxt(siteUrl: string): string {
+export function llmsTxt(siteUrl: string, facts: SiteFacts = siteFacts(REPO_ROOT)): string {
   return `# ${NAME}
 
 > ${TAGLINE}. ${DESCRIPTION}
@@ -645,7 +710,7 @@ ${NAME} makes narrated video walkthroughs of websites. You paste a link, optiona
 
 ## Also
 
-${NAME} began as a lab for browser AI agents: it records an agent's run, diagnoses why it failed with deterministic rules checked against the application's real state, and saves the failure as a replayable regression test. Its benchmark has 39 scenarios across three CRM tasks; in its validation experiment with scripted agents it named the right cause for 25 of 25 injected faults and raised 0 false alarms on 15 fault-free runs.
+${NAME} began as a lab for browser AI agents: it records an agent's run, diagnoses why it failed with deterministic rules checked against the application's real state, and saves the failure as a replayable regression test. ${labSummarySentence(facts)}
 
 ## Links
 

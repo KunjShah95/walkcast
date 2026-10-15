@@ -1,3 +1,4 @@
+import "./env.ts";
 import { mkdirSync, readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { diagnose } from "./lab/classifier.ts";
 import { writeRunReport } from "./lab/report.ts";
@@ -49,8 +50,9 @@ Commands:
                                         pass^k table for every fixture × agent; exits 1 on any failure
                                         of the last agent listed
   experiment [--task t] [--scenarios singles|pairs] [--baseline id] [--candidates a,b] [--seeds n]
-      [--trials k] [--concurrency c] [--model-mode m] [--out dir]
-                                        Full validation experiment (docs/ASSESSMENT.md §7)
+      [--trials k] [--concurrency c] [--model-mode m] [--agent-model spec] [--stagehand-model spec] [--out dir]
+                                        Full validation experiment (docs/ASSESSMENT.md §7). Writes
+                                        summary.md with Wilson 95% intervals and the false-success rate.
 
   ui [--port 4320]                      Web app: landing page at /, accounts (email or Google), and the
                                         dashboard at /app over runs/, fixtures/, results/, recordings/.
@@ -356,6 +358,7 @@ async function main(): Promise<number> {
         baseline: values.baseline!,
         candidates: values.candidates!.split(","),
         ...(modelMode() ? { modelMode: modelMode() } : {}),
+        ...(models() ? { models: models() } : {}),
         outDir: out,
       });
       return 0;

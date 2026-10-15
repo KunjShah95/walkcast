@@ -1,4 +1,5 @@
 node_modules/
+chrome/
 runs/
 results/*/runs/
 dashboard/dist/

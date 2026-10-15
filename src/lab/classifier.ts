@@ -70,13 +70,15 @@ export function diagnose(input: ClassifierInput): Diagnosis {
       explanation: `Agent claimed success ("${claim.summary}") but ${failedChecks(oracle)}.`,
       evidenceSteps: [claim.stepId],
     });
-  } else if (claim && !claim.success && oracle.taskPassed) {
+  } else if (oracle.taskPassed && (!claim || !claim.success)) {
     findings.push({
       label: "missed-success",
       kind: "symptom",
       confidence: "oracle",
-      explanation: `Agent reported failure ("${claim.summary}") but the application's records show the task was completed.`,
-      evidenceSteps: [claim.stepId],
+      explanation: claim
+        ? `Agent reported failure ("${claim.summary}") but the application's records show the task was completed.`
+        : "Agent made no claim, but the application's records show the task was completed.",
+      evidenceSteps: claim ? [claim.stepId] : [],
     });
   } else if (!oracle.taskPassed && expectation === "task-success") {
     findings.push({
@@ -143,12 +145,16 @@ export function diagnose(input: ClassifierInput): Diagnosis {
     const current = writes[i]!;
     const ambiguous = (previous.status ?? 0) >= 500 || previous.failure !== undefined;
     const sameRequest = JSON.stringify(previous.postData) === JSON.stringify(current.postData);
+    // Overlapping writes are a double submit, not a retry: the later request must start after the
+    // earlier one has a recorded response (or a recorded network failure).
+    const finishedAt = previous.respondedAt ?? (previous.failure !== undefined ? previous.at : undefined);
+    const afterPreviousSettled = finishedAt !== undefined && current.at >= finishedAt;
     // A read-back is a page load of the list/detail, or a fetchText step (page.request reads
     // don't appear as browser requests).
     const readBetween =
       requests.some((r) => r.method === "GET" && r.at > previous.at && r.at < current.at && /^\/leads(\/\d+)?$/.test(new URL(r.url).pathname)) ||
       steps.some((st) => st.tool === "fetchText" && st.startedAt > previous.at && st.startedAt < current.at);
-    if (ambiguous && sameRequest && !readBetween) {
+    if (ambiguous && sameRequest && !readBetween && afterPreviousSettled) {
       findings.push({
         label: "unsafe-retry",
         kind: "cause",

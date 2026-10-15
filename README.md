@@ -394,6 +394,10 @@ guard; `LAB_ALLOW_PRIVATE=1` lifts it).
   on public pages and keeps them out of `/app`, `/api`, `/auth`.
 - `sitemap.xml` includes a video sitemap entry; `/llms.txt` is a plain summary assistants can
   quote accurately.
+- The lab numbers on `/` and `/llms.txt` come from the newest experiment under `results/` — the same
+  summaries the dashboard's Experiments view reads — quoted with 95% Wilson intervals. A checkout
+  without `results/` (a trimmed image) falls back to the committed figures instead of inventing
+  them.
 - Self-hosted fonts (preloaded) and a ~28 KB page with ~1 KB of script.
 
 None of this can guarantee a ranking. What decides it after launch is a real domain, links from

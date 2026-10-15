@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -219,4 +219,82 @@ test("guides: unique titles and descriptions, valid structured data, all in the 
   }
   assert.ok(guidesIndexPage("https://lab.example", null).includes("CollectionPage"));
   assert.ok(landingPage("https://lab.example", null).includes(`href="/guides/${GUIDES[0]!.slug}"`));
+});
+
+test("lab numbers: the pages quote the committed experiment under results/, with intervals", async () => {
+  const { siteFacts } = await import("../src/site/facts.ts");
+  const facts = siteFacts(process.cwd());
+  assert.equal(facts.scenarios, 39);
+  assert.equal(facts.providers, 15);
+  const e = facts.experiment;
+  assert.ok(e, "the experiment committed under results/ is published");
+  assert.equal(e.scripted, true);
+  assert.deepEqual(e.agents, ["v0", "v1", "v2"]);
+  assert.ok(e.detected.n > 0 && e.detected.k <= e.detected.n);
+  assert.ok(e.falseAlarms.n > 0);
+
+  const html = landingPage("https://lab.example", null, facts);
+  // The numbers on the page are the ones in the data, not the fallback copy — and they carry
+  // the measured interval, which the fallback does not.
+  assert.match(html, new RegExp(`class="stat">${e.detected.k}/${e.detected.n}<`));
+  assert.match(html, new RegExp(`class="stat">${e.falseAlarms.k}/${e.falseAlarms.n}<`));
+  assert.match(html, /95% CI \d+%–100%/);
+  assert.ok(!html.includes("success claims"), "the committed summary predates false-success tracking");
+  assert.match(llmsTxt("https://lab.example", facts), new RegExp(`named the right cause for ${e.detected.k} of ${e.detected.n} injected faults \\(95% CI `));
+});
+
+test("lab numbers: a summary with the newer sections publishes false success", async () => {
+  const { siteFacts } = await import("../src/site/facts.ts");
+  const root = mkdtempSync(join(tmpdir(), "lab-facts-"));
+  try {
+    mkdirSync(join(root, "results", "2026-10-16-live"), { recursive: true });
+    writeFileSync(
+      join(root, "results", "2026-10-16-live", "summary.json"),
+      JSON.stringify({
+        meta: { startedAt: "2026-10-16T10:00:00.000Z", caveat: "c", seeds: 5, trials: 3, baseline: "sh-p0", candidates: ["sh-p1"] },
+        detection: [
+          { fault: "none", runs: 5, failing: 0, correctlyAttributed: 0, spuriousCauses: [], unexplained: 0 },
+          { fault: "stale-owners", runs: 10, failing: 9, correctlyAttributed: 8, spuriousCauses: ["stale-observation"], unexplained: 1 },
+        ],
+        falsePositives: { baselineCleanRunsFailed: 1, baselineCleanRuns: 5, candidateCleanRunsFailed: 0, candidateCleanRuns: 5 },
+        reproduction: [{ fixture: "f1", reproduced: 3, trials: 3, drift: [] }],
+        regression: [
+          { fixture: "f1", agent: "sh-p0", passes: 1, trials: 3, passAll: false, causes: ["stale-observation"] },
+          { fixture: "f1", agent: "sh-p1", passes: 3, trials: 3, passAll: true, causes: [] },
+        ],
+        falseSuccess: { runs: 5, successClaims: 4, falseSuccesses: 2 },
+        cost: { agentRuns: 1, modelCalls: 0, liveInputTokens: 0, liveOutputTokens: 0, medianRunMs: 1, p95RunMs: 1 },
+      }),
+    );
+    const facts = siteFacts(root);
+    const e = facts.experiment;
+    assert.equal(e?.at, "2026-10-16");
+    assert.equal(e?.scripted, false, "LLM agents are not described as scripts");
+    assert.deepEqual(e?.detected, { k: 8, n: 9 });
+    assert.deepEqual(e?.falseAlarms, { k: 1, n: 10 });
+    assert.deepEqual(e?.falseSuccess, { k: 2, n: 4 });
+
+    const html = landingPage("https://lab.example", null, facts);
+    assert.match(html, /class="stat">2\/4</);
+    assert.match(html, /success claims the application's records disagreed with \(agents sh-p0, sh-p1; 95% CI 15%–85%\)/);
+    assert.match(llmsTxt("https://lab.example", facts), /Of the runs that claimed success, 2 of 4 were false/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("lab numbers: a checkout without results/ keeps the committed copy", async () => {
+  const { siteFacts } = await import("../src/site/facts.ts");
+  const root = mkdtempSync(join(tmpdir(), "lab-facts-empty-"));
+  try {
+    const facts = siteFacts(root);
+    assert.equal(facts.experiment, null);
+    assert.equal(facts.scenarios, 39);
+    const html = landingPage("https://lab.example", null, facts);
+    assert.match(html, /class="stat">25\/25<small>injected faults diagnosed with the right cause \(scripted agents\)</);
+    assert.match(html, /class="stat">0\/15<small>false alarms on runs with no fault injected</);
+    assert.match(llmsTxt("https://lab.example", facts), /named the right cause for 25 of 25 injected faults and raised 0 false alarms on 15 fault-free runs\./);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

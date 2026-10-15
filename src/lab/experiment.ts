@@ -4,7 +4,8 @@ import { type FaultId, type Scenario, type TaskId, allScenarios, parseScenario }
 import { resolveAgent } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
-import { causes, type FindingLabel } from "./classifier.ts";
+import { causes, symptoms, type FindingLabel } from "./classifier.ts";
+import { renderSummary, type ExperimentSummary } from "./summary.ts";
 import { replayFixture, writeFixture, type Fixture, type ReplaySummary } from "./fixture.ts";
 import { runOnce, type RunResult } from "./runner.ts";
 import { taskById } from "./task.ts";
@@ -129,6 +130,8 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
     },
     reproduction: reproduction.map((r) => ({ fixture: r.fixture, reproduced: r.reproduced, trials: r.trials.length, drift: r.environmentDrift })),
     regression: comparisons.map((c) => ({ fixture: c.fixture, agent: c.agent, passes: c.passes, trials: c.trials.length, passAll: c.passAll, causes: [...new Set(c.trials.flatMap((t) => t.causes))] })),
+    falseSuccess: falseSuccessStats(baselineRuns),
+    rates: rateStats(reproduction, comparisons),
     cost: costSummary([...baselineRuns, ...controls], comparisons),
   };
 
@@ -161,49 +164,35 @@ function costSummary(runs: RunResult[], replays: ReplaySummary[]) {
   };
 }
 
-type Summary = {
-  meta: Record<string, unknown> & { caveat: string; trials: number; seeds: number; baseline: string; candidates: string[] };
-  detection: { fault: string; runs: number; failing: number; correctlyAttributed: number; spuriousCauses: string[]; unexplained: number }[];
-  falsePositives: { baselineCleanRunsFailed: number; baselineCleanRuns: number; candidateCleanRunsFailed: number; candidateCleanRuns: number };
-  reproduction: { fixture: string; reproduced: number; trials: number; drift: string[] }[];
-  regression: { fixture: string; agent: string; passes: number; trials: number; passAll: boolean; causes: string[] }[];
-  cost: ReturnType<typeof costSummary>;
-};
+type Summary = ExperimentSummary;
 
-function renderSummary(s: Summary): string {
-  const lines: string[] = [];
-  lines.push("# Experiment summary", "");
-  lines.push(`> ${s.meta.caveat}`, "");
-  lines.push(`Seeds per fault: ${s.meta.seeds} · trials per replay: ${s.meta.trials} · baseline: ${s.meta.baseline} · candidates: ${s.meta.candidates.join(", ")}`, "");
+function falseSuccessStats(runs: RunResult[]): Summary["falseSuccess"] {
+  const successClaims = runs.filter((r) => r.claim?.success === true);
+  return {
+    runs: runs.length,
+    successClaims: successClaims.length,
+    falseSuccesses: successClaims.filter((r) => symptoms(r.diagnosis).includes("false-success")).length,
+  };
+}
 
-  lines.push("## Failure detection and attribution (baseline runs)", "");
-  lines.push("| Fault | Runs | Failed (oracle) | Correct primary cause | Spurious causes | Unexplained |", "|---|---|---|---|---|---|");
-  for (const d of s.detection) {
-    lines.push(`| ${d.fault} | ${d.runs} | ${d.failing} | ${d.fault === "none" ? "n/a" : `${d.correctlyAttributed}/${d.failing}`} | ${d.spuriousCauses.join(", ") || "none"} | ${d.unexplained} |`);
-  }
-  const fp = s.falsePositives;
-  lines.push("", `False positives on clean runs: baseline ${fp.baselineCleanRunsFailed}/${fp.baselineCleanRuns}, candidates ${fp.candidateCleanRunsFailed}/${fp.candidateCleanRuns}.`, "");
-
-  lines.push("## Reproduction (fixture replayed with the agent that failed)", "");
-  const reproducedAll = s.reproduction.filter((r) => r.reproduced === r.trials).length;
-  lines.push(`${reproducedAll}/${s.reproduction.length} fixtures reproduced the original causes in every trial.`, "");
-  lines.push("| Fixture | Reproduced | Environment drift |", "|---|---|---|");
-  for (const r of s.reproduction) lines.push(`| ${r.fixture} | ${r.reproduced}/${r.trials} | ${r.drift.join("; ") || "none"} |`);
-  lines.push("");
-
-  lines.push("## Regression comparison (pass^k per fixture)", "");
-  const agents = [...new Set(s.regression.map((r) => r.agent))];
-  const fixtures = [...new Set(s.regression.map((r) => r.fixture))];
-  lines.push(`| Fixture | ${agents.join(" | ")} |`, `|---|${agents.map(() => "---").join("|")}|`);
-  for (const f of fixtures) {
-    const cells = agents.map((a) => {
-      const r = s.regression.find((x) => x.fixture === f && x.agent === a);
-      return r ? `${r.passAll ? "✅" : "❌"} ${r.passes}/${r.trials}${r.passAll ? "" : ` (${r.causes.join(", ")})`}` : "";
-    });
-    lines.push(`| ${f} | ${cells.join(" | ")} |`);
-  }
-  lines.push("", "## Cost", "", `Agent runs: ${s.cost.agentRuns} · model calls: ${s.cost.modelCalls} (live tokens in/out: ${s.cost.liveInputTokens}/${s.cost.liveOutputTokens}) · median run: ${s.cost.medianRunMs} ms · p95 run: ${s.cost.p95RunMs} ms`, "");
-  return lines.join("\n");
+function rateStats(reproduction: ReplaySummary[], comparisons: ReplaySummary[]): Summary["rates"] {
+  const agents = [...new Set(comparisons.map((c) => c.agent))];
+  return {
+    reproductionTrials: {
+      k: reproduction.reduce((n, r) => n + r.reproduced, 0),
+      n: reproduction.reduce((n, r) => n + r.trials.length, 0),
+    },
+    passByAgent: agents.map((agent) => {
+      const rows = comparisons.filter((c) => c.agent === agent);
+      return {
+        agent,
+        passes: rows.reduce((n, r) => n + r.passes, 0),
+        trials: rows.reduce((n, r) => n + r.trials.length, 0),
+        fixturesPassed: rows.filter((r) => r.passAll).length,
+        fixtures: rows.length,
+      };
+    }),
+  };
 }
 
 async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {

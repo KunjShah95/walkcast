@@ -3,6 +3,7 @@ import { join, relative, resolve, sep } from "node:path";
 import type { TraceEvent } from "../capture/recorder.ts";
 import type { FixtureManifest } from "../lab/fixture.ts";
 import type { RunResult } from "../lab/runner.ts";
+import type { ExperimentSummary as ExperimentSummaryData } from "../lab/summary.ts";
 
 /**
  * Read-only index over what the lab writes to disk: runs (runs/, results/<exp>/runs/),
@@ -55,7 +56,51 @@ export interface FixtureSummary {
 export interface ExperimentSummary {
   id: string;
   dir: string;
-  summary: Record<string, unknown>;
+  summary: ServedExperimentSummary;
+}
+
+/**
+ * An experiment summary.json as stored on disk. The false-success section was added after the
+ * first published experiment, so files written before it lack the field.
+ */
+export type StoredExperimentSummary = Omit<ExperimentSummaryData, "falseSuccess"> & {
+  falseSuccess?: ExperimentSummaryData["falseSuccess"];
+};
+
+/** What the dashboard is served: `rates` is always filled in, derived if the file predates it. */
+export type ServedExperimentSummary = Omit<StoredExperimentSummary, "rates"> & {
+  rates: ExperimentSummaryData["rates"];
+};
+
+/**
+ * Older summaries already carry the rows `rates` is aggregated from (reproduction and regression
+ * per agent), so derive it rather than render an experiment whose numbers the file does contain.
+ */
+export function withRates(s: StoredExperimentSummary): ServedExperimentSummary {
+  if (s.rates && Array.isArray(s.rates.passByAgent)) return { ...s, rates: s.rates };
+  // A torn or truncated file gets empty rates rather than taking the whole dashboard down.
+  const regression = Array.isArray(s.regression) ? s.regression : [];
+  const reproduction = Array.isArray(s.reproduction) ? s.reproduction : [];
+  const agents = [...new Set(regression.map((r) => r.agent))];
+  return {
+    ...s,
+    rates: {
+      reproductionTrials: {
+        k: reproduction.reduce((n, r) => n + r.reproduced, 0),
+        n: reproduction.reduce((n, r) => n + r.trials, 0),
+      },
+      passByAgent: agents.map((agent) => {
+        const rows = regression.filter((r) => r.agent === agent);
+        return {
+          agent,
+          passes: rows.reduce((n, r) => n + r.passes, 0),
+          trials: rows.reduce((n, r) => n + r.trials, 0),
+          fixturesPassed: rows.filter((r) => r.passAll).length,
+          fixtures: rows.length,
+        };
+      }),
+    },
+  };
 }
 
 /** A narrated site recording (src/record), as listed by the dashboard. */
@@ -105,7 +150,7 @@ export class LabData {
       runRoots.push([join(expDir, "runs"), `experiment:${exp}`]);
       fixtureRoots.push([join(expDir, "fixtures"), `experiment:${exp}`]);
       const summaryPath = join(this.root, expDir, "summary.json");
-      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: expDir, summary: readJson(summaryPath) });
+      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: expDir, summary: withRates(readJson<StoredExperimentSummary>(summaryPath)) });
     }
 
     for (const [base, source] of runRoots) {
