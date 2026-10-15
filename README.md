@@ -1,4 +1,15 @@
-# Browser Agent Failure Lab
+# Walkcast
+
+**Paste a link, get a narrated video walkthrough of the website.** Walkcast signs in to a site you
+own or may test, browses its pages, and returns an MP4 with a spoken voice-over, captions and a
+transcript. The same recorder powers **Walkcast Lab** (formerly "Browser Agent Failure Lab"): it
+turns a failed browser-agent run into a classified, reproducible regression test.
+
+- [Site recorder: narrated walkthroughs](#site-recorder-narrated-walkthroughs)
+- [Web app: landing page, accounts, SEO](#web-app-landing-page-accounts-seo)
+- [Walkcast Lab: agent failures → regression tests](#quick-start)
+
+## Walkcast Lab
 
 Turn a failed browser-agent run into a **classified, reproducible regression test** that checks
 the application's real state, then use it to tell whether the next agent version fixed the bug
@@ -191,7 +202,7 @@ The same diff runs in the dashboard (Compare), including in exported snapshots.
 
 ```sh
 npm run ui                       # builds, then serves http://127.0.0.1:4320 (read-only, local only)
-npm run lab -- ui-export --out failure-lab.html --max-runs 40 --screenshot-runs 10
+npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
                                  # one self-contained HTML file with the data baked in (CI uploads one per run)
 ```
 
@@ -230,6 +241,99 @@ failure, condensed display type, mono for data. Light and dark themes are both s
 patterns follow Aceternity UI's idioms (sticky-header timeline with scroll beam, bento overview,
 cursor spotlight cards), reimplemented here with Tailwind and Motion. Stack: Vite, React 19,
 Tailwind 4, Motion; built to a single file.
+
+## Site recorder: narrated walkthroughs
+
+```sh
+# Only for sites you own or are authorized to test. The password is read from an env var.
+LAB_SITE_PASSWORD=... npm run lab -- record --url https://app.example.com/login \
+  --username you@example.com --i-am-authorized --max-pages 10
+#   sign-in: signed-in — Signed in; landed on /dashboard.
+#   200  https://app.example.com/dashboard  "Dashboard"
+#   ...
+#   media: Narrated with the flite "slt" voice (21 lines).
+#   recording: recordings/app.example.com-<id>/recording.mp4
+```
+
+Or use the **Record** page in the web app (`/app#record`): paste the link, add the sign-in, tick
+the authorization box. Each recording directory holds:
+
+| File | What |
+| --- | --- |
+| `recording.mp4` | H.264 video + AAC narration + embedded `mov_text` caption track |
+| `narrated.webm` | Same narration over the original VP8 video (for browsers without H.264) |
+| `captions.vtt` | WebVTT captions, timed to the speech |
+| `narration.wav` | The voice-over on its own |
+| `recording.json`, `trace.jsonl` | Pages visited (status, title), links skipped and why, the step trace |
+
+How it works (`src/record/`):
+
+- **Sign-in** (`site.ts`) finds the login form, including two-step email-then-password and
+  "Sign in" links, fills it, and reports `signed-in`, `rejected` (with the site's own message),
+  `captcha`, `mfa-required` or `no-form`.
+- **Browsing** is a breadth-first walk of same-origin links up to `--max-pages` (≤ 30 from the
+  web app), scrolling each page so the video shows all of it.
+- **Narration** (`narration.ts`) is written only from recorded events: "Opening the leads page",
+  "Typing the username into "Email"", "Sign-in succeeded". A password is announced as entered but
+  never spoken.
+- **Audio and video** (`media.ts`): each line is spoken with ffmpeg's built-in flite voice
+  (`LAB_VOICE`, default `slt`). The browser **pauses after each action for as long as its line
+  takes to say** (the exact clip length, measured once and cached), so speech and video stay
+  within a few hundred ms. The clips are mixed with `adelay`/`amix` and muxed into the MP4.
+  Without ffmpeg/flite you still get the WebM video and captions.
+
+Guardrails: an explicit authorization attestation is required; the recorder never bypasses
+CAPTCHA or 2FA (it stops and says so); after sign-in it submits no forms, makes GET navigations
+only, skips sign-out/delete/cancel/unsubscribe links, honours `robots.txt` and paces requests;
+credentials are registered as secrets, so nothing on disk contains them.
+
+## Web app: landing page, accounts, SEO
+
+`npm run lab -- ui` serves:
+
+| Path | What |
+| --- | --- |
+| `/` | Server-rendered landing page: hero with a URL box, the real demo walkthrough with a clickable transcript, how it works, outputs, guardrails, the agent lab, FAQ |
+| `/signup`, `/login` | Accounts: **Continue with Google** or email + password |
+| `/app` | The dashboard (Record, Simulator, Runs, Fixtures, Experiments) |
+| `/robots.txt`, `/sitemap.xml`, `/llms.txt` | Crawler files |
+
+Pasting a link on the landing page goes to `/start?url=…`: signed-in users land on the Record page
+with the link filled in; everyone else signs up first and is brought back to it.
+
+**Accounts** (`src/site/auth.ts`): passwords hashed with scrypt; sessions are random tokens in an
+`HttpOnly; SameSite=Lax` cookie (`Secure` on https) and only their SHA-256 is stored, in
+`.lab/users.json` (git-ignored); sign-in errors don't reveal whether an email exists; 10 attempts
+per 15 minutes per address; cross-site POSTs are refused. Starting runs or recordings needs a
+signed-in account (`LAB_AUTH=off` turns that off for local use); viewing does not.
+
+**Google sign-in** uses the OAuth 2.0 authorization-code flow with a `state` cookie, and only
+accepts Google accounts with a verified email (an existing email account is linked). To enable
+it, create an OAuth client ("Web application") in Google Cloud Console, add the authorized
+redirect URI `<LAB_SITE_URL>/auth/google/callback`, then set `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`. Until then the button is shown disabled with an explanation.
+
+**Hosting it**: set `LAB_SITE_URL=https://your-domain` (canonical URLs, sitemap, OAuth redirect)
+and `LAB_HOST=0.0.0.0`, and put it behind TLS. When the server is reachable from other machines,
+the recorder refuses targets that resolve to private, loopback or link-local addresses (an SSRF
+guard; `LAB_ALLOW_PRIVATE=1` lifts it).
+
+**Search and AI discoverability (SEO / AEO / GEO)**, all in `src/site/pages.ts`:
+
+- The full content is in the HTML (no client rendering), with one `h1`, a canonical URL, Open
+  Graph/Twitter cards with a 1200×630 image, and `max-snippet`/`max-video-preview` robots meta.
+- JSON-LD `@graph`: `WebSite`, `SoftwareApplication`, `VideoObject` (with the transcript),
+  `HowTo` and `FAQPage`. Every FAQ answer is also visible on the page.
+- `robots.txt` explicitly allows search and AI crawlers (Googlebot, Bingbot, GPTBot,
+  OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot and others)
+  on public pages and keeps them out of `/app`, `/api`, `/auth`.
+- `sitemap.xml` includes a video sitemap entry; `/llms.txt` is a plain summary assistants can
+  quote accurately.
+- Self-hosted fonts (preloaded) and a ~28 KB page with ~1 KB of script.
+
+None of this can guarantee a ranking. What decides it after launch is a real domain, links from
+other sites, more pages answering specific questions (e.g. a guide per use case) and Search
+Console / Bing Webmaster submission of the sitemap.
 
 ## Secrets
 
@@ -277,6 +381,9 @@ src/agents/     Scripted agent versions v0/v1/v2
 src/lab/        Task + oracle, classifier, runner, report, fixtures/replay, experiment
 fixtures/       Committed regression fixtures (CI release gate)
 results/        Experiment outputs (summary.md / summary.json; per-run traces are not committed)
+src/record/     Site recorder: sign-in, same-origin walk, narration, ffmpeg audio/video
+src/site/       Landing page, sign-up/sign-in (email + Google), robots/sitemap/llms.txt
+site/static/    Demo walkthrough (MP4/WebM/VTT), poster and social image
 dashboard/      Dashboard and timeline viewer (React); src/ui/ serves and exports it
 docs/           Research assessment
 ```

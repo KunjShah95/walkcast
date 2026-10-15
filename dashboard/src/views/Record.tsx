@@ -1,7 +1,7 @@
 import { Download, Film, Link2, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Empty, Panel, PanelHeader } from "../components/ui.tsx";
-import { isSnapshot, loadCapabilities, mediaUrl, startRecording } from "../lib/api.ts";
+import { SignInRequired, isSnapshot, loadCapabilities, loadMe, mediaUrl, startRecording } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
 
@@ -18,7 +18,7 @@ const OUTCOME: Record<string, { text: string; tone: string }> = {
  * Paste a site's URL (and sign-in details), get back a narrated video of the whole visit:
  * the browser video with a spoken track and captions, plus the pages visited.
  */
-export function Record({ index, refresh }: { index: LabIndex; refresh: () => Promise<LabIndex> }) {
+export function Record({ index, refresh, initialUrl }: { index: LabIndex; refresh: () => Promise<LabIndex>; initialUrl?: string }) {
   const recordings = index.recordings ?? [];
   const [selected, setSelected] = useState<string | null>(recordings[0]?.dir ?? null);
   const current = recordings.find((r) => r.dir === selected) ?? recordings[0];
@@ -37,6 +37,7 @@ export function Record({ index, refresh }: { index: LabIndex; refresh: () => Pro
       <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
         <div className="grid content-start gap-4">
           <RecordForm
+            initialUrl={initialUrl ?? ""}
             onDone={async (dir) => {
               await refresh();
               setSelected(dir);
@@ -71,8 +72,9 @@ export function Record({ index, refresh }: { index: LabIndex; refresh: () => Pro
   );
 }
 
-function RecordForm({ onDone }: { onDone: (dir: string) => Promise<void> }) {
-  const [url, setUrl] = useState("");
+function RecordForm({ onDone, initialUrl }: { onDone: (dir: string) => Promise<void>; initialUrl: string }) {
+  const [url, setUrl] = useState(initialUrl);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [maxPages, setMaxPages] = useState(8);
@@ -82,8 +84,14 @@ function RecordForm({ onDone }: { onDone: (dir: string) => Promise<void> }) {
   const [serverBusy, setServerBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isSnapshot) loadCapabilities().then((c) => setServerBusy(c.running ?? null));
+    if (!isSnapshot) {
+      loadCapabilities().then((c) => setServerBusy(c.running ?? null));
+      loadMe().then((me) => setNeedsSignIn(Boolean(me && me.authRequired && !me.user)));
+    }
   }, []);
+  useEffect(() => {
+    if (initialUrl) setUrl(initialUrl);
+  }, [initialUrl]);
 
   const valid = /^https?:\/\/\S+$/i.test(url.trim()) && authorized;
   const submit = async (e: React.FormEvent) => {
@@ -96,6 +104,7 @@ function RecordForm({ onDone }: { onDone: (dir: string) => Promise<void> }) {
       setPassword("");
       await onDone(dir);
     } catch (err) {
+      if (err instanceof SignInRequired) setNeedsSignIn(true);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
@@ -157,6 +166,19 @@ function RecordForm({ onDone }: { onDone: (dir: string) => Promise<void> }) {
         <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
           <ShieldCheck className="size-3.5" aria-hidden /> The password stays in memory; traces and captions show it as a placeholder.
         </p>
+        {needsSignIn && (
+          <p className="rounded-lg border border-line bg-panel-2 px-3 py-2 text-[12.5px] text-ink-2">
+            Recording needs an account.{" "}
+            <a className="font-medium text-ink underline" href={`/signup?next=${encodeURIComponent(`/app#record?url=${encodeURIComponent(url)}`)}`}>
+              Create one
+            </a>{" "}
+            or{" "}
+            <a className="font-medium text-ink underline" href={`/login?next=${encodeURIComponent(`/app#record?url=${encodeURIComponent(url)}`)}`}>
+              sign in
+            </a>
+            , with Google or email.
+          </p>
+        )}
         {serverBusy && <p className="text-[12.5px] text-ink-2">Server busy: {serverBusy}</p>}
         {error && <p className="rounded-lg border border-fail/40 bg-fail-soft px-3 py-2 text-[12.5px] text-fail">{error}</p>}
         <button

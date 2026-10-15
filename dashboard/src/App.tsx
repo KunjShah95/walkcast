@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "./components/ui.tsx";
-import { isSnapshot, loadIndex } from "./lib/api.ts";
+import { isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
 import { Experiments } from "./views/Experiments.tsx";
@@ -15,7 +15,7 @@ import { Record } from "./views/Record.tsx";
 export type Route =
   | { view: "overview" }
   | { view: "simulator" }
-  | { view: "record" }
+  | { view: "record"; url?: string }
   | { view: "runs" }
   | { view: "fixtures" }
   | { view: "experiments" }
@@ -29,6 +29,7 @@ function parse(hash: string): Route {
     const [base = "", cand = ""] = h.slice(8).split("|").map(decodeURIComponent);
     return { view: "compare", base, cand };
   }
+  if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
   if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record") return { view: h };
   return { view: "overview" };
 }
@@ -86,7 +87,7 @@ export function App() {
         >
           <button type="button" onClick={() => go({ view: "overview" })} className="flex items-center gap-2.5">
             <Mark />
-            <span className="font-display text-[19px] font-semibold tracking-tight">Failure Lab</span>
+            <span className="font-display text-[19px] font-semibold tracking-tight">Walkcast</span>
           </button>
           <nav className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto" aria-label="Sections">
             {NAV.map((n) => (
@@ -105,6 +106,7 @@ export function App() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3">
+            <Account />
             {index && (
               <span className="hidden font-mono text-[11px] text-ink-3 md:inline">
                 {isSnapshot ? "snapshot" : "live"} · indexed {ago(Date.parse(index.generatedAt))}
@@ -127,10 +129,29 @@ export function App() {
         {index && route.view === "experiments" && <Experiments index={index} />}
         {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
         {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
-        {index && route.view === "record" && <Record index={index} refresh={refresh} />}
+        {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} />}
         {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
       </main>
     </div>
+  );
+}
+
+/** Signed-in account (live server only). */
+function Account() {
+  const [me, setMe] = useState<{ user: { email: string } | null } | null>(null);
+  useEffect(() => {
+    if (!isSnapshot) loadMe().then(setMe);
+  }, []);
+  if (!me) return null;
+  return me.user ? (
+    <span className="flex items-center gap-2 text-[12.5px] text-ink-2">
+      <span className="hidden max-w-[16ch] truncate sm:inline">{me.user.email}</span>
+      <a href="/auth/logout" className="rounded-md border border-line px-2 py-1 hover:bg-panel-2">Sign out</a>
+    </span>
+  ) : (
+    <a href={`/login?next=${encodeURIComponent("/app" + location.hash)}`} className="rounded-md bg-ink px-2.5 py-1 text-[12.5px] text-paper">
+      Sign in
+    </a>
   );
 }
 

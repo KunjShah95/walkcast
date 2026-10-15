@@ -80,6 +80,19 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 export async function startRecording(input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean }): Promise<string> {
   const res = await fetch("/api/record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   const body = (await res.json()) as { dir?: string; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in to record.");
   if (!res.ok || !body.dir) throw new Error(body.error ?? `Recording failed (${res.status}).`);
   return body.dir;
+}
+
+export class SignInRequired extends Error {}
+
+export async function loadMe(): Promise<{ user: { email: string; name?: string } | null; google: boolean; authRequired: boolean } | null> {
+  if (baked) return null;
+  try {
+    const res = await fetch("/api/me");
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
 }

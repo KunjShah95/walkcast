@@ -1,5 +1,5 @@
 {
-  "name": "browser-agent-failure-lab",
+  "name": "walkcast",
   "version": "0.1.0",
   "private": true,
   "description": "Turn browser-agent failures into classified, reproducible regression fixtures.",

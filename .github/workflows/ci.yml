@@ -41,12 +41,12 @@ jobs:
         run: npm run lab -- compare fixtures --agents v1 --trials 3
       - name: Export the dashboard for this run
         if: always()
-        run: npm run ui:build && npm run lab -- ui-export --out failure-lab.html --max-runs 40 --screenshot-runs 10
+        run: npm run ui:build && npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
       - name: Upload dashboard and run reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: failure-lab
+          name: walkcast
           path: |
-            failure-lab.html
+            walkcast.html
             runs/**/report.md

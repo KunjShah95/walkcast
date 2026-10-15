@@ -1,0 +1,107 @@
+{
+ "captions": [
+  {
+   "start": 0.02,
+   "end": 3.19,
+   "text": "Opening 127.0.0.1."
+  },
+  {
+   "start": 3.45,
+   "end": 6.39,
+   "text": "Typing the username into \"Username\"."
+  },
+  {
+   "start": 6.49,
+   "end": 10.36,
+   "text": "Entering the password. It is hidden on screen and never saved."
+  },
+  {
+   "start": 10.46,
+   "end": 11.94,
+   "text": "Clicking \"Sign in\"."
+  },
+  {
+   "start": 12.04,
+   "end": 13.67,
+   "text": "Sign-in succeeded."
+  },
+  {
+   "start": 13.77,
+   "end": 16.9,
+   "text": "Scrolling through \"Leads \u00b7 MiniCRM\"."
+  },
+  {
+   "start": 17,
+   "end": 19.44,
+   "text": "Opening the leads, new page."
+  },
+  {
+   "start": 21.82,
+   "end": 25.03,
+   "text": "Scrolling through \"New lead \u00b7 MiniCRM\"."
+  },
+  {
+   "start": 25.21,
+   "end": 28.28,
+   "text": "Opening the leads, 1001 page."
+  },
+  {
+   "start": 30.96,
+   "end": 35.01,
+   "text": "Scrolling through \"Lead 1001 \u00b7 MiniCRM\"."
+  },
+  {
+   "start": 35.18,
+   "end": 38.28,
+   "text": "Opening the leads, 1002 page."
+  },
+  {
+   "start": 40.96,
+   "end": 45.04,
+   "text": "Scrolling through \"Lead 1002 \u00b7 MiniCRM\"."
+  },
+  {
+   "start": 45.22,
+   "end": 48.35,
+   "text": "Opening the leads, 1003 page."
+  },
+  {
+   "start": 51.03,
+   "end": 55.12,
+   "text": "Scrolling through \"Lead 1003 \u00b7 MiniCRM\"."
+  },
+  {
+   "start": 55.22,
+   "end": 58.06,
+   "text": "Recording finished. 5 pages visited."
+  }
+ ],
+ "pages": [
+  {
+   "path": "/leads",
+   "title": "Leads \u00b7 MiniCRM",
+   "status": 200
+  },
+  {
+   "path": "/leads/new",
+   "title": "New lead \u00b7 MiniCRM",
+   "status": 200
+  },
+  {
+   "path": "/leads/1001",
+   "title": "Lead 1001 \u00b7 MiniCRM",
+   "status": 200
+  },
+  {
+   "path": "/leads/1002",
+   "title": "Lead 1002 \u00b7 MiniCRM",
+   "status": 200
+  },
+  {
+   "path": "/leads/1003",
+   "title": "Lead 1003 \u00b7 MiniCRM",
+   "status": 200
+  }
+ ],
+ "durationSeconds": 58
+}

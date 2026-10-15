@@ -20,7 +20,7 @@ import { cpSync } from "node:fs";
 import { SEED_LEADS, createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
 import { recordSite } from "./record/site.ts";
 
-const HELP = `Browser Agent Failure Lab
+const HELP = `Walkcast: narrated website walkthroughs and a failure lab for browser agents
 
 Usage: npm run lab -- <command> [options]
 
@@ -37,7 +37,10 @@ Commands:
   experiment [--baseline id] [--candidates a,b] [--seeds n] [--trials k] [--concurrency c] [--model-mode m] [--out dir]
                                         Full validation experiment (docs/ASSESSMENT.md §7)
 
-  ui [--port 4320]                      Dashboard and timeline viewer over runs/, fixtures/, results/
+  ui [--port 4320]                      Web app: landing page at /, accounts (email or Google), and the
+                                        dashboard at /app over runs/, fixtures/, results/, recordings/.
+                                        Env: LAB_SITE_URL (public origin), LAB_HOST, GOOGLE_CLIENT_ID,
+                                        GOOGLE_CLIENT_SECRET, LAB_AUTH=off (no sign-in needed to record)
                                         (build first: npm run ui:build, or just npm run ui)
   ui-export [--out file.html] [--max-runs n] [--lean]
                                         One self-contained HTML file with the data baked in
@@ -202,12 +205,12 @@ async function main(): Promise<number> {
     }
     case "ui": {
       const url = await serveDashboard(Number(values.port ?? 4320));
-      console.log(`Failure Lab dashboard: ${url}  (read-only view of runs/, fixtures/, results/)`);
+      console.log(`Walkcast: ${url}  (landing page)  ·  dashboard: ${url}/app`);
       await new Promise(() => undefined);
       return 0;
     }
     case "ui-export": {
-      const out = resolve(values.out ?? "failure-lab.html");
+      const out = resolve(values.out ?? "walkcast.html");
       const r = exportDashboard({
         out,
         maxRuns: Number(values["max-runs"]),
