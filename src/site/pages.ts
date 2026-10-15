@@ -402,7 +402,7 @@ export function authPage(siteUrl: string, mode: "signup" | "login", opts: { goog
 </div></section>
 <script>
 document.getElementById("auth").addEventListener("submit",function(e){e.preventDefault();var f=e.target,err=document.getElementById("err"),b=f.querySelector("button");err.textContent="";b.disabled=true;
-fetch("/auth/${mode}",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(f)))}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"Something went wrong.");location.href=${JSON.stringify(opts.next)}})}).catch(function(x){err.textContent=x.message;b.disabled=false})});
+fetch("/auth/${mode}",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(f)))}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"Something went wrong.");location.href=${JSON.stringify(opts.next).replace(/</g, "\\u003c")}})}).catch(function(x){err.textContent=x.message;b.disabled=false})});
 </script>`;
   return layout({
     siteUrl,

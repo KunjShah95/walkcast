@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { Auth, AuthError, safeNext } from "../src/site/auth.ts";
-import { landingPage, llmsTxt, robotsTxt, sitemapXml } from "../src/site/pages.ts";
+import { authPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../src/site/pages.ts";
 import { serveDashboard } from "../src/ui/server.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "lab-site-"));
@@ -129,13 +129,67 @@ test("server: public pages, protected actions, sign-up then record", async () =>
   }
 });
 
-test("an exposed server refuses private and loopback targets", async () => {
-  const { privateTarget } = await import("../src/ui/server.ts");
-  assert.equal(await privateTarget("http://127.0.0.1:4310/", false), null, "local server: allowed");
-  for (const t of ["http://127.0.0.1/", "http://10.1.2.3/", "http://192.168.0.5/", "http://169.254.169.254/latest/meta-data", "http://[::1]/", "http://localhost/"]) {
-    assert.match(String(await privateTarget(t, true)), /private or local|resolve/, t);
+test("SSRF guard: private, loopback, link-local and IPv4-mapped addresses are blocked", async () => {
+  const { blockedHost, isPrivateAddress } = await import("../src/record/ssrf.ts");
+  for (const a of ["127.0.0.1", "10.1.2.3", "192.168.0.5", "172.20.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "[::ffff:169.254.169.254]"]) {
+    assert.equal(isPrivateAddress(a), true, a);
   }
-  assert.equal(await privateTarget("http://93.184.215.14/", true), null);
+  for (const a of ["93.184.215.14", "1.1.1.1", "2606:4700:4700::1111"]) assert.equal(isPrivateAddress(a), false, a);
+  assert.match(String(await blockedHost("localhost")), /private or local/);
+  assert.match(String(await blockedHost("[::ffff:127.0.0.1]")), /private or local/);
+  assert.equal(await blockedHost("93.184.215.14"), null);
+});
+
+test("review regressions: escaped redirect target, strict next, Google takeover, JSON bodies", async () => {
+  // Script-context XSS through ?next=
+  const page = authPage("https://lab.example", "login", { google: false, next: safeNext("/</script><script>alert(1)</script>") });
+  assert.ok(!page.includes("</script><script>alert(1)"));
+  // Tabs/newlines/backslashes can't smuggle a second slash in.
+  for (const bad of ["/\t/evil.example", "/\n", "/\r\n/evil.example", "/\\evil.example", "//evil.example"]) assert.equal(safeNext(bad), "/app#record", JSON.stringify(bad));
+  assert.equal(safeNext("/app#record?url=https%3A%2F%2Fx.example"), "/app#record?url=https%3A%2F%2Fx.example");
+
+  // Someone pre-registers the victim's email; the verified Google owner takes the account back.
+  const auth = new Auth(join(dir, "takeover.json"), "https://lab.example", { clientId: "c", clientSecret: "s" });
+  const squatter = auth.signUp("victim@example.com", "attacker-password");
+  const { res, headers } = fakeRes();
+  auth.startSession(res, squatter);
+  const token = (headers["set-cookie"] as string[])[0]!.split(";")[0]!.split("=")[1]!;
+  const req = { headers: { cookie: `lab_session=${token}` } } as never;
+  auth.upsertGoogle("google-victim", "victim@example.com");
+  assert.equal(auth.user(req), null, "the squatter's session is gone");
+  assert.throws(() => auth.signIn("victim@example.com", "attacker-password", "2.2.2.2"), /incorrect/);
+
+  const { parseBody } = await import("../src/capture/recorder.ts");
+  assert.deepEqual(parseBody('{"email":"a@b.c","password":"Tr0ub&dor3","n":1}', "application/json"), { email: "a@b.c", password: "Tr0ub&dor3", n: "1" });
+  assert.deepEqual(parseBody("a=1&b=two", "application/x-www-form-urlencoded"), { a: "1", b: "two" });
+});
+
+test("server: dashboard data needs an account; recordings are only shown to their owner", async () => {
+  const root = mkdtempSync(join(tmpdir(), "lab-own-"));
+  const port = 4900 + Math.floor(Math.random() * 90);
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  for (const [name, owner] of [["a-1", "OWNER_A"], ["b-1", "OWNER_B"]] as const) {
+    mkdirSync(join(root, "recordings", name), { recursive: true });
+    writeFileSync(join(root, "recordings", name, "recording.json"), JSON.stringify({ id: name, owner, url: `https://${name}.example/`, createdAt: new Date().toISOString(), durationMs: 1, signIn: {}, pages: [], skipped: [], captions: [], media: { captions: "captions.vtt" } }));
+    writeFileSync(join(root, "recordings", name, "captions.vtt"), "WEBVTT\n");
+  }
+  const base = await serveDashboard(port, { root, unref: true });
+  try {
+    assert.equal((await fetch(`${base}/api/index`)).status, 401);
+    assert.equal((await fetch(`${base}/files/recordings/a-1/captions.vtt`)).status, 401);
+    const signup = await fetch(`${base}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "o@example.com", password: "a-good-password" }) });
+    const cookie = signup.headers.get("set-cookie")!.split(";")[0]!;
+    const index = (await (await fetch(`${base}/api/index`, { headers: { cookie } })).json()) as { recordings: unknown[] };
+    assert.equal(index.recordings.length, 0, "other accounts' recordings are hidden");
+    assert.equal((await fetch(`${base}/files/recordings/a-1/captions.vtt`, { headers: { cookie } })).status, 404);
+    assert.equal((await fetch(`${base}/files/%E0`, { headers: { cookie } })).status, 400);
+    const bad = await fetch(`${base}/api/record`, { method: "POST", headers: { cookie }, body: JSON.stringify({ url: "not a url", authorized: true }) });
+    assert.equal(bad.status, 400);
+    const agent = await fetch(`${base}/api/run`, { method: "POST", headers: { cookie }, body: JSON.stringify({ agent: "nope" }) });
+    assert.equal(agent.status, 400);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("guides: unique titles and descriptions, valid structured data, all in the sitemap", async () => {

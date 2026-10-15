@@ -1,4 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,13 +41,27 @@ export async function buildMedia(dir: string, captions: Caption[]): Promise<Medi
   if (!video) return finish("The browser produced no video.");
   if (!hasFlite()) return finish("ffmpeg with the flite voice is not installed; the recording has video and captions only.");
 
+  try {
+    return await narrate(dir, video, captions, result);
+  } catch (e) {
+    // Keep what we have (video + captions) and say what went wrong.
+    return finish(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the recording has video and captions only.`);
+  } finally {
+    for (const [i] of captions.entries()) {
+      rmSync(join(dir, `.tts-${i}.wav`), { force: true });
+      rmSync(join(dir, `.tts-${i}.txt`), { force: true });
+    }
+  }
+}
+
+async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult): Promise<MediaResult> {
   // 1. Speak each caption to its own clip.
   const clips: { file: string; seconds: number }[] = [];
   for (const [i, caption] of captions.entries()) {
     const text = join(dir, `.tts-${i}.txt`);
     const file = join(dir, `.tts-${i}.wav`);
     writeFileSync(text, caption.text.replace(/[{}]/g, ""));
-    run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(text)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", file]);
+    await run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(text)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", file]);
     clips.push({ file, seconds: wavSeconds(file) });
   }
 
@@ -64,18 +79,14 @@ export async function buildMedia(dir: string, captions: Caption[]): Promise<Medi
   const inputs = clips.flatMap((c) => ["-i", c.file]);
   const delays = captions.map((c, i) => `[${i}:a]adelay=${Math.round(c.start * 1000)}:all=1[a${i}]`);
   const mix = `${captions.map((_, i) => `[a${i}]`).join("")}amix=inputs=${captions.length}:normalize=0:dropout_transition=0[out]`;
-  run([...inputs, "-filter_complex", [...delays, mix].join(";"), "-map", "[out]", "-ar", "22050", "-ac", "1", audio]);
-  for (const [i, c] of clips.entries()) {
-    rmSync(c.file, { force: true });
-    rmSync(join(dir, `.tts-${i}.txt`), { force: true });
-  }
+  await run([...inputs, "-filter_complex", [...delays, mix].join(";"), "-map", "[out]", "-ar", "22050", "-ac", "1", audio]);
   writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
 
   // 4. Mux: hold the last frame if the narration runs past the end of the video.
   const videoSeconds = probeSeconds(join(dir, video));
   const extra = Math.max(0, cursor - videoSeconds + 0.5);
   const mp4 = join(dir, "recording.mp4");
-  run([
+  await run([
     "-i", join(dir, video),
     "-i", audio,
     "-i", join(dir, "captions.vtt"),
@@ -88,7 +99,7 @@ export async function buildMedia(dir: string, captions: Caption[]): Promise<Medi
     mp4,
   ]);
   const webm = join(dir, "narrated.webm");
-  run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
+  await run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
   result.webm = existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null;
   result.audio = "narration.wav";
   result.mp4 = existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null;
@@ -104,7 +115,7 @@ const spoken = new Map<string, number>();
  * How long the narration voice takes to say `text`, in ms. With flite available the line is
  * synthesized once (and cached) so the measurement is exact; otherwise it is estimated.
  */
-export function speechMs(text: string): number {
+export async function speechMs(text: string): Promise<number> {
   if (!hasFlite()) return text.split(/\s+/).filter(Boolean).length * 380 + 400;
   const cached = spoken.get(text);
   if (cached !== undefined) return cached;
@@ -113,7 +124,7 @@ export function speechMs(text: string): number {
   const txt = join(cacheDir, `${i}.txt`);
   const wav = join(cacheDir, `${i}.wav`);
   writeFileSync(txt, text.replace(/[{}]/g, ""));
-  run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(txt)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", wav]);
+  await run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(txt)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", wav]);
   const ms = Math.round(wavSeconds(wav) * 1000);
   rmSync(txt, { force: true });
   rmSync(wav, { force: true });
@@ -121,8 +132,11 @@ export function speechMs(text: string): number {
   return ms;
 }
 
-function run(args: string[]): void {
-  execFileSync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { stdio: ["ignore", "ignore", "pipe"] });
+const execFileAsync = promisify(execFile);
+
+/** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
+async function run(args: string[]): Promise<void> {
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 4 * 1024 * 1024 });
 }
 
 let fliteAvailable: boolean | undefined;

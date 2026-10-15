@@ -1,7 +1,5 @@
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { lookup } from "node:dns/promises";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
-import { isIP } from "node:net";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RunDetail } from "./data.ts";
@@ -10,7 +8,7 @@ import { taskById } from "../lab/task.ts";
 import { allAgents } from "../agents/registry.ts";
 import { runOnce } from "../lab/runner.ts";
 import { configuredProviders } from "../llm/providers.ts";
-import { recordSite } from "../record/site.ts";
+import { RecordError, recordSite } from "../record/site.ts";
 import { Auth, AuthError, defaultAuthFile, publicUser, safeNext } from "../site/auth.ts";
 import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
@@ -56,7 +54,9 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   const data = new LabData(root);
   const auth = new Auth(defaultAuthFile(root), siteUrl);
   const html = dashboardHtml();
-  let running: string | null = null;
+  let running: { label: string; owner: string | undefined } | null = null;
+  const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
+  const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const json = (status: number, value: unknown) => {
@@ -133,7 +133,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       }
       if (url.pathname === "/auth/login" && req.method === "POST") {
         return readJsonBody((b) => {
-          const found = auth.signIn(String(b.email ?? ""), String(b.password ?? ""), req.socket.remoteAddress ?? "?");
+          const found = auth.signIn(String(b.email ?? ""), String(b.password ?? ""), clientIp(req));
           auth.startSession(res, found);
           json(200, { user: publicUser(found) });
         });
@@ -145,122 +145,114 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       }
       if (url.pathname === "/auth/google") return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
       if (url.pathname === "/auth/google/callback") {
-        auth.googleCallback(req, url).then(
-          ({ user: signedIn, next }) => {
+        auth
+          .googleCallback(req, url)
+          .then(({ user: signedIn, next }) => {
             auth.startSession(res, signedIn);
-            res.writeHead(302, { Location: next });
+            res.writeHead(302, { Location: safeNext(next) });
             res.end();
-          },
-          (e: unknown) => send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e)),
-        );
+          })
+          .catch((e: unknown) => {
+            if (res.headersSent) return res.end();
+            send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
+          });
         return;
       }
       if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: Boolean(auth.google), authRequired: requireAuth });
-      if (requireAuth && !user && req.method === "POST" && (url.pathname === "/api/run" || url.pathname === "/api/record")) {
-        return json(401, { error: "Sign in to start runs and recordings.", signIn: "/login?next=%2Fapp%23record" });
+      // Everything below is the dashboard: its data (recordings of signed-in pages, traces) and its
+      // actions need an account when accounts are on.
+      if (requireAuth && !user && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))) {
+        return json(401, { error: "Sign in to use the dashboard.", signIn: `/login?next=${encodeURIComponent("/app")}` });
       }
+      // A recording is visible to the account that made it; ones made from the CLI (no owner) only
+      // on a server that isn't reachable from other machines.
+      const canSee = (owner: string | undefined) => (owner ? !requireAuth || owner === user?.id : !exposed);
+
       // ---------------------------------------------------------------- dashboard API
-      if (url.pathname === "/api/index") return json(200, data.index());
+      if (url.pathname === "/api/index") {
+        const index = data.index();
+        return json(200, { ...index, recordings: index.recordings.filter((r) => canSee(r.owner)) });
+      }
       if (url.pathname === "/api/capabilities") {
         return json(200, {
           live: true,
-          running,
+          running: running ? (running.owner === user?.id || !requireAuth ? running.label : "another job") : null,
           user: publicUser(user),
           authRequired: requireAuth,
           stagehand: Boolean(process.env.LAB_CHROME_PATH && existsSync(process.env.LAB_CHROME_PATH)),
+          liveModels: allowLiveRuns,
           providers: configuredProviders().map((p) => p.id),
           agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description })),
           scenarios: allScenarios("pairs"),
         });
       }
-      if (url.pathname === "/api/run" && req.method === "POST") {
-        // Starts a real run. Local-only server; one run at a time.
-        if (running) return json(409, { error: `A run is already in progress (${running}).` });
-        let body = "";
-        req.on("data", (c) => (body += c));
-        req.on("end", () => {
-          let input: { agent?: string; fault?: string; seed?: number; task?: string; modelMode?: "live" | "replay" | "scripted" };
+      if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
+        // One job at a time. Claimed before the body is read so two requests can't both start.
+        if (running) return json(409, { error: `Busy: ${running.owner === user?.id || !requireAuth ? running.label : "another job is running"}. Try again shortly.` });
+        const job = { label: url.pathname === "/api/run" ? "a run" : "a recording", owner: user?.id };
+        running = job;
+        const release = () => {
+          if (running === job) running = null;
+        };
+        req.on("close", () => {
+          if (!res.writableEnded && !req.complete) release();
+        });
+        return readJsonBody(async (b) => {
           try {
-            input = JSON.parse(body || "{}");
-            const fault = normalizeScenario(input.fault ?? "none");
-            const agent = String(input.agent ?? "v0");
-            running = `${agent} on ${fault}`;
-            runOnce({
-              fault,
-              seed: Number(input.seed ?? 1),
-              agent,
-              task: taskById(isTaskId(input.task ?? "") ? (input.task as TaskId) : "create-lead"),
-              outDir: join(data.root, "runs"),
-              screenshots: true,
-              ...(input.modelMode ? { modelMode: input.modelMode } : {}),
-            }).then(
-              (r) => {
-                running = null;
-                json(200, { dir: join("runs", basename(r.runDir)) });
-              },
-              (e: unknown) => {
-                running = null;
-                json(500, { error: e instanceof Error ? e.message : String(e) });
-              },
-            );
+            if (url.pathname === "/api/run") {
+              const agent = String(b.agent ?? "v0");
+              if (!allAgents().some((a) => a.id === agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
+              const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
+              if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
+              if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.");
+              const fault = normalizeScenario(String(b.fault ?? "none"));
+              const task = taskById(isTaskId(String(b.task ?? "")) ? (b.task as TaskId) : "create-lead");
+              const seed = Number.isFinite(Number(b.seed)) ? Number(b.seed) : 1;
+              job.label = `${agent} on ${fault}`;
+              const r = await runOnce({ fault, seed, agent, task, outDir: join(data.root, "runs"), screenshots: true, ...(modelMode ? { modelMode: modelMode as "live" | "replay" | "scripted" } : {}) });
+              return json(200, { dir: join("runs", basename(r.runDir)) });
+            }
+            // Records a site the user says they may test. The password lives only in this request's memory.
+            if (b.authorized !== true) throw new AuthError(400, "Confirm that you own this site or are authorized to test it.");
+            if (typeof b.url !== "string" || !b.url.trim()) throw new AuthError(400, "Paste the site's URL.");
+            job.label = `recording ${b.url}`;
+            const pages = Number(b.maxPages);
+            const r = await recordSite({
+              url: b.url.trim(),
+              ...(typeof b.username === "string" && b.username ? { username: b.username } : {}),
+              ...(typeof b.password === "string" && b.password ? { password: b.password } : {}),
+              maxPages: Number.isFinite(pages) ? Math.max(1, Math.min(30, pages)) : 8,
+              authorized: true,
+              outDir: join(data.root, "recordings"),
+              blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
+              ...(user ? { owner: user.id } : {}),
+            });
+            return json(200, { dir: join("recordings", basename(r.dir)) });
           } catch (e) {
-            running = null;
-            json(400, { error: e instanceof Error ? e.message : String(e) });
+            if (e instanceof RecordError) throw new AuthError(400, e.message);
+            throw e instanceof AuthError ? e : new AuthError(500, e instanceof Error ? e.message : String(e));
+          } finally {
+            release();
           }
         });
-        return;
-      }
-      if (url.pathname === "/api/record" && req.method === "POST") {
-        // Records a site the user says they may test. The password lives only in this request's memory.
-        if (running) return json(409, { error: `Busy (${running}).` });
-        let body = "";
-        req.on("data", (c) => (body += c));
-        req.on("end", () => {
-          try {
-            const input = JSON.parse(body || "{}") as { url?: string; username?: string; password?: string; maxPages?: number; authorized?: boolean };
-            if (!input.authorized) return json(400, { error: "Confirm that you own this site or are authorized to test it." });
-            if (!input.url) return json(400, { error: "Paste the site's URL." });
-            const target = input.url;
-            const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
-            running = `recording ${target}`;
-            privateTarget(target, exposed)
-              .then((blocked) => {
-                if (blocked) throw new AuthError(400, blocked);
-                return recordSite({
-                  url: target,
-                  ...(input.username ? { username: input.username } : {}),
-                  ...(input.password ? { password: input.password } : {}),
-                  maxPages: Math.max(1, Math.min(30, Number(input.maxPages ?? 8))),
-                  authorized: true,
-                  outDir: join(data.root, "recordings"),
-                });
-              })
-              .then(
-                (r) => {
-                  running = null;
-                  json(200, { dir: join("recordings", basename(r.dir)) });
-                },
-                (e: unknown) => {
-                  running = null;
-                  json(e instanceof AuthError ? e.status : 500, { error: e instanceof Error ? e.message : String(e) });
-                },
-              );
-          } catch (e) {
-            running = null;
-            json(400, { error: e instanceof Error ? e.message : String(e) });
-          }
-        });
-        return;
       }
       if (url.pathname === "/api/run") {
         const detail = data.run(url.searchParams.get("dir") ?? "");
         return detail ? json(200, detail) : json(404, { error: "run not found" });
       }
       if (url.pathname.startsWith("/files/")) {
-        const abs = data.safe(decodeURIComponent(url.pathname.slice("/files/".length)));
+        let rel: string;
+        try {
+          rel = decodeURIComponent(url.pathname.slice("/files/".length));
+        } catch {
+          return json(400, { error: "bad path" });
+        }
+        const abs = data.safe(rel);
         const type = abs ? TYPES[extname(abs).toLowerCase()] : undefined;
         if (!abs || !type || !existsSync(abs)) return json(404, { error: "not found" });
-        return streamFile(req, res, abs, type, "max-age=3600");
+        const recording = /^recordings[\\/]([^\\/]+)/.exec(rel)?.[1];
+        if (recording && !canSee(data.recordingOwner(recording))) return json(404, { error: "not found" });
+        return streamFile(req, res, abs, type, "private, max-age=3600");
       }
       if (url.pathname === "/app" || url.pathname === "/app/") return send(200, "text/html; charset=utf-8", html);
       return send(404, "text/html; charset=utf-8", `<!doctype html><meta charset="utf-8"><title>Not found</title><p style="font-family:system-ui;padding:40px">Page not found. <a href="/">Home</a> · <a href="/app">Dashboard</a></p>`);
@@ -273,21 +265,10 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
 }
 
-/**
- * On a server reachable from other machines, refuse targets on private networks (SSRF guard):
- * the recorder would otherwise browse the server's own network for whoever asked.
- * LAB_ALLOW_PRIVATE=1 lifts it (e.g. a team recording its own staging hosts).
- */
-export async function privateTarget(target: string, exposed: boolean): Promise<string | null> {
-  if (!exposed || process.env.LAB_ALLOW_PRIVATE === "1") return null;
-  const hostname = new URL(target).hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(hostname) ? [hostname] : (await lookup(hostname, { all: true }).catch(() => [])).map((a) => a.address);
-  if (addresses.length === 0) return `Could not resolve ${hostname}.`;
-  const blocked = addresses.find((a) =>
-    /^(127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(a) ||
-    /^(::1?$|f[cd]|fe[89ab]|::ffff:(127|10|192\.168|169\.254)\.)/i.test(a),
-  );
-  return blocked ? `This server does not record private or local addresses (${hostname} resolves to ${blocked}).` : null;
+/** The client's address; behind a reverse proxy set LAB_TRUST_PROXY=1 to use X-Forwarded-For. */
+function clientIp(req: IncomingMessage): string {
+  const forwarded = process.env.LAB_TRUST_PROXY === "1" ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
+  return forwarded || req.socket.remoteAddress || "?";
 }
 
 /** Serve a file with byte-range support, so video players can seek. */

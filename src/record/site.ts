@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { type Page, chromium } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
 import { buildMedia, speechMs, type MediaResult } from "./media.ts";
 import { captionsFor, type Caption } from "./narration.ts";
+import { blockedHost, guardContext } from "./ssrf.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -27,6 +28,10 @@ export interface RecordOptions {
   /** Minimum time between page visits. */
   paceMs?: number;
   ignoreRobots?: boolean;
+  /** Abort every request to private/loopback addresses (servers reachable from other machines). */
+  blockPrivate?: boolean;
+  /** Account id of whoever asked for the recording (the dashboard only shows it to them). */
+  owner?: string;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -52,98 +57,80 @@ export interface RecordingResult {
   captions: Caption[];
   media: MediaResult;
   dir: string;
+  owner?: string;
+  /** Requests the SSRF guard refused. */
+  blockedRequests?: string[];
 }
+
+/** A problem with the request (bad URL, not authorized, blocked target): the caller's to fix. */
+export class RecordError extends Error {}
 
 const SKIP_LINK = /log ?out|sign ?out|delete|remove|destroy|unsubscribe|cancel (my |your )?(account|subscription)|deactivate/i;
 const SKIP_HREF = /^(mailto|tel|javascript|data):|\.(pdf|zip|gz|dmg|exe|png|jpe?g|gif|svg|mp4|mp3)(\?|$)/i;
 
 export async function recordSite(options: RecordOptions): Promise<RecordingResult> {
-  if (!options.authorized) throw new Error("Recording needs your confirmation that you own this site or are authorized to test it.");
-  const start = new URL(options.url);
-  if (start.protocol !== "http:" && start.protocol !== "https:") throw new Error("Only http(s) URLs can be recorded.");
+  if (!options.authorized) throw new RecordError("Recording needs your confirmation that you own this site or are authorized to test it.");
+  let start: URL;
+  try {
+    start = new URL(options.url);
+  } catch {
+    throw new RecordError("That doesn't look like a web address. Paste the full link, starting with https://");
+  }
+  if (start.protocol !== "http:" && start.protocol !== "https:") throw new RecordError("Only http(s) URLs can be recorded.");
+  if (options.blockPrivate) {
+    const blocked = await blockedHost(start.hostname);
+    if (blocked) throw new RecordError(`This server does not record private or local addresses: ${blocked}`);
+  }
+  const maxPages = Number.isFinite(options.maxPages) ? Math.max(1, Math.min(50, Math.floor(options.maxPages))) : 8;
+  options = { ...options, maxPages };
   if (options.password) registerSecret("site_password", options.password);
   if (options.username) registerSecret("site_username", options.username);
 
   const id = `${start.hostname.replace(/[^a-z0-9.-]/gi, "_")}-${Date.now().toString(36)}`;
   const dir = join(options.outDir, id);
   mkdirSync(dir, { recursive: true });
-  const recorder = new Recorder(dir, { screenshots: false });
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    recordVideo: { dir, size: { width: 1280, height: 800 } },
-    serviceWorkers: "block",
-  });
-  await context.addInitScript("window.__name = (fn) => fn;");
-  const page = await context.newPage();
-  const videoStart = recorder.now();
-  recorder.attach(context, page);
+  // Request bodies stay out of the trace: they belong to the recorded site, not to us.
+  const recorder = new Recorder(dir, { screenshots: false, bodies: false });
   const pace = options.paceMs ?? 800;
   const started = Date.now();
-
   const pages: PageVisit[] = [];
   const skipped: { url: string; reason: string }[] = [];
   let signIn: RecordingResult["signIn"] = { attempted: false, outcome: "not-attempted", detail: "No credentials were given." };
-  const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }));
+  let blockedRequests: string[] = [];
+  let videoStart = 0;
 
+  const browser = await chromium.launch({ headless: true });
   try {
-    const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
-    await tools.goto(start.toString());
-    await tools.waitForQuiet(400, 8000);
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      recordVideo: { dir, size: { width: 1280, height: 800 } },
+      serviceWorkers: "block",
+    });
+    if (options.blockPrivate) blockedRequests = await guardContext(context);
+    await context.addInitScript("window.__name = (fn) => fn;");
+    const page = await context.newPage();
+    videoStart = recorder.now();
+    recorder.attach(context, page);
+    const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }));
 
-    if (options.username || options.password) {
-      signIn = await signInFlow(tools, options.username ?? "", options.password ?? "");
-      const outcome = signIn;
-      // A marker step so the outcome is narrated at the moment it is known.
-      await tools.record("signInResult", { outcome: outcome.outcome }, async () => outcome);
+    try {
+      await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn);
+    } finally {
+      const video = page.video();
+      await context.close().catch(() => undefined);
+      const raw = video ? await video.path().catch(() => null) : null;
+      if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
     }
-
-    // Browse: breadth-first over same-origin links, starting from wherever sign-in left us.
-    const queue: string[] = [normalize(page.url())];
-    const seen = new Set<string>(queue);
-    while (queue.length && pages.length < options.maxPages) {
-      const next = queue.shift()!;
-      if (disallowed.some((p) => new URL(next).pathname.startsWith(p))) {
-        skipped.push({ url: next, reason: "robots.txt disallows it" });
-        continue;
-      }
-      if (normalize(page.url()) !== next) {
-        await page.waitForTimeout(pace);
-        await tools.goto(next).catch(() => undefined);
-        await tools.waitForQuiet(400, 8000);
-      }
-      const status = await lastDocumentStatus(recorder, next);
-      await scrollThrough(tools);
-      const obs = await tools.observe();
-      pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length });
-      if (isAuthWall(obs) && signIn.outcome !== "signed-in" && pages.length > 1) continue;
-      for (const link of await collectLinks(tools)) {
-        const target = normalize(link.href);
-        if (seen.has(target)) continue;
-        seen.add(target);
-        if (new URL(target).origin !== start.origin) continue;
-        if (SKIP_HREF.test(link.href)) continue;
-        if (SKIP_LINK.test(link.text) || SKIP_LINK.test(target)) {
-          skipped.push({ url: target, reason: `skipped "${link.text || target}" (sign-out or destructive)` });
-          continue;
-        }
-        queue.push(target);
-      }
-    }
-    const ok = !signIn.attempted || signIn.outcome === "signed-in";
-    await tools.done(ok, `${signIn.attempted ? `Sign-in: ${signIn.outcome}. ` : ""}Visited ${pages.length} page(s).`);
   } finally {
-    const video = page.video();
-    await context.close();
-    await browser.close();
-    const raw = video ? await video.path().catch(() => null) : null;
-    if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
+    await browser.close().catch(() => undefined);
   }
 
   recorder.flush();
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
   const media = await buildMedia(dir, captions);
   const result: RecordingResult = {
+    ...(options.owner ? { owner: options.owner } : {}),
+    ...(blockedRequests.length ? { blockedRequests } : {}),
     kind: "recording",
     id,
     url: start.toString(),
@@ -191,10 +178,72 @@ class NarratedTools extends BrowserTools {
     const lines = captionsFor(steps, { ...this.context(), signIn: { attempted: false, outcome: "not-attempted", detail: "" }, pages: [] })
       .map((c) => c.text)
       .filter((t) => !t.startsWith("Recording finished"));
-    const owed = lines.reduce((sum, t) => sum + speechMs(t), 0) - (this.recorder.now() - last.startedAt);
+    let speech = 0;
+    for (const t of lines) speech += await speechMs(t);
+    const owed = speech - (this.recorder.now() - last.startedAt);
     if (owed > 0) await this.page.waitForTimeout(owed);
     return value;
   }
+}
+
+async function browse(
+  tools: NarratedTools,
+  page: Page,
+  recorder: Recorder,
+  options: RecordOptions,
+  start: URL,
+  pace: number,
+  pages: PageVisit[],
+  skipped: { url: string; reason: string }[],
+  setSignIn: (s: RecordingResult["signIn"]) => void,
+  getSignIn: () => RecordingResult["signIn"],
+): Promise<void> {
+  const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
+  await tools.goto(start.toString());
+  await tools.waitForQuiet(400, 8000);
+
+  if (options.username || options.password) {
+    const outcome = await signInFlow(tools, options.username ?? "", options.password ?? "");
+    setSignIn(outcome);
+    // A marker step so the outcome is narrated at the moment it is known.
+    await tools.record("signInResult", { outcome: outcome.outcome }, async () => outcome);
+  }
+  const signIn = getSignIn();
+
+  // Breadth-first over same-origin links, starting from wherever sign-in left us.
+  const queue: string[] = [normalize(page.url())];
+  const seen = new Set<string>(queue);
+  while (queue.length && pages.length < options.maxPages) {
+    const next = queue.shift()!;
+    if (disallowed.some((p) => new URL(next).pathname.startsWith(p))) {
+      skipped.push({ url: next, reason: "robots.txt disallows it" });
+      continue;
+    }
+    if (normalize(page.url()) !== next) {
+      await page.waitForTimeout(pace);
+      await tools.goto(next).catch(() => undefined);
+      await tools.waitForQuiet(400, 8000);
+    }
+    const status = await lastDocumentStatus(recorder, next);
+    await scrollThrough(tools);
+    const obs = await tools.observe();
+    pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length });
+    if (isAuthWall(obs) && signIn.outcome !== "signed-in" && pages.length > 1) continue;
+    for (const link of await collectLinks(tools)) {
+      const target = normalize(link.href);
+      if (seen.has(target)) continue;
+      seen.add(target);
+      if (new URL(target).origin !== start.origin) continue;
+      if (SKIP_HREF.test(link.href)) continue;
+      if (SKIP_LINK.test(link.text) || SKIP_LINK.test(target)) {
+        skipped.push({ url: target, reason: `skipped "${link.text || target}" (sign-out or destructive)` });
+        continue;
+      }
+      queue.push(target);
+    }
+  }
+  const ok = !signIn.attempted || signIn.outcome === "signed-in";
+  await tools.done(ok, `${signIn.attempted ? `Sign-in: ${signIn.outcome}. ` : ""}Visited ${pages.length} page(s).`);
 }
 
 // ------------------------------------------------------------------ sign-in

@@ -123,7 +123,9 @@ export class BrowserTools {
 
   async fill(index: number, value: string, from?: Observation): Promise<void> {
     const element = this.element(index, from);
-    await this.record("fill", { index, name: element.name, value }, async () => {
+    // A password field's value never enters the trace, whatever its length or encoding.
+    const recorded = element.type === "password" ? "[REDACTED]" : value;
+    await this.record("fill", { index, name: element.name, value: recorded }, async () => {
       await this.page.fill(element.selector, value, { timeout: 2000 });
     }, undefined, () => this.checkTarget(element, from));
   }

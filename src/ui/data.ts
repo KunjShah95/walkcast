@@ -61,6 +61,8 @@ export interface ExperimentSummary {
 /** A narrated site recording (src/record), as listed by the dashboard. */
 export interface RecordingSummary {
   id: string;
+  /** Account that asked for it (absent for CLI recordings). */
+  owner?: string;
   dir: string;
   url: string;
   createdAt: string;
@@ -117,6 +119,15 @@ export class LabData {
     }
     runs.sort((a, b) => b.createdAt - a.createdAt);
     return { generatedAt: new Date().toISOString(), recordings: this.recordings(), runs, fixtures, experiments };
+  }
+
+  recordingOwner(name: string): string | undefined {
+    const path = join(this.root, "recordings", name, "recording.json");
+    try {
+      return existsSync(path) ? (readJson(path) as RecordingSummary).owner : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   recordings(): RecordingSummary[] {

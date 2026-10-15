@@ -92,6 +92,26 @@ export function redact<T extends Record<string, unknown>>(record: T): T {
 }
 
 /**
+ * Form fields of a request body. JSON bodies are parsed as JSON (top-level fields; nested values
+ * stringified) so that key-based redaction still applies; anything else is read as a form.
+ */
+export function parseBody(body: string, contentType: string): Record<string, string> {
+  if (/json/i.test(contentType) || /^\s*[{[]/.test(body)) {
+    try {
+      const value = JSON.parse(body) as unknown;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]));
+      }
+      return { _body: "[non-form JSON body omitted]" };
+    } catch {
+      return { _body: "[unparsed body omitted]" };
+    }
+  }
+  if (/multipart\//i.test(contentType)) return { _body: "[multipart body omitted]" };
+  return Object.fromEntries(new URLSearchParams(body));
+}
+
+/**
  * Collects a single run's trace on one monotonic clock. Network and console events are
  * attributed to whichever tool call was in flight when they happened.
  */
@@ -103,7 +123,8 @@ export class Recorder {
 
   constructor(
     readonly runDir: string,
-    readonly options: { screenshots: boolean },
+    /** bodies: false keeps request bodies out of the trace entirely (e.g. third-party sign-in forms). */
+    readonly options: { screenshots: boolean; bodies?: boolean },
   ) {
     mkdirSync(runDir, { recursive: true });
   }
@@ -123,8 +144,8 @@ export class Recorder {
         url: request.url(),
       };
       const body = request.postData();
-      if (body && request.method() === "POST") {
-        event.postData = redact(Object.fromEntries(new URLSearchParams(body)));
+      if (body && request.method() === "POST" && this.options.bodies !== false) {
+        event.postData = redact(parseBody(body, request.headers()["content-type"] ?? ""));
       }
       this.requestIndex.set(request, event);
       this.events.push(event);

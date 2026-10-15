@@ -59,24 +59,26 @@ export class Auth {
   }
 
   signIn(emailRaw: string, password: string, ip: string): User {
-    this.throttle(ip);
+    // Per address+account (so one shared proxy IP can't lock everyone out) and per address overall.
+    this.throttle(`${ip}|${normalizeEmail(emailRaw) ?? "?"}`, 10);
+    this.throttle(ip, 50);
     const user = this.store.users.find((u) => u.email === normalizeEmail(emailRaw));
     // Same work and same message whether or not the account exists.
     const ok = verifyPassword(password, user?.password ?? DUMMY_HASH);
     if (!user || !user.password || !ok) throw new AuthError(401, "Email or password is incorrect.");
-    this.attempts.delete(ip);
+    this.attempts.delete(`${ip}|${user.email}`);
     return user;
   }
 
-  private throttle(ip: string): void {
+  private throttle(key: string, limit: number): void {
     const now = Date.now();
-    const a = this.attempts.get(ip);
+    const a = this.attempts.get(key);
     if (!a || now - a.since > 15 * 60_000) {
-      this.attempts.set(ip, { count: 1, since: now });
+      this.attempts.set(key, { count: 1, since: now });
       return;
     }
     a.count++;
-    if (a.count > 10) throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+    if (a.count > limit) throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
   }
 
   // ---------------------------------------------------------------- Google
@@ -127,6 +129,13 @@ export class Auth {
   upsertGoogle(sub: string, emailRaw: string, name?: string): User {
     const email = normalizeEmail(emailRaw)!;
     let user = this.store.users.find((u) => u.google === sub) ?? this.store.users.find((u) => u.email === email);
+    if (user && !user.google) {
+      // Email sign-ups are not verified, so anyone could have registered this address first.
+      // Google has verified it: the Google owner takes the account over, and the unverified
+      // password and every existing session stop working.
+      delete user.password;
+      this.store.sessions = this.store.sessions.filter((s) => s.userId !== user!.id);
+    }
     if (user) user.google = sub;
     else {
       user = { id: randomBytes(9).toString("base64url"), email, ...(name ? { name } : {}), google: sub, createdAt: new Date().toISOString() };
@@ -196,7 +205,17 @@ export function defaultAuthFile(root: string): string {
 
 /** Only same-site relative paths are allowed as post-sign-in destinations. */
 export function safeNext(next: string | null | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/app#record";
+  const fallback = "/app#record";
+  // Browsers strip tabs/newlines and treat "\\" as "/" in URLs, so any of them could turn a
+  // path into "//evil.example". Reject them outright, then require a same-origin result.
+  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback;
+  try {
+    const base = "http://same.invalid";
+    const url = new URL(next, base);
+    return url.origin === base ? url.pathname + url.search + url.hash : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeEmail(email: string): string | null {

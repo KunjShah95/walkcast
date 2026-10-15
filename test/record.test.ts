@@ -44,6 +44,7 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
     for (let i = 1; i < r.captions.length; i++) assert.ok(r.captions[i]!.start >= r.captions[i - 1]!.end - 0.01);
   }
   assert.deepEqual(filesContain(r.dir, "demo-pass"), []);
+  assert.deepEqual(filesContain(r.dir, "postData"), [], "request bodies stay out of site recordings");
 });
 
 test("a wrong password is reported as rejected, with the site's own message", { timeout: 120_000 }, async () => {
@@ -51,6 +52,15 @@ test("a wrong password is reported as rejected, with the site's own message", { 
   assert.equal(r.signIn.outcome, "rejected");
   assert.match(r.signIn.detail, /Invalid username or password/);
   assert.deepEqual(filesContain(r.dir, "not-the-password"), []);
+});
+
+test("an exposed server's recorder refuses local targets before opening a browser", async () => {
+  await assert.rejects(recordSite({ url: app.url, maxPages: 1, authorized: true, outDir: out, blockPrivate: true }), /private or local/);
+  await assert.rejects(recordSite({ url: "not a url", maxPages: 1, authorized: true, outDir: out }), /web address/);
+});
+
+test("WebVTT cue text from page titles can't break the file", () => {
+  assert.equal(toWebVtt([{ start: 0, end: 1, text: "A --> B\n\n<b>&" }]), "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\nA → B &lt;b&gt;&amp;\n");
 });
 
 test("WebVTT output", () => {
