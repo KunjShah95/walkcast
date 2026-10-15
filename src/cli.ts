@@ -19,6 +19,17 @@ import { compareRuns, type DiffReport } from "./lab/diff.ts";
 import { cpSync } from "node:fs";
 import { SEED_LEADS, createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
 import { recordSite } from "./record/site.ts";
+import { Worker } from "./jobs/worker.ts";
+import { createMedia } from "./media/store.ts";
+import { log } from "./ops/log.ts";
+import { PgStore, createStore, databaseUrl, migrate } from "./store/index.ts";
+
+function untilSignal(): Promise<NodeJS.Signals> {
+  return new Promise((resolve) => {
+    process.once("SIGTERM", () => resolve("SIGTERM"));
+    process.once("SIGINT", () => resolve("SIGINT"));
+  });
+}
 
 const HELP = `Walkcast: narrated website walkthroughs and a failure lab for browser agents
 
@@ -46,6 +57,9 @@ Commands:
                                         Env: LAB_SITE_URL (public origin), LAB_HOST, GOOGLE_CLIENT_ID,
                                         GOOGLE_CLIENT_SECRET, LAB_AUTH=off (no sign-in needed to record)
                                         (build first: npm run ui:build, or just npm run ui)
+  worker                                Run queued recordings and runs (scale these separately from the web
+                                        service; needs SUPABASE_DB_URL so they share the queue)
+  db migrate                            Apply supabase/migrations to SUPABASE_DB_URL (same as supabase db push)
   ui-export [--out file.html] [--max-runs n] [--screenshot-runs n] [--max-recordings n] [--lean]
                                         One self-contained HTML file with the data baked in
   diff <baselineRun> <candidateRun>     Align two runs' actions, find what broke, how pages changed, and
@@ -210,9 +224,32 @@ async function main(): Promise<number> {
       return checkModel(target);
     }
     case "ui": {
-      const url = await serveDashboard(Number(values.port ?? 4320));
-      console.log(`Walkcast: ${url}  (landing page)  ·  dashboard: ${url}/app`);
-      await new Promise(() => undefined);
+      const server = await serveDashboard(Number(values.port ?? process.env.PORT ?? 4320));
+      console.error(`Walkcast: ${server.url}  (landing page)  ·  dashboard: ${server.url}/app`);
+      // ECS sends SIGTERM on deploy/scale-in and waits stopTimeout before SIGKILL.
+      await untilSignal();
+      await server.close(Number(process.env.LAB_SHUTDOWN_GRACE_MS ?? 25_000));
+      return 0;
+    }
+    case "worker": {
+      // A queue worker on its own (the web service then runs with LAB_WORKER=off).
+      const store = createStore(process.cwd());
+      if (store.kind === "file") console.error("Note: with the local file store a separate worker can't share the web server's queue; set SUPABASE_DB_URL.");
+      const worker = new Worker({ store, media: createMedia(process.cwd()), root: process.cwd() }).start();
+      log.info("worker.started", { id: worker.id, store: store.kind });
+      await untilSignal();
+      await worker.stop(Number(process.env.LAB_SHUTDOWN_GRACE_MS ?? 90_000));
+      await store.close();
+      return 0;
+    }
+    case "db": {
+      if (target !== "migrate") throw new Error("usage: lab db migrate");
+      const url = databaseUrl();
+      if (!url) throw new Error("Set SUPABASE_DB_URL (or DATABASE_URL) to your Supabase Postgres connection string.");
+      const store = new PgStore(url, { max: 1 });
+      const applied = await migrate(store, (line) => console.log(line));
+      console.log(applied.length ? `Applied ${applied.length} migration(s).` : "Database is up to date.");
+      await store.close();
       return 0;
     }
     case "ui-export": {

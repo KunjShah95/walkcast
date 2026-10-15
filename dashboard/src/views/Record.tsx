@@ -80,6 +80,7 @@ function RecordForm({ onDone, initialUrl }: { onDone: (dir: string) => Promise<v
   const [maxPages, setMaxPages] = useState(8);
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [serverBusy, setServerBusy] = useState<string | null>(null);
 
@@ -100,7 +101,9 @@ function RecordForm({ onDone, initialUrl }: { onDone: (dir: string) => Promise<v
     setBusy(true);
     setError(null);
     try {
-      const dir = await startRecording({ url: url.trim(), username, password, maxPages, authorized });
+      const dir = await startRecording({ url: url.trim(), username, password, maxPages, authorized }, (job) =>
+        setStatus(job.status === "queued" ? "Waiting for a free recorder…" : (job.progress ?? "Recording…")),
+      );
       setPassword("");
       await onDone(dir);
     } catch (err) {
@@ -108,6 +111,7 @@ function RecordForm({ onDone, initialUrl }: { onDone: (dir: string) => Promise<v
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      setStatus(null);
     }
   };
 
@@ -187,7 +191,7 @@ function RecordForm({ onDone, initialUrl }: { onDone: (dir: string) => Promise<v
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-3 py-2 text-[13.5px] font-medium text-paper disabled:opacity-40"
         >
           {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Film className="size-4" aria-hidden />}
-          {busy ? "Recording… this takes a minute or two" : "Record with narration"}
+          {busy ? (status ?? "Starting…") : "Record with narration"}
         </button>
       </form>
     </Panel>

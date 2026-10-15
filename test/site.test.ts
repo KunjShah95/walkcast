@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { Auth, AuthError, safeNext } from "../src/site/auth.ts";
+import { FileStore } from "../src/store/index.ts";
 import { authPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../src/site/pages.ts";
 import { serveDashboard } from "../src/ui/server.ts";
 
@@ -25,41 +26,41 @@ function fakeRes() {
   return { res, headers, status: () => status };
 }
 
-test("email accounts: hashed passwords, generic errors, working sessions", () => {
-  const auth = new Auth(join(dir, "users.json"), "https://lab.example", null);
-  const user = auth.signUp("  Ana@Example.COM ", "correct-horse-battery", "Ana");
+test("email accounts: hashed passwords, generic errors, working sessions", async () => {
+  const auth = new Auth(new FileStore(join(dir, "users.json")), "https://lab.example", null);
+  const user = await auth.signUp("  Ana@Example.COM ", "correct-horse-battery", "Ana");
   assert.equal(user.email, "ana@example.com");
-  assert.throws(() => auth.signUp("ana@example.com", "another-password"), (e: AuthError) => e.status === 409);
-  assert.throws(() => auth.signUp("not-an-email", "long-enough-pw"), /valid email/);
-  assert.throws(() => auth.signUp("b@example.com", "short"), /at least 8/);
-  assert.throws(() => auth.signIn("ana@example.com", "wrong", "1.1.1.1"), /incorrect/);
-  assert.throws(() => auth.signIn("nobody@example.com", "wrong", "1.1.1.1"), /incorrect/);
-  assert.equal(auth.signIn("ANA@example.com", "correct-horse-battery", "1.1.1.1").id, user.id);
+  await assert.rejects(auth.signUp("ana@example.com", "another-password"), (e: AuthError) => e.status === 409);
+  await assert.rejects(auth.signUp("not-an-email", "long-enough-pw"), /valid email/);
+  await assert.rejects(auth.signUp("b@example.com", "short"), /at least 8/);
+  await assert.rejects(auth.signIn("ana@example.com", "wrong", "1.1.1.1"), /incorrect/);
+  await assert.rejects(auth.signIn("nobody@example.com", "wrong", "1.1.1.1"), /incorrect/);
+  assert.equal((await auth.signIn("ANA@example.com", "correct-horse-battery", "1.1.1.1")).id, user.id);
   const stored = readFileSync(join(dir, "users.json"), "utf8");
   assert.ok(!stored.includes("correct-horse-battery"));
   assert.match(stored, /scrypt\$/);
 
   const { res, headers } = fakeRes();
-  auth.startSession(res, user);
+  await auth.startSession(res, user);
   const cookie = (headers["set-cookie"] as string[])[0]!;
   assert.match(cookie, /HttpOnly; SameSite=Lax/);
   assert.match(cookie, /Secure/);
   const token = cookie.split(";")[0]!.split("=")[1]!;
   assert.ok(!readFileSync(join(dir, "users.json"), "utf8").includes(token), "only the token's hash is stored");
   const req = { headers: { cookie: `other=1; lab_session=${token}` } } as never;
-  assert.equal(auth.user(req)?.id, user.id);
-  auth.endSession(req, fakeRes().res);
-  assert.equal(auth.user(req), null);
+  assert.equal((await auth.user(req))?.id, user.id);
+  await auth.endSession(req, fakeRes().res);
+  assert.equal(await auth.user(req), null);
 });
 
-test("sign-in attempts are throttled per address", () => {
-  const auth = new Auth(join(dir, "throttle.json"), "http://localhost", null);
-  for (let i = 0; i < 10; i++) assert.throws(() => auth.signIn("x@example.com", "nope", "9.9.9.9"), /incorrect/);
-  assert.throws(() => auth.signIn("x@example.com", "nope", "9.9.9.9"), (e: AuthError) => e.status === 429);
+test("sign-in attempts are throttled per address", async () => {
+  const auth = new Auth(new FileStore(join(dir, "throttle.json")), "http://localhost", null);
+  for (let i = 0; i < 10; i++) await assert.rejects(auth.signIn("x@example.com", "nope", "9.9.9.9"), /incorrect/);
+  await assert.rejects(auth.signIn("x@example.com", "nope", "9.9.9.9"), (e: AuthError) => e.status === 429);
 });
 
-test("Google sign-in: redirect carries state, accounts link by verified email", () => {
-  const auth = new Auth(join(dir, "google.json"), "https://lab.example", { clientId: "cid", clientSecret: "secret" });
+test("Google sign-in: redirect carries state, accounts link by verified email", async () => {
+  const auth = new Auth(new FileStore(join(dir, "google.json")), "https://lab.example", { clientId: "cid", clientSecret: "secret" });
   const { res, headers, status } = fakeRes();
   auth.googleRedirect(res, "/app#record");
   assert.equal(status(), 302);
@@ -69,10 +70,10 @@ test("Google sign-in: redirect carries state, accounts link by verified email", 
   assert.equal(location.searchParams.get("scope"), "openid email profile");
   assert.ok(String(headers["set-cookie"]).includes(`lab_oauth_state=${location.searchParams.get("state")}.`));
 
-  const email = auth.signUp("sam@example.com", "password-123");
-  const linked = auth.upsertGoogle("google-sub-1", "Sam@Example.com", "Sam");
+  const email = await auth.signUp("sam@example.com", "password-123");
+  const linked = await auth.upsertGoogle("google-sub-1", "Sam@Example.com", "Sam");
   assert.equal(linked.id, email.id);
-  assert.equal(auth.upsertGoogle("google-sub-1", "sam@example.com").id, email.id);
+  assert.equal((await auth.upsertGoogle("google-sub-1", "sam@example.com")).id, email.id);
 });
 
 test("post-sign-in redirects stay on this site", () => {
@@ -104,7 +105,8 @@ test("crawlers: the landing page carries full content and structured data", () =
 test("server: public pages, protected actions, sign-up then record", async () => {
   const root = mkdtempSync(join(tmpdir(), "lab-srv-"));
   const port = 4600 + Math.floor(Math.random() * 300);
-  const base = await serveDashboard(port, { root, unref: true });
+  const srv = await serveDashboard(port, { root, unref: true, worker: false });
+  const base = srv.url;
   try {
     for (const path of ["/", "/robots.txt", "/sitemap.xml", "/llms.txt", "/signup", "/app", "/assets/og.png"]) {
       assert.equal((await fetch(base + path)).status, 200, path);
@@ -125,6 +127,7 @@ test("server: public pages, protected actions, sign-up then record", async () =>
     assert.equal(rec.status, 400);
     assert.match(((await rec.json()) as { error: string }).error, /authorized/);
   } finally {
+    await srv.close(100);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -149,15 +152,15 @@ test("review regressions: escaped redirect target, strict next, Google takeover,
   assert.equal(safeNext("/app#record?url=https%3A%2F%2Fx.example"), "/app#record?url=https%3A%2F%2Fx.example");
 
   // Someone pre-registers the victim's email; the verified Google owner takes the account back.
-  const auth = new Auth(join(dir, "takeover.json"), "https://lab.example", { clientId: "c", clientSecret: "s" });
-  const squatter = auth.signUp("victim@example.com", "attacker-password");
+  const auth = new Auth(new FileStore(join(dir, "takeover.json")), "https://lab.example", { clientId: "c", clientSecret: "s" });
+  const squatter = await auth.signUp("victim@example.com", "attacker-password");
   const { res, headers } = fakeRes();
-  auth.startSession(res, squatter);
+  await auth.startSession(res, squatter);
   const token = (headers["set-cookie"] as string[])[0]!.split(";")[0]!.split("=")[1]!;
   const req = { headers: { cookie: `lab_session=${token}` } } as never;
-  auth.upsertGoogle("google-victim", "victim@example.com");
-  assert.equal(auth.user(req), null, "the squatter's session is gone");
-  assert.throws(() => auth.signIn("victim@example.com", "attacker-password", "2.2.2.2"), /incorrect/);
+  await auth.upsertGoogle("google-victim", "victim@example.com");
+  assert.equal(await auth.user(req), null, "the squatter's session is gone");
+  await assert.rejects(auth.signIn("victim@example.com", "attacker-password", "2.2.2.2"), /incorrect/);
 
   const { parseBody } = await import("../src/capture/recorder.ts");
   assert.deepEqual(parseBody('{"email":"a@b.c","password":"Tr0ub&dor3","n":1}', "application/json"), { email: "a@b.c", password: "Tr0ub&dor3", n: "1" });
@@ -173,7 +176,8 @@ test("server: dashboard data needs an account; recordings are only shown to thei
     writeFileSync(join(root, "recordings", name, "recording.json"), JSON.stringify({ id: name, owner, url: `https://${name}.example/`, createdAt: new Date().toISOString(), durationMs: 1, signIn: {}, pages: [], skipped: [], captions: [], media: { captions: "captions.vtt" } }));
     writeFileSync(join(root, "recordings", name, "captions.vtt"), "WEBVTT\n");
   }
-  const base = await serveDashboard(port, { root, unref: true });
+  const srv = await serveDashboard(port, { root, unref: true, worker: false });
+  const base = srv.url;
   try {
     assert.equal((await fetch(`${base}/api/index`)).status, 401);
     assert.equal((await fetch(`${base}/files/recordings/a-1/captions.vtt`)).status, 401);
@@ -188,6 +192,7 @@ test("server: dashboard data needs an account; recordings are only shown to thei
     const agent = await fetch(`${base}/api/run`, { method: "POST", headers: { cookie }, body: JSON.stringify({ agent: "nope" }) });
     assert.equal(agent.status, 400);
   } finally {
+    await srv.close(100);
     rmSync(root, { recursive: true, force: true });
   }
 });

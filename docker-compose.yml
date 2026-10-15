@@ -1,0 +1,45 @@
+# Local production-like stack: Postgres (stands in for Supabase), one web, one worker.
+#   docker compose up --build    then open http://localhost:4320
+# Against Supabase instead: drop the `db` service and set SUPABASE_DB_URL in .env.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: walkcast
+      POSTGRES_PASSWORD: walkcast
+      POSTGRES_DB: walkcast
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U walkcast"]
+      interval: 2s
+      retries: 30
+  migrate:
+    build: .
+    command: ["node", "--import", "tsx", "src/cli.ts", "db", "migrate"]
+    environment: &env
+      SUPABASE_DB_URL: postgres://walkcast:walkcast@db:5432/walkcast?sslmode=disable
+      LAB_SECRET_KEY: ${LAB_SECRET_KEY:?set LAB_SECRET_KEY (openssl rand -base64 32)}
+      LAB_SITE_URL: http://localhost:4320
+    depends_on:
+      db: { condition: service_healthy }
+  web:
+    build: .
+    init: true
+    environment:
+      <<: *env
+      LAB_WORKER: "off"
+    ports: ["4320:4320"]
+    volumes: ["recordings:/app/recordings"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  worker:
+    build: .
+    init: true
+    command: ["node", "--import", "tsx", "src/cli.ts", "worker"]
+    environment: *env
+    # Recordings on local disk must be visible to the web container; with object storage
+    # (SUPABASE_S3_* or MEDIA_S3_*) this shared volume isn't needed.
+    volumes: ["recordings:/app/recordings"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+volumes:
+  recordings:

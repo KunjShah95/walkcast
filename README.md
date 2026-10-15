@@ -33,6 +33,9 @@ Environment variables you may want (none are required to start):
 | Variable | For |
 | --- | --- |
 | `LAB_AUTH=off` | Use the web app locally without creating an account |
+| `SUPABASE_DB_URL` (or `DATABASE_URL`) | Supabase Postgres for accounts, sessions, the job queue and the recordings index (default: `.lab/store.json`) |
+| `SUPABASE_URL`, `SUPABASE_S3_*` or `MEDIA_S3_*` | Recording media in Supabase Storage or S3 (default: `recordings/` on disk) |
+| `LAB_SECRET_KEY`, `LAB_WORKER=off` | Separate queue workers (see [Production](#production-supabase--aws)) |
 | `LAB_SITE_URL`, `LAB_HOST`, `LAB_TRUST_PROXY=1` | Hosting the web app (public URL, bind address, behind a reverse proxy) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google" |
 | `LAB_ALLOW_PRIVATE=1`, `LAB_ALLOW_LIVE_RUNS=1` | On a hosted server: allow recording private addresses / paid live-model runs |
@@ -373,6 +376,40 @@ None of this can guarantee a ranking. What decides it after launch is a real dom
 other sites, more pages answering specific questions (e.g. a guide per use case) and Search
 Console / Bing Webmaster submission of the sitemap.
 
+## Production: Supabase + AWS
+
+Locally everything lives in files (`.lab/store.json`, `recordings/`) and the web server runs the
+work itself. For more than one machine, point it at Supabase:
+
+```sh
+export SUPABASE_DB_URL=postgres://...            # Supabase → Project Settings → Database
+npm run lab -- db migrate                        # or: supabase db push (supabase/migrations/)
+export LAB_SECRET_KEY=$(openssl rand -base64 32)
+LAB_WORKER=off npm run lab -- ui                 # web: stateless, any number of instances
+npm run lab -- worker                            # workers: one job each, scale on queue depth
+```
+
+How the pieces fit (full guide: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md); `docker compose up`
+runs the same shape locally):
+
+- **Store** (`src/store/`): one interface, two implementations. `PgStore` (Supabase) keeps users,
+  sessions (token hashes only), sign-in throttling and quotas, the job queue and the recordings
+  index in Postgres, so every web instance shares them. RLS is on with no policies, so the public
+  Supabase APIs can't reach any of it. `FileStore` does the same in one JSON file for local use.
+- **Queue** (`src/jobs/`): `POST /api/record` and `/api/run` return `202` with a job id; the
+  dashboard polls `/api/jobs/:id`. Workers claim with `FOR UPDATE SKIP LOCKED` under a renewed
+  lease, get two attempts and a hard deadline, and hand the job back on SIGTERM. Submissions carry
+  an `Idempotency-Key`, so a double-click is one job. Each account gets one active job and a
+  daily quota. Site passwords travel sealed (AES-256-GCM, `LAB_SECRET_KEY`) and are erased when
+  the job ends.
+- **Media** (`src/media/`): Supabase Storage (S3 protocol) or AWS S3 through a small SigV4
+  client checked against AWS's published test vectors; files are served through 15-minute
+  presigned links after an ownership check. On ECS the task role supplies credentials.
+- **Operations**: `/healthz` (liveness) and `/readyz` (database reachable, not draining), one
+  JSON log line per request and per job transition with the ALB trace id, graceful shutdown,
+  keep-alive above the ALB idle timeout, timeouts on every ffmpeg call, async password hashing,
+  and a cached run index (`/api/index?limit=`).
+
 ## Secrets
 
 Credentials the harness gives an agent are registered as secrets. Before anything is written to
@@ -420,6 +457,11 @@ src/lab/        Task + oracle, classifier, runner, report, fixtures/replay, expe
 fixtures/       Committed regression fixtures (CI release gate)
 results/        Experiment outputs (summary.md / summary.json; per-run traces are not committed)
 src/record/     Site recorder: sign-in, same-origin walk, narration, ffmpeg audio/video
+src/store/      Store interface: FileStore (local JSON) and PgStore (Supabase Postgres)
+src/jobs/       Job queue worker (leases, retries, deadlines) and sealed job secrets
+src/media/      Media storage: local disk, or Supabase Storage / S3 (SigV4, presigned links)
+src/ops/        Structured JSON logging
+supabase/       SQL migrations (supabase db push, or npm run lab -- db migrate)
 src/site/       Landing page, sign-up/sign-in (email + Google), robots/sitemap/llms.txt
 site/static/    Demo walkthrough (MP4/WebM/VTT), poster and social image
 dashboard/      Dashboard and timeline viewer (React); src/ui/ serves and exports it

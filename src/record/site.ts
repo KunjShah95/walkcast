@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Page, chromium } from "playwright";
@@ -32,6 +33,10 @@ export interface RecordOptions {
   blockPrivate?: boolean;
   /** Account id of whoever asked for the recording (the dashboard only shows it to them). */
   owner?: string;
+  /** Aborting stops the recording at once (job deadline, worker shutdown). */
+  signal?: AbortSignal;
+  /** Called as the recording advances ("Signing in", "Page 3 of 8"). */
+  onProgress?: (message: string) => void;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -86,7 +91,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   if (options.password) registerSecret("site_password", options.password);
   if (options.username) registerSecret("site_username", options.username);
 
-  const id = `${start.hostname.replace(/[^a-z0-9.-]/gi, "_")}-${Date.now().toString(36)}`;
+  const id = `${start.hostname.replace(/[^a-z0-9.-]/gi, "_")}-${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   const dir = join(options.outDir, id);
   mkdirSync(dir, { recursive: true });
   // Request bodies stay out of the trace: they belong to the recorded site, not to us.
@@ -99,7 +104,12 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   let blockedRequests: string[] = [];
   let videoStart = 0;
 
-  const browser = await chromium.launch({ headless: true });
+  options.signal?.throwIfAborted();
+  // Chromium's own sandbox needs a non-root user and unprivileged user namespaces; turn it on with
+  // LAB_CHROMIUM_SANDBOX=1 where the container allows it (see docs/DEPLOY-AWS.md).
+  const browser = await chromium.launch({ headless: true, chromiumSandbox: process.env.LAB_CHROMIUM_SANDBOX === "1" });
+  const abort = () => void browser.close().catch(() => undefined);
+  options.signal?.addEventListener("abort", abort, { once: true });
   try {
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -122,11 +132,14 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
     }
   } finally {
+    options.signal?.removeEventListener("abort", abort);
     await browser.close().catch(() => undefined);
   }
+  options.signal?.throwIfAborted();
 
   recorder.flush();
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
+  options.onProgress?.("Adding narration and encoding the video");
   const media = await buildMedia(dir, captions);
   const result: RecordingResult = {
     ...(options.owner ? { owner: options.owner } : {}),
@@ -203,6 +216,7 @@ async function browse(
   await tools.waitForQuiet(400, 8000);
 
   if (options.username || options.password) {
+    options.onProgress?.("Signing in");
     const outcome = await signInFlow(tools, options.username ?? "", options.password ?? "");
     setSignIn(outcome);
     // A marker step so the outcome is narrated at the moment it is known.
@@ -214,6 +228,8 @@ async function browse(
   const queue: string[] = [normalize(page.url())];
   const seen = new Set<string>(queue);
   while (queue.length && pages.length < options.maxPages) {
+    options.signal?.throwIfAborted();
+    options.onProgress?.(`Page ${pages.length + 1} of up to ${options.maxPages}`);
     const next = queue.shift()!;
     if (disallowed.some((p) => new URL(next).pathname.startsWith(p))) {
       skipped.push({ url: next, reason: "robots.txt disallows it" });

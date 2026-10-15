@@ -89,7 +89,11 @@ export class LabData {
     this.root = resolve(root);
   }
 
-  index(): LabIndex {
+  /** Parsed run summaries keyed by result.json path, reused while its mtime is unchanged. */
+  private cache = new Map<string, { mtimeMs: number; summary: RunSummary | null }>();
+
+  /** Newest `limit` runs (all by default). Unchanged runs are served from an mtime-keyed cache. */
+  index(limit = Number.POSITIVE_INFINITY): LabIndex {
     const runs: RunSummary[] = [];
     const fixtures: FixtureSummary[] = [];
     const experiments: ExperimentSummary[] = [];
@@ -118,6 +122,7 @@ export class LabData {
       }
     }
     runs.sort((a, b) => b.createdAt - a.createdAt);
+    runs.splice(limit);
     return { generatedAt: new Date().toISOString(), recordings: this.recordings(), runs, fixtures, experiments };
   }
 
@@ -172,7 +177,20 @@ export class LabData {
 
   private runSummary(dir: string, source: string): RunSummary | null {
     const resultPath = join(this.root, dir, "result.json");
-    if (!existsSync(resultPath)) return null;
+    let mtimeMs: number;
+    try {
+      mtimeMs = statSync(resultPath).mtimeMs;
+    } catch {
+      return null;
+    }
+    const hit = this.cache.get(resultPath);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.summary ? { ...hit.summary, source } : null;
+    const summary = this.parseRun(dir, source, resultPath, mtimeMs);
+    this.cache.set(resultPath, { mtimeMs, summary });
+    return summary;
+  }
+
+  private parseRun(dir: string, source: string, resultPath: string, mtimeMs: number): RunSummary | null {
     let r: RunResult;
     try {
       r = readJson(resultPath);
@@ -203,7 +221,7 @@ export class LabData {
       steps: r.steps,
       modelCalls: r.modelCalls ?? 0,
       modelMode: r.model?.mode ?? null,
-      createdAt: statSync(resultPath).mtimeMs,
+      createdAt: mtimeMs,
       screenshots: files.filter((f) => f.endsWith(".jpg")).length,
     };
   }

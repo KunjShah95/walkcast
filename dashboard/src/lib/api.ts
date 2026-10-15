@@ -62,12 +62,42 @@ export async function loadCapabilities(): Promise<Capabilities> {
 }
 
 /** Starts a real run on the local server and resolves with its directory when it finishes. */
-export async function startRun(input: { agent: string; fault: string; seed: number; task?: string; modelMode?: string }): Promise<string> {
-  const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
-  const body = (await res.json()) as { dir?: string; error?: string };
-  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in to start runs.");
-  if (!res.ok || !body.dir) throw new Error(body.error ?? `Run failed (${res.status}).`);
-  return body.dir;
+export interface JobStatus {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  progress: string | null;
+  error: string | null;
+  result: { dir?: string; id?: string } | null;
+}
+
+/**
+ * Submit a job and wait for it: the server answers at once (202) and the work happens on a
+ * queue worker, so a recording that takes minutes never depends on one long HTTP request.
+ * The idempotency key makes a double-click or a retried POST start one job, not two.
+ */
+async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<string> {
+  const key = crypto.randomUUID();
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
+  const body = (await res.json()) as { job?: JobStatus; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.job) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  let job = body.job;
+  onProgress?.(job);
+  for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
+    await new Promise((r) => setTimeout(r, delay));
+    const poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
+    if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
+    if (!poll.ok) continue; // transient (deploy, network); keep waiting
+    job = ((await poll.json()) as { job: JobStatus }).job;
+    onProgress?.(job);
+  }
+  if (job.status !== "succeeded" || !job.result?.dir) throw new Error(job.error ?? `The job ${job.status}.`);
+  return job.result.dir;
+}
+
+/** Starts a real run and resolves with its directory when it finishes. */
+export function startRun(input: { agent: string; fault: string; seed: number; task?: string; modelMode?: string }, onProgress?: (s: JobStatus) => void): Promise<string> {
+  return submitAndWait("/api/run", input, onProgress);
 }
 
 /** URL for a recording's media file (baked as a data URI in snapshots, served by `lab ui` otherwise). */
@@ -79,12 +109,12 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 }
 
 /** Records a site on the local server; resolves with the recording's directory when done. */
-export async function startRecording(input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean }): Promise<string> {
-  const res = await fetch("/api/record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
-  const body = (await res.json()) as { dir?: string; error?: string };
-  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in to record.");
-  if (!res.ok || !body.dir) throw new Error(body.error ?? `Recording failed (${res.status}).`);
-  return body.dir;
+/** Records a site; resolves with the recording's directory when it is done. */
+export function startRecording(
+  input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean },
+  onProgress?: (s: JobStatus) => void,
+): Promise<string> {
+  return submitAndWait("/api/record", input, onProgress);
 }
 
 export class SignInRequired extends Error {}

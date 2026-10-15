@@ -1,43 +1,27 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import { DuplicateError, type Store, type User } from "../store/index.ts";
+
+export type { User };
 
 /**
- * Accounts for the hosted dashboard: email + password (scrypt) and Google sign-in (OAuth 2.0
- * authorization-code flow). Stored in a JSON file under .lab/ (git-ignored). Session tokens are
- * random; only their SHA-256 is stored, so a leaked store cannot be replayed as a cookie.
+ * Accounts for the web app: email + password (scrypt) and Google sign-in (OAuth 2.0
+ * authorization-code flow), stored through the Store (a local JSON file, or Supabase Postgres when
+ * configured). Session tokens are random; only their SHA-256 is stored, so a leaked database can't
+ * be replayed as cookies. Throttling counters live in the store too, so every instance shares them.
  */
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-  /** scrypt$N$salt$hash, absent for Google-only accounts. */
-  password?: string;
-  google?: string;
-  createdAt: string;
-}
-
-interface Store {
-  users: User[];
-  sessions: { hash: string; userId: string; expires: number }[];
-}
-
 const COOKIE = "lab_session";
 const STATE_COOKIE = "lab_oauth_state";
 const SESSION_DAYS = 30;
+const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number; maxmem?: number }) => Promise<Buffer>;
 
 export class Auth {
-  private store: Store;
-  private attempts = new Map<string, { count: number; since: number }>();
-
   constructor(
-    readonly file: string,
+    readonly store: Store,
     readonly siteUrl: string,
     readonly google = googleConfig(),
-  ) {
-    this.store = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Store) : { users: [], sessions: [] };
-  }
+  ) {}
 
   get secure(): boolean {
     return this.siteUrl.startsWith("https://");
@@ -45,40 +29,40 @@ export class Auth {
 
   // ---------------------------------------------------------------- email + password
 
-  signUp(emailRaw: string, password: string, name?: string): User {
+  async signUp(emailRaw: string, password: string, name?: string): Promise<User> {
     const email = normalizeEmail(emailRaw);
     if (!email) throw new AuthError(400, "Enter a valid email address.");
     if (password.length < 8) throw new AuthError(400, "Use a password of at least 8 characters.");
     if (password.length > 200) throw new AuthError(400, "That password is too long.");
-    const existing = this.store.users.find((u) => u.email === email);
-    if (existing) throw new AuthError(409, existing.password ? "An account with this email already exists. Sign in instead." : "This email signs in with Google.");
-    const user: User = { id: randomBytes(9).toString("base64url"), email, ...(name?.trim() ? { name: name.trim().slice(0, 80) } : {}), password: hashPassword(password), createdAt: new Date().toISOString() };
-    this.store.users.push(user);
-    this.save();
-    return user;
-  }
-
-  signIn(emailRaw: string, password: string, ip: string): User {
-    // Per address+account (so one shared proxy IP can't lock everyone out) and per address overall.
-    this.throttle(`${ip}|${normalizeEmail(emailRaw) ?? "?"}`, 10);
-    this.throttle(ip, 50);
-    const user = this.store.users.find((u) => u.email === normalizeEmail(emailRaw));
-    // Same work and same message whether or not the account exists.
-    const ok = verifyPassword(password, user?.password ?? DUMMY_HASH);
-    if (!user || !user.password || !ok) throw new AuthError(401, "Email or password is incorrect.");
-    this.attempts.delete(`${ip}|${user.email}`);
-    return user;
-  }
-
-  private throttle(key: string, limit: number): void {
-    const now = Date.now();
-    const a = this.attempts.get(key);
-    if (!a || now - a.since > 15 * 60_000) {
-      this.attempts.set(key, { count: 1, since: now });
-      return;
+    const user: User = {
+      id: randomBytes(9).toString("base64url"),
+      email,
+      ...(name?.trim() ? { name: name.trim().slice(0, 80) } : {}),
+      password: await hashPassword(password),
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      // The unique index decides; no check-then-insert race between instances.
+      await this.store.insertUser(user);
+    } catch (e) {
+      if (!(e instanceof DuplicateError)) throw e;
+      const existing = await this.store.userByEmail(email);
+      throw new AuthError(409, existing?.password ? "An account with this email already exists. Sign in instead." : "This email signs in with Google.");
     }
-    a.count++;
-    if (a.count > limit) throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+    return user;
+  }
+
+  async signIn(emailRaw: string, password: string, ip: string): Promise<User> {
+    const email = normalizeEmail(emailRaw) ?? "?";
+    // Per address+account (so one shared proxy IP can't lock everyone out) and per address overall.
+    if ((await this.store.hit(`login:${ip}|${email}`, 15 * 60_000)) > 10 || (await this.store.hit(`login:${ip}`, 15 * 60_000)) > 50) {
+      throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+    }
+    const user = await this.store.userByEmail(email);
+    // Same work and same message whether or not the account exists.
+    const ok = await verifyPassword(password, user?.password ?? (await dummyHash()));
+    if (!user || !user.password || !ok) throw new AuthError(401, "Email or password is incorrect.");
+    return user;
   }
 
   // ---------------------------------------------------------------- Google
@@ -123,60 +107,53 @@ export class Auth {
       (r) => r.json() as Promise<{ sub?: string; email?: string; email_verified?: boolean; name?: string }>,
     );
     if (!info.sub || !info.email || !info.email_verified) throw new AuthError(403, "Google did not confirm a verified email for this account.");
-    return { user: this.upsertGoogle(info.sub, info.email, info.name), next: safeNext(Buffer.from(nextEncoded, "base64url").toString()) };
+    return { user: await this.upsertGoogle(info.sub, info.email, info.name), next: safeNext(Buffer.from(nextEncoded, "base64url").toString()) };
   }
 
-  upsertGoogle(sub: string, emailRaw: string, name?: string): User {
+  async upsertGoogle(sub: string, emailRaw: string, name?: string): Promise<User> {
     const email = normalizeEmail(emailRaw)!;
-    let user = this.store.users.find((u) => u.google === sub) ?? this.store.users.find((u) => u.email === email);
-    if (user && !user.google) {
-      // Email sign-ups are not verified, so anyone could have registered this address first.
-      // Google has verified it: the Google owner takes the account over, and the unverified
-      // password and every existing session stop working.
-      delete user.password;
-      this.store.sessions = this.store.sessions.filter((s) => s.userId !== user!.id);
+    const user = (await this.store.userByGoogle(sub)) ?? (await this.store.userByEmail(email));
+    if (user) {
+      if (!user.google) {
+        // Email sign-ups are not verified, so anyone could have registered this address first.
+        // Google has verified it: the Google owner takes the account over, and the unverified
+        // password and every existing session stop working.
+        delete user.password;
+        await this.store.deleteUserSessions(user.id);
+      }
+      user.google = sub;
+      await this.store.updateUser(user);
+      return user;
     }
-    if (user) user.google = sub;
-    else {
-      user = { id: randomBytes(9).toString("base64url"), email, ...(name ? { name } : {}), google: sub, createdAt: new Date().toISOString() };
-      this.store.users.push(user);
+    const created: User = { id: randomBytes(9).toString("base64url"), email, ...(name ? { name } : {}), google: sub, createdAt: new Date().toISOString() };
+    try {
+      await this.store.insertUser(created);
+      return created;
+    } catch (e) {
+      // Two callbacks for the same new account raced; the other one won.
+      if (e instanceof DuplicateError) return (await this.store.userByEmail(email))!;
+      throw e;
     }
-    this.save();
-    return user;
   }
 
   // ---------------------------------------------------------------- sessions
 
-  startSession(res: ServerResponse, user: User): void {
+  async startSession(res: ServerResponse, user: User): Promise<void> {
     const token = randomBytes(32).toString("base64url");
-    const now = Date.now();
-    this.store.sessions = this.store.sessions.filter((s) => s.expires > now);
-    this.store.sessions.push({ hash: sha256(token), userId: user.id, expires: now + SESSION_DAYS * 86_400_000 });
-    this.save();
+    await this.store.createSession(sha256(token), user.id, new Date(Date.now() + SESSION_DAYS * 86_400_000));
     res.setHeader("Set-Cookie", [cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure)]);
   }
 
-  endSession(req: IncomingMessage, res: ServerResponse): void {
+  async endSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const token = readCookie(req, COOKIE);
-    if (token) {
-      const hash = sha256(token);
-      this.store.sessions = this.store.sessions.filter((s) => s.hash !== hash);
-      this.save();
-    }
+    if (token) await this.store.deleteSession(sha256(token));
     res.setHeader("Set-Cookie", cookie(COOKIE, "", 0, this.secure));
   }
 
-  user(req: IncomingMessage): User | null {
+  async user(req: IncomingMessage): Promise<User | null> {
     const token = readCookie(req, COOKIE);
-    if (!token) return null;
-    const hash = sha256(token);
-    const session = this.store.sessions.find((s) => s.hash === hash && s.expires > Date.now());
-    return session ? (this.store.users.find((u) => u.id === session.userId) ?? null) : null;
-  }
-
-  private save(): void {
-    mkdirSync(dirname(this.file), { recursive: true });
-    writeFileSync(this.file, JSON.stringify(this.store, null, 2), { mode: 0o600 });
+    if (!token || token.length > 100) return null;
+    return this.store.sessionUser(sha256(token));
   }
 }
 
@@ -199,10 +176,6 @@ function googleConfig(): { clientId: string; clientSecret: string } | null {
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
-export function defaultAuthFile(root: string): string {
-  return join(root, ".lab", "users.json");
-}
-
 /** Only same-site relative paths are allowed as post-sign-in destinations. */
 export function safeNext(next: string | null | undefined): string {
   const fallback = "/app#record";
@@ -223,21 +196,24 @@ function normalizeEmail(email: string): string | null {
   return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 254 ? e : null;
 }
 
-function hashPassword(password: string): string {
+// scrypt runs on libuv's thread pool (async), so a burst of sign-ins doesn't stall other requests.
+async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 });
+  const hash = await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 });
   return `scrypt$16384$${salt.toString("base64")}$${hash.toString("base64")}`;
 }
 
-function verifyPassword(password: string, stored: string): boolean {
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [scheme, n, saltB64, hashB64] = stored.split("$");
-  if (scheme !== "scrypt" || !n || !saltB64 || !hashB64) return false;
+  if (scheme !== "scrypt" || !n || !saltB64 || !hashB64 || Number(n) > 1 << 17) return false;
   const expected = Buffer.from(hashB64, "base64");
-  const actual = scryptSync(password, Buffer.from(saltB64, "base64"), expected.length, { N: Number(n), r: 8, p: 1 });
+  if (expected.length === 0) return false;
+  const actual = await scrypt(password, Buffer.from(saltB64, "base64"), expected.length, { N: Number(n), r: 8, p: 1, maxmem: 256 * 1024 * 1024 });
   return timingSafeEqual(expected, actual);
 }
 
-const DUMMY_HASH = hashPassword(randomBytes(12).toString("hex"));
+let dummy: Promise<string> | undefined;
+const dummyHash = () => (dummy ??= hashPassword(randomBytes(12).toString("hex")));
 
 function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");

@@ -9,6 +9,11 @@ export function registerSecret(name: string, value: string): void {
   if (value.length >= 4) SECRETS.set(name, value);
 }
 
+/** Forget secrets when the job that registered them is done (workers run many jobs). */
+export function unregisterSecret(...names: string[]): void {
+  for (const name of names) SECRETS.delete(name);
+}
+
 export function scrub<T>(value: T): T {
   if (SECRETS.size === 0) return value;
   let text = JSON.stringify(value);

@@ -83,7 +83,7 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
 
   // 4. Mux: hold the last frame if the narration runs past the end of the video.
-  const videoSeconds = probeSeconds(join(dir, video));
+  const videoSeconds = await probeSeconds(join(dir, video));
   const extra = Math.max(0, cursor - videoSeconds + 0.5);
   const mp4 = join(dir, "recording.mp4");
   await run([
@@ -136,7 +136,8 @@ const execFileAsync = promisify(execFile);
 
 /** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
 async function run(args: string[]): Promise<void> {
-  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 4 * 1024 * 1024 });
+  // A hung encode must not hold a worker forever.
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL" });
 }
 
 let fliteAvailable: boolean | undefined;
@@ -162,13 +163,12 @@ function wavSeconds(file: string): number {
   return 0;
 }
 
-function probeSeconds(file: string): number {
-  const out = spawnSync(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" });
-  const n = Number.parseFloat(out.stdout);
+async function probeSeconds(file: string): Promise<number> {
+  const probe = (args: string[]) => execFileAsync(FFPROBE, ["-v", "error", ...args, file], { timeout: 60_000, maxBuffer: 16 * 1024 * 1024 }).then((r) => r.stdout, () => "");
+  const n = Number.parseFloat(await probe(["-show_entries", "format=duration", "-of", "csv=p=0"]));
   if (Number.isFinite(n)) return n;
-  // Playwright WebM files sometimes lack a duration header; count frames' timestamps instead.
-  const pkt = spawnSync(FFPROBE, ["-v", "error", "-select_streams", "v", "-show_entries", "packet=pts_time", "-of", "csv=p=0", file], { encoding: "utf8" });
-  const times = pkt.stdout.split("\n").map(Number.parseFloat).filter(Number.isFinite);
+  // Playwright WebM files sometimes lack a duration header; use the last frame's timestamp instead.
+  const times = (await probe(["-select_streams", "v", "-show_entries", "packet=pts_time", "-of", "csv=p=0"])).split("\n").map(Number.parseFloat).filter(Number.isFinite);
   return times.length ? Math.max(...times) : 0;
 }
 
