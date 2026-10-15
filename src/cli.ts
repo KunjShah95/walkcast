@@ -26,15 +26,19 @@ Usage: npm run lab -- <command> [options]
 
 Commands:
   list                                  List faults and agent versions
-  app --fault <id> [--seed n] [--port p]  Serve MiniCRM for manual exploration
-  run --fault <id> --agent <id> [--seed n] [--fixtures dir] [--screenshots] [--video] [--model-mode m]
-                                        Run once; write trace + report; save a fixture if it fails
+  app --fault <id> [--seed n] [--port p]  Serve MiniCRM for manual exploration (login demo / demo-pass)
+  run --fault <id> --agent <id> [--task t] [--seed n] [--fixtures dir] [--screenshots] [--video]
+      [--model-mode m] [--agent-model spec] [--stagehand-model spec]
+                                        Run once; write trace + report; on failure save a fixture
+                                        (default runs/_fixtures) and exit 1. Tasks: create-lead,
+                                        reassign-lead, lookup-owner
   replay <fixtureDir> --agent <id> [--trials k] [--model-mode m]
                                         Re-run a fixture; exits 1 unless the agent passes every trial
   compare <fixturesDir> --agents v0,v1,v2 [--trials k]
                                         pass^k table for every fixture × agent; exits 1 on any failure
                                         of the last agent listed
-  experiment [--baseline id] [--candidates a,b] [--seeds n] [--trials k] [--concurrency c] [--model-mode m] [--out dir]
+  experiment [--task t] [--scenarios singles|pairs] [--baseline id] [--candidates a,b] [--seeds n]
+      [--trials k] [--concurrency c] [--model-mode m] [--out dir]
                                         Full validation experiment (docs/ASSESSMENT.md §7)
 
   ui [--port 4320]                      Web app: landing page at /, accounts (email or Google), and the
@@ -42,7 +46,7 @@ Commands:
                                         Env: LAB_SITE_URL (public origin), LAB_HOST, GOOGLE_CLIENT_ID,
                                         GOOGLE_CLIENT_SECRET, LAB_AUTH=off (no sign-in needed to record)
                                         (build first: npm run ui:build, or just npm run ui)
-  ui-export [--out file.html] [--max-runs n] [--lean]
+  ui-export [--out file.html] [--max-runs n] [--screenshot-runs n] [--max-recordings n] [--lean]
                                         One self-contained HTML file with the data baked in
   diff <baselineRun> <candidateRun>     Align two runs' actions, find what broke, how pages changed, and
                                         the likely replacement for each broken element; exits 1 on breakage
@@ -65,8 +69,8 @@ deepseek, huggingface (hf), xai (grok), together, fireworks, cerebras, ollama (l
 (any OpenAI-compatible URL via LAB_CUSTOM_BASE_URL).
 
 Agents: v0/v1/v2 are scripted; sh-p0/sh-p1 are Claude + Stagehand v4 (need LAB_CHROME_PATH).
-Model modes (Stagehand agents): live (Claude; needs ANTHROPIC_API_KEY), replay (recorded
-model calls, $0), scripted (deterministic stand-in for plumbing tests).
+Model modes (Stagehand agents): live (any configured provider; see "providers"), replay
+(recorded model calls, $0), scripted (deterministic stand-in for plumbing tests).
 `;
 
 const { positionals, values } = parseArgs({

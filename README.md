@@ -5,9 +5,40 @@ own or may test, browses its pages, and returns an MP4 with a spoken voice-over,
 transcript. The same recorder powers **Walkcast Lab** (formerly "Browser Agent Failure Lab"): it
 turns a failed browser-agent run into a classified, reproducible regression test.
 
-- [Site recorder: narrated walkthroughs](#site-recorder-narrated-walkthroughs)
-- [Web app: landing page, accounts, SEO](#web-app-landing-page-accounts-seo)
-- [Walkcast Lab: agent failures → regression tests](#quick-start)
+## Start here
+
+There are two things in this repo. Pick the one you came for.
+
+| I want to… | Read | Needs |
+| --- | --- | --- |
+| Get a narrated video of my website | [Site recorder](#site-recorder-narrated-walkthroughs), [Web app](#web-app-landing-page-accounts-seo) | Node 22+, Playwright's Chromium, **ffmpeg** (with the built-in `flite` voice, as in most Linux/Homebrew builds) for the audio |
+| Test how a browser AI agent fails | [Walkcast Lab](#walkcast-lab), [Quick start](#quick-start) | Node 22+, Playwright's Chromium. For the LLM agents (`sh-p0`, `sh-p1`): Chrome for Testing in `LAB_CHROME_PATH`, plus an API key for live models |
+
+```sh
+git clone <this repo> && cd browser-user
+npm ci
+npx playwright install chromium          # skip if Chromium is already available
+ffmpeg -hide_banner -filters | grep flite  # optional: narration audio needs this line to print
+
+# Walkthrough of a site you may test (the password comes from an env var, never a flag):
+LAB_SITE_PASSWORD=... npm run lab -- record --url https://app.example.com/login --username you@example.com --i-am-authorized
+
+# Or the web app: landing page, Record page and the Lab dashboard at http://127.0.0.1:4320/app.
+# Locally, LAB_AUTH=off skips sign-up; on a shared server leave accounts on.
+LAB_AUTH=off npm run ui
+```
+
+Environment variables you may want (none are required to start):
+
+| Variable | For |
+| --- | --- |
+| `LAB_AUTH=off` | Use the web app locally without creating an account |
+| `LAB_SITE_URL`, `LAB_HOST`, `LAB_TRUST_PROXY=1` | Hosting the web app (public URL, bind address, behind a reverse proxy) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google" |
+| `LAB_ALLOW_PRIVATE=1`, `LAB_ALLOW_LIVE_RUNS=1` | On a hosted server: allow recording private addresses / paid live-model runs |
+| `LAB_CHROME_PATH` | Chrome for Testing, for the Stagehand agents |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Live model runs (`npm run lab -- providers` lists them all) |
+| `LAB_VOICE` | flite voice for narration: `slt` (default), `awb`, `kal`, `rms` |
 
 ## Walkcast Lab
 
@@ -38,8 +69,10 @@ npx playwright install chromium         # skip if Chromium is already available
 npm run lab -- list                     # faults and agent versions
 npm run lab -- run --fault stale-owners --agent v0 --screenshots
 #   FAIL  symptoms=[false-success] causes=[stale-observation]
-#   report: runs/<id>/report.md      fixture: fixtures/stale-owners-s1-stale-observation
-npm run lab -- replay fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
+#   report: runs/<id>/report.md      fixture: runs/_fixtures/stale-owners-s1-stale-observation
+# (A failing run exits with code 1 on purpose, so the command doubles as a CI check; npm prints
+#  an error line for that. Add --fixtures fixtures to put the new fixture in the committed CI gate.)
+npm run lab -- replay runs/_fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
 npm run lab -- compare fixtures --agents v0,v1,v2 --trials 3
 npm run lab -- experiment --seeds 5 --trials 3        # full validation experiment
 npm test                                               # unit + end-to-end tests
@@ -79,8 +112,9 @@ npm test                                               # unit + end-to-end tests
 
 | Kind | Labels | Basis |
 |---|---|---|
-| Symptom | `false-success`, `wrong-outcome`, `duplicate-action` | Application state (oracle) |
+| Symptom | `false-success`, `missed-success`, `wrong-outcome`, `duplicate-action` | Application state (oracle) |
 | Cause | `stale-observation`, `navigation-timeout`, `unsafe-retry`, `action-failed`, `auth-lost`, `locator-not-found`, `app-dropped-field`, `app-error` | Deterministic trace rules |
+| Cause | `agent-error` | The agent crashed (missing key, provider outage, exhausted replay): always a failure, never saved as a fixture |
 | Cause | `unexplained` | No rule fired; needs human or LLM review |
 | Incident | Any cause on a run that still passed | The agent recovered |
 
@@ -103,7 +137,7 @@ npm test                                               # unit + end-to-end tests
 | Before/after evaluation | ✅ `compare` / `experiment`: pass^k, duration, causes per agent version |
 | Video narration | ✅ Event-based narration in the simulator (captions and optional speech), synced to playback; generated only from recorded events |
 | Workflow regression / change detection | ✅ `baseline save`, `check`, `diff`; Compare view |
-| Benchmark of controlled tasks | 🟡 16 fault scenarios on one task (create lead); more tasks are next |
+| Benchmark of controlled tasks | ✅ 39 scenarios over 3 tasks: create a lead (16), reassign a lead (16), look up an owner (7: only three faults apply to a read) |
 | LLM agent integration | ✅ Model-driven tool loop + Stagehand v4 `act()`; record/replay of every model call; 15 provider routes |
 
 ## LLM agent: Claude-style tool loop + Stagehand v4
@@ -175,7 +209,8 @@ examples, not defaults; check each provider's model list.
 ## Composable faults: the benchmark grid
 
 Faults combine with `+`: `--fault stale-owners+session-expiry`. The grid is the control, the
-5 single faults and all 10 pairs: 16 scenarios per task.
+single faults and every pair of faults that apply to the task: 16 scenarios for create-lead and
+reassign-lead (5 faults), 7 for lookup-owner (3 faults). Pick the task with `--task`.
 
 ```sh
 npm run lab -- run --fault gateway-timeout+ui-drift --agent v0
@@ -201,7 +236,7 @@ The same diff runs in the dashboard (Compare), including in exported snapshots.
 ## Dashboard and timeline viewer
 
 ```sh
-npm run ui                       # builds, then serves http://127.0.0.1:4320 (read-only, local only)
+npm run ui                       # builds, then serves http://127.0.0.1:4320 (dashboard at /app; can start runs and recordings)
 npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
                                  # one self-contained HTML file with the data baked in (CI uploads one per run)
 ```
@@ -209,7 +244,7 @@ npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
 ![Overview](docs/screenshots/overview.png)
 ![Run: agent said vs app recorded, diagnosis](docs/screenshots/run.png)
 ![Timeline (dark)](docs/screenshots/timeline-dark.png)
-![Simulator](docs/screenshots/simulator.png)
+![Fault replay](docs/screenshots/simulator.png)
 ![Compare: baseline vs candidate](docs/screenshots/compare.png)
 
 - **Overview:** how many runs failed and how many claimed success anyway. An agent × fault matrix
@@ -221,16 +256,19 @@ npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
   before/after page state, target identity checks, network and screenshots. Agent decisions are
   interleaved, and Stagehand's element resolution sits inside the `act()` step that asked for it.
   A scroll beam tracks your place in the run.
-- **Simulator** (after [SystemForge](https://github.com/vijaygupta18/system-design-simulator)'s
-  "wire it, run it, get scored" loop):
-  - Pick an agent and up to two faults; each fault is pinned to the node where it lives
-    (page, gateway, session, API).
+- **Fault replay** (formerly "Simulator"; after [SystemForge](https://github.com/vijaygupta18/system-design-simulator)'s
+  "wire it, run it, get scored" loop). **What it's for:** seeing, and showing someone else, how a
+  browser agent copes when the app misbehaves. It does not simulate anything new: it replays a
+  real recorded run of the exact task, agent and faults you pick, so you can explain a failure to
+  your team, compare agent versions on the same fault, or show why a reliability fix matters.
+  - Pick a task, an agent and up to two faults; each fault is pinned to the node where it lives
+    (page, gateway, session, API), and marked when that setup has a recording.
   - Play the run across the pipeline (agent, model, Stagehand, browser, page, gateway, session,
     API, database, oracle) with packets and node health driven by the recorded trace.
   - Event-based narration, optionally spoken. Every sentence comes from a recorded event.
   - A 5 × 20-point reliability scorecard: Outcome, Honesty, Idempotency, Resilience, Efficiency,
     graded Brittle / Fragile / Dependable / Robust / Production-ready.
-  - On the local server, "Run this scenario" starts a real run.
+  - On the local server, "Run it live" starts a real run of that setup (about 30 s).
 - **Compare:** baseline vs candidate outcome, broken elements with replacements, page changes and
   the action alignment.
 - **Fixtures** with copyable replay commands, and **Experiments** with detection, reproduction
@@ -295,7 +333,7 @@ credentials are registered as secrets, so nothing on disk contains them.
 | --- | --- |
 | `/` | Server-rendered landing page: hero with a URL box, the real demo walkthrough with a clickable transcript, how it works, outputs, guardrails, the agent lab, FAQ |
 | `/signup`, `/login` | Accounts: **Continue with Google** or email + password |
-| `/app` | The dashboard (Record, Simulator, Runs, Fixtures, Experiments) |
+| `/app` | The dashboard (Overview, Fault replay, Record, Runs, Fixtures, Experiments, Compare) |
 | `/robots.txt`, `/sitemap.xml`, `/llms.txt` | Crawler files |
 
 Pasting a link on the landing page goes to `/start?url=…`: signed-in users land on the Record page
@@ -377,7 +415,7 @@ form.
 ```
 src/app/        MiniCRM test application and fault definitions
 src/capture/    Recorder (trace on one clock, redaction) and BrowserTools (the agent's only interface)
-src/agents/     Scripted agent versions v0/v1/v2
+src/agents/     Agents under test: scripted v0/v1/v2 and the Stagehand LLM agents sh-p0/sh-p1
 src/lab/        Task + oracle, classifier, runner, report, fixtures/replay, experiment
 fixtures/       Committed regression fixtures (CI release gate)
 results/        Experiment outputs (summary.md / summary.json; per-run traces are not committed)
@@ -392,6 +430,8 @@ docs/           Research assessment
 
 - Fixtures reproduce failures in **an application you control**. Arbitrary production sessions on
   third-party sites can't be reproduced exactly; see `docs/ASSESSMENT.md` §8.
-- Request bodies and tool arguments are redacted by key name (`password`, `token`, `cookie`, …).
-  That isn't a general-purpose PII redactor.
+- Credentials the harness knows about are replaced by placeholders everywhere on disk (see
+  [Secrets](#secrets)); password-field values are never recorded; other request fields are
+  redacted by key name (`password`, `token`, `cookie`, …). That isn't a general-purpose PII
+  redactor: don't record real customer data.
 - The agents are scripts. Measured numbers in `results/` validate the harness, not any model.
