@@ -117,7 +117,7 @@ export function Pipeline({
     oracle: "checks the records",
   };
   return (
-    <svg viewBox="0 0 860 440" className="block h-auto w-full min-w-[680px]" role="img" aria-label="Agent pipeline">
+    <svg viewBox="0 0 860 440" className="block h-auto w-full min-w-[680px]" role="group" aria-label="Agent pipeline: the agent and model on the left, the app under test on the right">
       <defs>
         <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L8,4 L0,8 z" fill="var(--ink-3)" />

@@ -1,5 +1,5 @@
 import { Empty, Panel, PanelHeader } from "../components/ui.tsx";
-import { FAULT_LABEL, cn, label, ms } from "../lib/format.ts";
+import { faultLabel, cn, label, ms } from "../lib/format.ts";
 import type { LabIndex } from "../lib/types.ts";
 
 interface Summary {
@@ -63,7 +63,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
               <tbody className="divide-y divide-line">
                 {s.detection.map((d) => (
                   <tr key={d.fault}>
-                    <td className="px-4 py-2">{FAULT_LABEL[d.fault] ?? d.fault}</td>
+                    <td className="px-4 py-2">{faultLabel(d.fault)}</td>
                     <td className="px-2 py-2 font-mono">
                       {d.failing}/{d.runs}
                     </td>

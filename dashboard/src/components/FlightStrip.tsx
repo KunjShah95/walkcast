@@ -49,7 +49,15 @@ export function FlightStrip({ events, evidence, onJump }: { events: TraceEvent[]
             const w = Math.max(3, x(s.endedAt) - x(s.startedAt));
             const isEvidence = evidence.has(s.stepId);
             return (
-              <g key={s.stepId} className="cursor-pointer" onClick={() => onJump(s.stepId)}>
+              <g
+                key={s.stepId}
+                className="cursor-pointer focus:outline-none [&:focus-visible>rect:last-child]:stroke-[var(--signal)] [&:focus-visible>rect:last-child]:stroke-2"
+                role="button"
+                tabIndex={0}
+                aria-label={`Step ${s.stepId}: ${s.tool}${s.error ? ", failed" : ""}`}
+                onClick={() => onJump(s.stepId)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onJump(s.stepId))}
+              >
                 <title>{`#${s.stepId} ${s.tool} · ${ms(s.endedAt - s.startedAt)}${s.error ? ` · ${s.error}` : ""}`}</title>
                 {isEvidence && <rect x={x(s.startedAt) - 2} y={16} width={w + 4} height={22} rx={3} fill="var(--highlight)" />}
                 <rect x={x(s.startedAt)} y={19} width={w} height={16} rx={2} fill={s.error ? "var(--fail)" : FAMILY_COLOR[toolFamily(s.tool)]} opacity={0.9} />

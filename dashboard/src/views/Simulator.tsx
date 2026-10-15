@@ -4,8 +4,8 @@ import type { Route } from "../App.tsx";
 import { type NodeStatus, type Packet, Pipeline } from "../components/Pipeline.tsx";
 import { CopyButton, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { AGENT_INFO, FAULT_INFO, FAULT_NODE, TASKS } from "../lib/agents.ts";
-import { type Capabilities, loadCapabilities, loadRun, startRun } from "../lib/api.ts";
-import { cn, ms } from "../lib/format.ts";
+import { type Capabilities, SignInRequired, loadCapabilities, loadRun, startRun } from "../lib/api.ts";
+import { cn, faultLabel, ms } from "../lib/format.ts";
 import { type Caption, narrate } from "../lib/narrate.ts";
 import { type Scorecard, score } from "../lib/score.ts";
 import type { LabIndex, RunDetail } from "../lib/types.ts";
@@ -28,6 +28,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "running" | "missing" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [lab, setLab] = useState(index);
 
   useEffect(() => {
@@ -75,10 +76,15 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
       autoplay.current = true;
       setLab(await refresh()); // the newest run for this scenario loads and plays
     } catch (e) {
+      setNeedsSignIn(e instanceof SignInRequired);
       setError((e as Error).message);
       setState("error");
     }
   };
+  // Which scenarios have a recording for this agent and task (for the markers and suggestions).
+  const recordedKeys = useMemo(() => new Set(lab.runs.filter((r) => r.agent === agent && r.task === task).map((r) => r.fault)), [lab, agent, task]);
+  const keyWith = (f: string) => scenarioKey(faults.includes(f) ? faults.filter((x) => x !== f) : [...faults, f]);
+  const stagehandUnavailable = AGENT_INFO[agent]?.kind === "stagehand" && caps.live && caps.stagehand === false;
 
   const viaStagehand = AGENT_INFO[agent]?.kind === "stagehand";
   const captions = useMemo(() => (detail ? narrate(detail, viaStagehand) : []), [detail, viaStagehand]);
@@ -93,16 +99,21 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
   }, [captions]);
   const done = player.t >= player.duration;
 
-  const toggleFault = (f: string) => setFaults((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f].slice(-2)));
+  // At most two faults: a third can't be ticked until one is unticked (no silent swaps).
+  const toggleFault = (f: string) => setFaults((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : cur.length >= 2 ? cur : [...cur, f]));
 
   return (
     <div className="grid gap-5">
       <div className="max-w-[72ch]">
-        <div className="eyebrow">Simulator</div>
-        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight sm:text-[34px]">Inject a fault. Watch the agent meet it.</h1>
+        <div className="eyebrow">Fault replay</div>
+        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight sm:text-[34px]">See how a browser agent handles a broken app.</h1>
         <p className="mt-1 text-ink-2">
-          Pick an agent and up to two faults, then play the recording. Every packet, status change and line of narration comes from the recorded trace; the
-          scorecard comes from the application's records.
+          Choose a task, an agent and up to two things that go wrong. We replay a <strong className="font-medium text-ink">real recorded run</strong> of exactly
+          that setup on a diagram of the system, narrate what happened, and score it against the app's own records: did the job get done, and did the agent tell
+          the truth about it?
+        </p>
+        <p className="mt-2 text-[13px] text-ink-3">
+          Use it to explain a failure to your team, to compare agent versions on the same fault, or to see why a reliability fix matters before you ship it.
         </p>
       </div>
 
@@ -158,26 +169,49 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
             <div className="grid gap-1.5 p-3">
               {FAULT_ORDER.filter((f) => taskInfo.faults.includes(f)).map((f) => {
                 const on = faults.includes(f);
+                const full = !on && faults.length >= 2;
+                const hasRecording = recordedKeys.has(keyWith(f));
                 return (
                   <label
                     key={f}
                     htmlFor={`fault-${f}`}
                     onMouseEnter={() => setHoverFault(f)}
                     onMouseLeave={() => setHoverFault(null)}
-                    className={cn("flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2 transition-colors", on ? "border-highlight-ink/30 bg-highlight/40" : "border-line hover:border-ink-3")}
+                    title={full ? "Two faults at most: untick one first." : undefined}
+                    className={cn(
+                      "flex gap-2.5 rounded-lg border px-3 py-2 transition-colors",
+                      full ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                      on ? "border-highlight-ink/30 bg-highlight/40" : "border-line hover:border-ink-3",
+                    )}
                   >
-                    <input id={`fault-${f}`} type="checkbox" checked={on} onChange={() => toggleFault(f)} className="mt-0.5 accent-[var(--signal)]" />
+                    <input
+                      id={`fault-${f}`}
+                      type="checkbox"
+                      checked={on}
+                      disabled={full}
+                      onChange={() => toggleFault(f)}
+                      onFocus={() => setHoverFault(f)}
+                      onBlur={() => setHoverFault(null)}
+                      className="mt-0.5 accent-[var(--signal)]"
+                    />
                     <span className="min-w-0">
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="text-[13px] font-medium">{FAULT_INFO[f]!.name}</span>
-                        <span className="font-mono text-[10px] text-ink-3">@ {FAULT_NODE[f]}</span>
+                        <span className="font-mono text-[10px] text-ink-3" title="Where in the system this fault happens">
+                          at {FAULT_NODE[f]}
+                        </span>
                       </span>
                       <span className="block text-[12px] leading-snug text-ink-2">{FAULT_INFO[f]!.what}</span>
+                      <span className={cn("mt-1 flex items-center gap-1.5 text-[11px]", hasRecording ? "text-pass" : "text-ink-3")}>
+                        <span className={cn("size-1.5 rounded-full", hasRecording ? "bg-pass" : "border border-ink-3")} aria-hidden />
+                        {hasRecording ? `recorded ${on ? "without" : "with"} this` : `no recording ${on ? "without" : "with"} this yet`}
+                      </span>
                     </span>
                   </label>
                 );
               })}
               {faults.length === 0 && <p className="px-1 text-[12px] text-ink-3">No fault: the control run.</p>}
+              {faults.length >= 2 && <p className="px-1 text-[12px] text-ink-3">Two faults at most. Untick one to choose another.</p>}
             </div>
           </Panel>
         </aside>
@@ -197,10 +231,11 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
                   <button
                     type="button"
                     onClick={runLive}
-                    disabled={state === "running"}
+                    disabled={state === "running" || stagehandUnavailable}
+                    title={stagehandUnavailable ? "Stagehand agents need LAB_CHROME_PATH on the server (see README)." : "Starts a real browser against the test app; about 30 seconds."}
                     className="rounded-lg bg-ink px-3 py-1.5 text-[13px] font-medium text-paper disabled:opacity-60"
                   >
-                    {state === "running" ? "Running in a real browser…" : recorded ? "Run again" : "Run this scenario"}
+                    {state === "running" ? "Running in a real browser…" : recorded ? "Re-run live (~30 s)" : "Run it live (~30 s)"}
                   </button>
                 )}
                 {detail && (
@@ -223,16 +258,44 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
                 onToggleFault={toggleFault}
               />
             </div>
+            <p className="border-t border-line px-4 py-2 text-[12px] leading-relaxed text-ink-3">
+              <span className="font-medium text-ink-2">How to read it:</span> left is the agent and the model making its decisions; right is the app under test.
+              Dots are requests travelling between them; a box turns amber or red when something goes wrong there. The <em>oracle</em> is the app's own
+              database, used to check what the agent claimed.
+            </p>
             <PlayerBar player={player} disabled={!detail} />
             {state === "missing" && (
               <div className="grid gap-2 border-t border-line px-4 py-3 text-[13px]">
                 <span className="text-ink-2">
-                  {caps.live ? "This scenario has not been run yet. Run it above." : "This scenario isn't in the snapshot. Run it locally:"}
+                  {caps.live ? "No recording of this exact setup yet. Run it live above, or pick one that has a recording:" : "This setup isn't in the snapshot. Pick one that is, or run it locally:"}
                 </span>
+                {recordedKeys.size > 0 && (
+                  <span className="flex flex-wrap gap-1.5">
+                    {[...recordedKeys].slice(0, 8).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setFaults(k === "none" ? [] : k.split("+"))}
+                        className="rounded-md border border-line px-2 py-0.5 text-[12px] text-ink-2 hover:border-signal hover:text-signal"
+                      >
+                        {faultLabel(k)}
+                      </button>
+                    ))}
+                  </span>
+                )}
                 {!caps.live && <CopyButton text={`npm run lab -- run --task ${task} --agent ${agent} --fault ${key}${viaStagehand ? " --model-mode scripted" : ""}`} />}
               </div>
             )}
-            {error && <p className="border-t border-line px-4 py-3 text-[13px] text-fail">{error}</p>}
+            {error && (
+              <p className="border-t border-line px-4 py-3 text-[13px] text-fail">
+                {error}{" "}
+                {needsSignIn && (
+                  <a className="font-medium underline" href={`/login?next=${encodeURIComponent("/app#simulator")}`}>
+                    Sign in
+                  </a>
+                )}
+              </p>
+            )}
           </Panel>
 
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -408,6 +471,10 @@ function Narration({ captions, t, playing }: { captions: Caption[]; t: number; p
     const item = list?.children[current] as HTMLElement | undefined;
     if (list && item) list.scrollTop = Math.max(0, item.offsetTop - list.clientHeight / 2);
   }, [current]);
+
+  useEffect(() => {
+    if (canSpeak && (!playing || !speak)) window.speechSynthesis.cancel();
+  }, [playing, speak, canSpeak]);
 
   useEffect(() => {
     if (!speak || !playing || current < 0 || !canSpeak) return;

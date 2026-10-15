@@ -37,12 +37,12 @@ function parse(hash: string): Route {
 function toHash(route: Route): string {
   if (route.view === "run") return `#run/${encodeURIComponent(route.dir)}`;
   if (route.view === "compare") return `#compare/${encodeURIComponent(route.base)}|${encodeURIComponent(route.cand)}`;
-  return route.view === "overview" ? "#" : `#${route.view}`;
+  return route.view === "overview" ? "" : `#${route.view}`;
 }
 
 const NAV: { view: Route["view"]; label: string }[] = [
   { view: "overview", label: "Overview" },
-  { view: "simulator", label: "Simulator" },
+  { view: "simulator", label: "Fault replay" },
   { view: "record", label: "Record" },
   { view: "runs", label: "Runs" },
   { view: "fixtures", label: "Fixtures" },
@@ -63,7 +63,8 @@ export function App() {
 
   const go = (next: Route) => {
     const hash = toHash(next);
-    if (location.hash !== hash) history.pushState(null, "", hash || location.pathname);
+    // location.hash is "" on the overview, so this doesn't stack duplicate entries.
+    if (location.hash !== hash) history.pushState(null, "", hash || location.pathname + location.search);
     setRoute(next);
     window.scrollTo({ top: 0 });
   };
@@ -121,7 +122,18 @@ export function App() {
         className="mx-auto max-w-[1240px] pb-16 pt-6"
         style={{ paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: "max(16px, env(safe-area-inset-right, 0px))" }}
       >
-        {error && <p className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">{error} Start the server with npm run lab -- ui.</p>}
+        {error && (
+          <p className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">
+            {error}{" "}
+            {/401/.test(error) ? (
+              <a className="font-medium underline" href={`/login?next=${encodeURIComponent("/app" + location.hash)}`}>
+                Sign in to see the dashboard.
+              </a>
+            ) : (
+              <>Start it with npm run ui.</>
+            )}
+          </p>
+        )}
         {!index && !error && <p className="font-mono text-ink-3">Reading runs…</p>}
         {index && route.view === "overview" && <Overview index={index} go={go} />}
         {index && route.view === "runs" && <Runs index={index} go={go} />}
@@ -138,11 +150,11 @@ export function App() {
 
 /** Signed-in account (live server only). */
 function Account() {
-  const [me, setMe] = useState<{ user: { email: string } | null } | null>(null);
+  const [me, setMe] = useState<{ user: { email: string } | null; authRequired: boolean } | null>(null);
   useEffect(() => {
     if (!isSnapshot) loadMe().then(setMe);
   }, []);
-  if (!me) return null;
+  if (!me || (!me.user && !me.authRequired)) return null; // accounts off (local use): nothing to show
   return me.user ? (
     <span className="flex items-center gap-2 text-[12.5px] text-ink-2">
       <span className="hidden max-w-[16ch] truncate sm:inline">{me.user.email}</span>

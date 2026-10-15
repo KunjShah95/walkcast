@@ -48,6 +48,7 @@ export interface Capabilities {
   running?: string | null;
   stagehand?: boolean;
   providers?: string[];
+  liveModels?: boolean;
 }
 
 export async function loadCapabilities(): Promise<Capabilities> {
@@ -64,6 +65,7 @@ export async function loadCapabilities(): Promise<Capabilities> {
 export async function startRun(input: { agent: string; fault: string; seed: number; task?: string; modelMode?: string }): Promise<string> {
   const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   const body = (await res.json()) as { dir?: string; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in to start runs.");
   if (!res.ok || !body.dir) throw new Error(body.error ?? `Run failed (${res.status}).`);
   return body.dir;
 }

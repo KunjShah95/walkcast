@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import type { Route } from "../App.tsx";
 import { Empty, FindingChip, Panel, PanelHeader, SpotlightCard, Verdict } from "../components/ui.tsx";
-import { FAULT_LABEL, ago, cn, label, ms } from "../lib/format.ts";
+import { FAULT_LABEL, faultLabel, ago, cn, label, ms } from "../lib/format.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
 import { TASKS } from "../lib/agents.ts";
 import { useState } from "react";
@@ -133,7 +133,10 @@ function TaskMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => void }
 }
 
 function AgentFaultMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => void }) {
-  const faults = Object.keys(FAULT_LABEL).filter((f) => runs.some((r) => r.fault === f));
+  // Single faults in their usual order, then combined scenarios ("a+b"), all from the data.
+  const order = Object.keys(FAULT_LABEL);
+  const rank = (f: string) => (order.includes(f) ? order.indexOf(f) : order.length);
+  const faults = [...new Set(runs.map((r) => r.fault))].sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   const agents = [...new Set(runs.map((r) => r.agent))].sort();
   const latest = new Map<string, RunSummary>();
   for (const r of runs) {
@@ -148,7 +151,7 @@ function AgentFaultMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => 
             <th className="eyebrow w-20 px-1 font-normal">Agent</th>
             {faults.map((f) => (
               <th key={f} className="px-1 align-bottom text-[11.5px] font-medium leading-tight text-ink-2">
-                {FAULT_LABEL[f]}
+                {faultLabel(f)}
               </th>
             ))}
           </tr>
@@ -166,7 +169,7 @@ function AgentFaultMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => 
                     <button
                       type="button"
                       onClick={() => go({ view: "run", dir: r.dir })}
-                      title={`${a} · ${FAULT_LABEL[f]}: ${pass ? "pass" : [...r.symptoms, ...r.causes].map(label).join(", ")}`}
+                      title={`${a} · ${faultLabel(f)}: ${pass ? "pass" : [...r.symptoms, ...r.causes].map(label).join(", ")}`}
                       className={cn(
                         "flex h-full w-full flex-col justify-center rounded-md px-2 text-left transition-transform hover:scale-[1.03]",
                         pass ? "bg-pass-soft text-pass" : "bg-fail-soft text-fail",
@@ -255,7 +258,7 @@ export function RunCard({ run, onOpen }: { run: RunSummary; onOpen: () => void }
         <span className="truncate font-mono text-[12px] font-medium">{run.agent}</span>
         <Verdict verdict={run.verdict} />
       </div>
-      <div className="mt-1 truncate text-[13px]">{FAULT_LABEL[run.fault] ?? run.fault}</div>
+      <div className="mt-1 truncate text-[13px]">{faultLabel(run.fault)}</div>
       <div className="mt-2 flex min-h-5 flex-wrap gap-1">
         {run.symptoms.map((s) => (
           <FindingChip key={s} id={s} kind="symptom" />

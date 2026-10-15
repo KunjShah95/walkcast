@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { loadRun } from "../lib/api.ts";
-import { FAULT_LABEL, cn, ms } from "../lib/format.ts";
+import { faultLabel, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RunDetail } from "../lib/types.ts";
 import { type AlignmentRow, type DiffReport, compareRuns } from "../../../src/lab/diff.ts";
 
@@ -15,8 +15,16 @@ export function Compare({ base, cand, index, go }: { base: string; cand: string;
   const [pair, setPair] = useState<[RunDetail, RunDetail] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    let cancelled = false; // a slower, older request must not overwrite a newer pair
     setPair(null);
-    Promise.all([loadRun(base), loadRun(cand)]).then((p) => setPair(p as [RunDetail, RunDetail]), (e: Error) => setError(e.message));
+    setError(null);
+    Promise.all([loadRun(base), loadRun(cand)]).then(
+      (p) => !cancelled && setPair(p as [RunDetail, RunDetail]),
+      (e: Error) => !cancelled && setError(e.message),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [base, cand]);
   const report = useMemo<DiffReport | null>(
     () => (pair ? compareRuns({ result: pair[0].result, events: pair[0].events }, { result: pair[1].result, events: pair[1].events }) : null),
@@ -218,7 +226,7 @@ function RunPick({ label, detail, other, runs, onPick }: { label: string; detail
       </label>
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="truncate font-display text-[16px] font-semibold">
-          {s.agent} · {FAULT_LABEL[s.fault] ?? s.fault}
+          {s.agent} · {faultLabel(s.fault)}
         </span>
         <Verdict verdict={s.verdict} />
       </div>

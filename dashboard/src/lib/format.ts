@@ -38,6 +38,14 @@ export const FAULT_LABEL: Record<string, string> = {
   "ui-drift": "Submit button redesigned",
 };
 
+/** Readable name for a scenario id, including combined faults ("a+b" -> "A + B"). */
+export function faultLabel(id: string): string {
+  return id
+    .split("+")
+    .map((f) => FAULT_LABEL[f] ?? f)
+    .join(" + ");
+}
+
 /** Plain-language names for classifier labels. */
 export const LABEL: Record<string, string> = {
   "false-success": "Claimed success, wasn't",
@@ -52,6 +60,7 @@ export const LABEL: Record<string, string> = {
   "locator-not-found": "Element not found",
   "app-dropped-field": "App dropped a field",
   "app-error": "App error",
+  "agent-error": "Agent crashed",
   unexplained: "Unexplained",
 };
 

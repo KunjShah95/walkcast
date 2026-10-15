@@ -5,7 +5,7 @@ import type { Route } from "../App.tsx";
 import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/FlightStrip.tsx";
 import { CopyButton, FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { fileUrl, loadRun } from "../lib/api.ts";
-import { FAULT_LABEL, cn, ms, pathOf } from "../lib/format.ts";
+import { faultLabel, cn, ms, pathOf } from "../lib/format.ts";
 import type { ClaimEvent, ConsoleEvent, Finding, LabIndex, ModelCallEvent, NetworkEvent, RunDetail, StepEvent } from "../lib/types.ts";
 
 type Node =
@@ -19,9 +19,16 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
   const [flash, setFlash] = useState<number | null>(null);
 
   useEffect(() => {
+    let cancelled = false; // clicking Older/Newer quickly must show the run that was clicked last
     setDetail(null);
     setError(null);
-    loadRun(dir).then(setDetail, (e: Error) => setError(e.message));
+    loadRun(dir).then(
+      (d) => !cancelled && setDetail(d),
+      (e: Error) => !cancelled && setError(e.message),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [dir]);
 
   const jump = (stepId: number) => {
@@ -50,7 +57,8 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
         </button>
         <div className="flex flex-wrap gap-2">
           {(() => {
-            const clean = index.runs.find((r) => r.agent === index.runs[position]?.agent && r.fault === "none" && r.verdict === "pass" && r.dir !== dir);
+            const self = index.runs[position];
+            const clean = index.runs.find((r) => r.agent === self?.agent && r.task === self?.task && r.fault === "none" && r.verdict === "pass" && r.dir !== dir);
             return clean ? (
               <button
                 type="button"
@@ -78,7 +86,7 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
         <div className="min-w-0">
           <div className="eyebrow break-all">{run.id}</div>
           <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight sm:text-[32px]">
-            {run.agent} on “{FAULT_LABEL[run.fault] ?? run.fault}”
+            {run.agent} on “{faultLabel(run.fault)}”
           </h1>
           <p className="mt-1 max-w-[72ch] text-ink-2">{result.agentSpec?.description}</p>
           <dl className="tabular mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[12px] text-ink-2">
@@ -455,8 +463,21 @@ function StepCard({
               <img src={shot} alt={`Page after step ${step.stepId}`} loading="lazy" className="block h-28 w-auto max-w-full object-cover object-top" />
             </button>
             {zoom && (
-              <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-ink/70 p-4" onClick={() => setZoom(false)}>
-                <button type="button" className="absolute right-4 top-4 rounded-full bg-panel p-2 text-ink" aria-label="Close" style={{ marginTop: "env(safe-area-inset-top, 0px)" }}>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Screenshot after step ${step.stepId}`}
+                className="fixed inset-0 z-50 grid place-items-center bg-ink/70 p-4"
+                onClick={() => setZoom(false)}
+                onKeyDown={(e) => e.key === "Escape" && setZoom(false)}
+              >
+                <button
+                  type="button"
+                  ref={(el) => el?.focus()}
+                  className="absolute right-4 top-4 rounded-full bg-panel p-2 text-ink"
+                  aria-label="Close"
+                  style={{ marginTop: "env(safe-area-inset-top, 0px)" }}
+                >
                   <X className="size-4" />
                 </button>
                 <img src={shot} alt={`Page after step ${step.stepId}`} className="max-h-[88vh] max-w-full rounded-lg border border-line" />

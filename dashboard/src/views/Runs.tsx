@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { Empty, FindingChip, Panel, Verdict } from "../components/ui.tsx";
-import { FAULT_LABEL, ago, cn, ms } from "../lib/format.ts";
+import { faultLabel, ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex } from "../lib/types.ts";
 
 type VerdictFilter = "all" | "fail" | "pass" | "false-success";
@@ -25,12 +25,12 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
         <div>
           <div className="eyebrow">{index.runs.length} recorded</div>
           <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">Runs</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <Segmented
             value={verdict}
             onChange={setVerdict}
@@ -43,7 +43,7 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
           />
           <Select id="task-filter" label="Task" value={task} onChange={setTask} options={tasks} />
           <Select id="agent-filter" label="Agent" value={agent} onChange={setAgent} options={agents} />
-          <Select id="fault-filter" label="Fault" value={fault} onChange={setFault} options={faults} format={(f) => FAULT_LABEL[f] ?? f} />
+          <Select id="fault-filter" label="Fault" value={fault} onChange={setFault} options={faults} format={(f) => faultLabel(f)} />
         </div>
       </div>
 
@@ -71,7 +71,7 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
                   </span>
                   <span className="font-mono text-[12.5px] font-medium">{r.agent}</span>
                   <span className="col-span-2 truncate text-[13px] md:col-span-1">
-                    {FAULT_LABEL[r.fault] ?? r.fault} <span className="font-mono text-[11px] text-ink-3">{r.task !== "create-lead" ? `${r.task} · ` : ""}s{r.seed}</span>
+                    {faultLabel(r.fault)} <span className="font-mono text-[11px] text-ink-3">{r.task !== "create-lead" ? `${r.task} · ` : ""}s{r.seed}</span>
                   </span>
                   <span className="col-span-2 flex flex-wrap gap-1 md:col-span-1">
                     {r.symptoms.map((s) => (
@@ -133,9 +133,9 @@ function Select({
   format?: (v: string) => string;
 }) {
   return (
-    <label htmlFor={id} className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-1 text-[12.5px]">
+    <label htmlFor={id} className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-1 text-[12.5px]">
       <span className="text-ink-3">{label}</span>
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="bg-transparent text-ink outline-none">
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="min-w-0 max-w-full truncate bg-transparent text-ink outline-none">
         <option value="all">All</option>
         {options.map((o) => (
           <option key={o} value={o}>
