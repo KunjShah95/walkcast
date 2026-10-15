@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,9 +8,18 @@ import { taskById } from "../lab/task.ts";
 import { allAgents } from "../agents/registry.ts";
 import { runOnce } from "../lab/runner.ts";
 import { configuredProviders } from "../llm/providers.ts";
+import { recordSite } from "../record/site.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "dashboard", "dist", "index.html");
-const TYPES: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webm": "video/webm" };
+const TYPES: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webm": "video/webm",
+  ".mp4": "video/mp4",
+  ".wav": "audio/wav",
+  ".vtt": "text/vtt; charset=utf-8",
+};
 
 function dashboardHtml(): string {
   if (!existsSync(DIST)) throw new Error("Dashboard not built. Run: npm run ui:build");
@@ -77,6 +86,41 @@ export async function serveDashboard(port: number, root = process.cwd()): Promis
         });
         return;
       }
+      if (url.pathname === "/api/record" && req.method === "POST") {
+        // Records a site the user says they may test. The password lives only in this request's memory.
+        if (running) return json(409, { error: `Busy (${running}).` });
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            const input = JSON.parse(body || "{}") as { url?: string; username?: string; password?: string; maxPages?: number; authorized?: boolean };
+            if (!input.authorized) return json(400, { error: "Confirm that you own this site or are authorized to test it." });
+            if (!input.url) return json(400, { error: "Paste the site's URL." });
+            running = `recording ${input.url}`;
+            recordSite({
+              url: input.url,
+              ...(input.username ? { username: input.username } : {}),
+              ...(input.password ? { password: input.password } : {}),
+              maxPages: Math.max(1, Math.min(30, Number(input.maxPages ?? 8))),
+              authorized: true,
+              outDir: join(data.root, "recordings"),
+            }).then(
+              (r) => {
+                running = null;
+                json(200, { dir: join("recordings", basename(r.dir)) });
+              },
+              (e: unknown) => {
+                running = null;
+                json(500, { error: e instanceof Error ? e.message : String(e) });
+              },
+            );
+          } catch (e) {
+            running = null;
+            json(400, { error: e instanceof Error ? e.message : String(e) });
+          }
+        });
+        return;
+      }
       if (url.pathname === "/api/run") {
         const detail = data.run(url.searchParams.get("dir") ?? "");
         return detail ? json(200, detail) : json(404, { error: "run not found" });
@@ -85,8 +129,21 @@ export async function serveDashboard(port: number, root = process.cwd()): Promis
         const abs = data.safe(decodeURIComponent(url.pathname.slice("/files/".length)));
         const type = abs ? TYPES[extname(abs).toLowerCase()] : undefined;
         if (!abs || !type || !existsSync(abs)) return json(404, { error: "not found" });
-        res.writeHead(200, { "Content-Type": type, "Cache-Control": "max-age=3600" });
-        return res.end(readFileSync(abs));
+        // Byte ranges, so the video player can seek.
+        const size = statSync(abs).size;
+        const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+        if (range && (range[1] || range[2])) {
+          const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+          const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+          if (start > end || start >= size) {
+            res.writeHead(416, { "Content-Range": `bytes */${size}` });
+            return res.end();
+          }
+          res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1 });
+          return createReadStream(abs, { start, end }).pipe(res);
+        }
+        res.writeHead(200, { "Content-Type": type, "Cache-Control": "max-age=3600", "Accept-Ranges": "bytes", "Content-Length": size });
+        return createReadStream(abs).pipe(res);
       }
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(html);
@@ -108,6 +165,8 @@ export interface ExportOptions {
   screenshotRuns?: number;
   /** Write page content without the html/head/body wrapper (for hosts that add their own). */
   fragment?: boolean;
+  /** Embed the narrated MP4 and captions of at most this many recordings (newest first). */
+  recordings?: number;
   root?: string;
 }
 
@@ -135,8 +194,15 @@ export function exportDashboard(options: ExportOptions): { path: string; runs: n
       if (abs && existsSync(abs)) files[rel] = `data:image/jpeg;base64,${readFileSync(abs).toString("base64")}`;
     }
   }
+  const recordings = index.recordings.slice(0, options.recordings ?? 1);
+  for (const rec of recordings) {
+    for (const [name, mime] of [[rec.media.mp4, "video/mp4"], [rec.media.webm ?? null, "video/webm"], [rec.media.captions, "text/vtt"]] as const) {
+      const abs = name ? data.safe(join(rec.dir, name)) : null;
+      if (abs && existsSync(abs)) files[join(rec.dir, name!)] = `data:${mime};base64,${readFileSync(abs).toString("base64")}`;
+    }
+  }
   const payload: { index: LabIndex; details: Record<string, RunDetail>; files: Record<string, string> } = {
-    index: { ...index, runs },
+    index: { ...index, runs, recordings },
     details,
     files,
   };

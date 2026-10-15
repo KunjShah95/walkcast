@@ -58,8 +58,23 @@ export interface ExperimentSummary {
   summary: Record<string, unknown>;
 }
 
+/** A narrated site recording (src/record), as listed by the dashboard. */
+export interface RecordingSummary {
+  id: string;
+  dir: string;
+  url: string;
+  createdAt: string;
+  durationMs: number;
+  signIn: { attempted: boolean; outcome: string; detail: string };
+  pages: { url: string; title: string; status: number | null; controls: number }[];
+  skipped: { url: string; reason: string }[];
+  captions: { start: number; end: number; text: string }[];
+  media: { video: string | null; mp4: string | null; webm?: string | null; audio: string | null; captions: string; voice: string; note: string };
+}
+
 export interface LabIndex {
   generatedAt: string;
+  recordings: RecordingSummary[];
   runs: RunSummary[];
   fixtures: FixtureSummary[];
   experiments: ExperimentSummary[];
@@ -101,7 +116,22 @@ export class LabData {
       }
     }
     runs.sort((a, b) => b.createdAt - a.createdAt);
-    return { generatedAt: new Date().toISOString(), runs, fixtures, experiments };
+    return { generatedAt: new Date().toISOString(), recordings: this.recordings(), runs, fixtures, experiments };
+  }
+
+  recordings(): RecordingSummary[] {
+    const out: RecordingSummary[] = [];
+    for (const name of this.dirs("recordings")) {
+      const path = join(this.root, "recordings", name, "recording.json");
+      if (!existsSync(path)) continue;
+      try {
+        const r = readJson(path) as RecordingSummary;
+        out.push({ ...r, dir: join("recordings", name) });
+      } catch {
+        // half-written recording
+      }
+    }
+    return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
   run(dir: string): RunDetail | null {
@@ -125,7 +155,7 @@ export class LabData {
   /** Resolve a workspace-relative path, refusing anything outside the lab's output folders. */
   safe(path: string): string | null {
     const abs = resolve(this.root, path);
-    const allowed = ["runs", "results", "fixtures", "baselines"].map((d) => join(this.root, d) + sep);
+    const allowed = ["runs", "results", "fixtures", "baselines", "recordings"].map((d) => join(this.root, d) + sep);
     return allowed.some((prefix) => abs.startsWith(prefix)) ? abs : null;
   }
 

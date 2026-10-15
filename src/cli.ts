@@ -17,7 +17,8 @@ import { exportDashboard, serveDashboard } from "./ui/server.ts";
 import { LabData } from "./ui/data.ts";
 import { compareRuns, type DiffReport } from "./lab/diff.ts";
 import { cpSync } from "node:fs";
-import { createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
+import { SEED_LEADS, createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
+import { recordSite } from "./record/site.ts";
 
 const HELP = `Browser Agent Failure Lab
 
@@ -45,6 +46,11 @@ Commands:
   baseline save <runDir> --name n       Store a passing run as a baseline (baselines/n)
   check --against <baseline> --agent a --fault f
                                         Run, then diff against the baseline (workflow regression check)
+  record --url <https://site> --i-am-authorized [--username u] [--password-env VAR] [--max-pages n]
+                                        Sign in to a site you own or may test, browse its same-origin pages,
+                                        and save a narrated MP4 (video + spoken narration + captions) under
+                                        recordings/. Stops at CAPTCHA or 2FA. The password is read from the
+                                        env var (default LAB_SITE_PASSWORD) and never written to disk.
   rediagnose [dirs...]                  Re-apply the current classifier rules to stored runs (default runs/)
   providers                             List model providers and whether their API key is set
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
@@ -77,12 +83,19 @@ const { positionals, values } = parseArgs({
     concurrency: { type: "string", default: "3" },
     port: { type: "string" },
     "max-runs": { type: "string", default: "80" },
+    "max-recordings": { type: "string", default: "1" },
     lean: { type: "boolean", default: false },
     fragment: { type: "boolean", default: false },
     "screenshot-runs": { type: "string" },
     scenarios: { type: "string", default: "singles" },
     task: { type: "string", default: "create-lead" },
     name: { type: "string" },
+    url: { type: "string" },
+    username: { type: "string" },
+    "password-env": { type: "string", default: "LAB_SITE_PASSWORD" },
+    "max-pages": { type: "string", default: "8" },
+    "i-am-authorized": { type: "boolean", default: false },
+    "pace-ms": { type: "string" },
     "against": { type: "string" },
     fixtures: { type: "string", default: "fixtures" },
     out: { type: "string" },
@@ -200,14 +213,40 @@ async function main(): Promise<number> {
         maxRuns: Number(values["max-runs"]),
         screenshots: !values.lean,
         fragment: values.fragment,
+        recordings: Number(values["max-recordings"]),
         ...(values["screenshot-runs"] ? { screenshotRuns: Number(values["screenshot-runs"]) } : {}),
       });
       console.log(`Wrote ${r.path}: ${r.runs} runs, ${(r.bytes / 1024 / 1024).toFixed(1)} MB`);
       return 0;
     }
+    case "record": {
+      if (!values.url) throw new Error("record needs --url");
+      if (!values["i-am-authorized"]) {
+        console.error("Only record sites you own or are authorized to test. Re-run with --i-am-authorized to confirm.");
+        return 2;
+      }
+      const password = process.env[values["password-env"]!];
+      if (values.username && !password) console.warn(`No password in $${values["password-env"]}; sign-in will try the username only.`);
+      const r = await recordSite({
+        url: values.url,
+        ...(values.username ? { username: values.username } : {}),
+        ...(password ? { password } : {}),
+        maxPages: Number(values["max-pages"]),
+        authorized: true,
+        outDir: resolve("recordings"),
+        ...(values["pace-ms"] ? { paceMs: Number(values["pace-ms"]) } : {}),
+      });
+      console.log(`sign-in: ${r.signIn.outcome}${r.signIn.attempted ? ` — ${r.signIn.detail}` : ""}`);
+      for (const p of r.pages) console.log(`  ${p.status ?? "   "}  ${p.url}  "${p.title}"`);
+      if (r.skipped.length) console.log(`skipped ${r.skipped.length}: ${r.skipped.slice(0, 5).map((s) => s.url).join(", ")}`);
+      console.log(`media: ${r.media.note}`);
+      console.log(`recording: ${join(r.dir, r.media.mp4 ?? r.media.video ?? "recording.json")}`);
+      return r.signIn.attempted && r.signIn.outcome !== "signed-in" ? 1 : 0;
+    }
     case "app": {
       const fault = requireFault();
-      const app = await startApp({ fault, seed: Number(values.seed), port: Number(values.port ?? 4310) });
+      const task = requireTask();
+      const app = await startApp({ fault, seed: Number(values.seed), port: Number(values.port ?? 4310), task: task.id, seedLeads: SEED_LEADS });
       console.log(`MiniCRM (fault=${fault}, seed=${values.seed}) at ${app.url}  — login demo / demo-pass`);
       await new Promise(() => undefined);
       return 0;

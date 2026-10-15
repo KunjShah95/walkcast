@@ -67,3 +67,19 @@ export async function startRun(input: { agent: string; fault: string; seed: numb
   if (!res.ok || !body.dir) throw new Error(body.error ?? `Run failed (${res.status}).`);
   return body.dir;
 }
+
+/** URL for a recording's media file (baked as a data URI in snapshots, served by `lab ui` otherwise). */
+export function mediaUrl(dir: string, file: string): string | undefined {
+  if (!file) return undefined;
+  const rel = `${dir}/${file}`;
+  if (baked) return baked.files[rel];
+  return `/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/** Records a site on the local server; resolves with the recording's directory when done. */
+export async function startRecording(input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean }): Promise<string> {
+  const res = await fetch("/api/record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const body = (await res.json()) as { dir?: string; error?: string };
+  if (!res.ok || !body.dir) throw new Error(body.error ?? `Recording failed (${res.status}).`);
+  return body.dir;
+}

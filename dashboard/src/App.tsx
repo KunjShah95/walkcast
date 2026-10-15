@@ -10,10 +10,12 @@ import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
 import { Simulator } from "./views/Simulator.tsx";
+import { Record } from "./views/Record.tsx";
 
 export type Route =
   | { view: "overview" }
   | { view: "simulator" }
+  | { view: "record" }
   | { view: "runs" }
   | { view: "fixtures" }
   | { view: "experiments" }
@@ -27,7 +29,7 @@ function parse(hash: string): Route {
     const [base = "", cand = ""] = h.slice(8).split("|").map(decodeURIComponent);
     return { view: "compare", base, cand };
   }
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator") return { view: h };
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record") return { view: h };
   return { view: "overview" };
 }
 
@@ -40,6 +42,7 @@ function toHash(route: Route): string {
 const NAV: { view: Route["view"]; label: string }[] = [
   { view: "overview", label: "Overview" },
   { view: "simulator", label: "Simulator" },
+  { view: "record", label: "Record" },
   { view: "runs", label: "Runs" },
   { view: "fixtures", label: "Fixtures" },
   { view: "experiments", label: "Experiments" },
@@ -124,6 +127,7 @@ export function App() {
         {index && route.view === "experiments" && <Experiments index={index} />}
         {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
         {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
+        {index && route.view === "record" && <Record index={index} refresh={refresh} />}
         {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
       </main>
     </div>
