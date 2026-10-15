@@ -61,7 +61,7 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
     const text = join(dir, `.tts-${i}.txt`);
     const file = join(dir, `.tts-${i}.wav`);
     writeFileSync(text, caption.text.replace(/[{}]/g, ""));
-    await run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(text)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", file]);
+    await run(["-f", "lavfi", "-i", `flite=textfile=.tts-${i}.txt:voice=${VOICE}`, "-ar", "22050", "-ac", "1", file], { cwd: dir });
     clips.push({ file, seconds: wavSeconds(file) });
   }
 
@@ -124,7 +124,7 @@ export async function speechMs(text: string): Promise<number> {
   const txt = join(cacheDir, `${i}.txt`);
   const wav = join(cacheDir, `${i}.wav`);
   writeFileSync(txt, text.replace(/[{}]/g, ""));
-  await run(["-f", "lavfi", "-i", `flite=textfile=${escapeFilterPath(txt)}:voice=${VOICE}`, "-ar", "22050", "-ac", "1", wav]);
+  await run(["-f", "lavfi", "-i", `flite=textfile=${i}.txt:voice=${VOICE}`, "-ar", "22050", "-ac", "1", wav], { cwd: cacheDir });
   const ms = Math.round(wavSeconds(wav) * 1000);
   rmSync(txt, { force: true });
   rmSync(wav, { force: true });
@@ -135,9 +135,8 @@ export async function speechMs(text: string): Promise<number> {
 const execFileAsync = promisify(execFile);
 
 /** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
-async function run(args: string[]): Promise<void> {
-  // A hung encode must not hold a worker forever.
-  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL" });
+async function run(args: string[], opts: { cwd?: string } = {}): Promise<void> {
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL" });
 }
 
 let fliteAvailable: boolean | undefined;
@@ -172,10 +171,6 @@ async function probeSeconds(file: string): Promise<number> {
   return times.length ? Math.max(...times) : 0;
 }
 
-/** ffmpeg filter arguments treat ':' '\'' and '\\' specially. */
-function escapeFilterPath(path: string): string {
-  return path.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
-}
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;

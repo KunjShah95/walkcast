@@ -70,15 +70,15 @@ This is not another browser agent, recorder or dashboard. The ecosystem already 
 ```sh
 npm ci
 npx playwright install chromium         # skip if Chromium is already available
-npm run lab -- list                     # faults and agent versions
-npm run lab -- run --fault stale-owners --agent v0 --screenshots
+node --import tsx src/cli.ts list                     # faults and agent versions
+node --import tsx src/cli.ts run --fault stale-owners --agent v0 --screenshots
 #   FAIL  symptoms=[false-success] causes=[stale-observation]
 #   report: runs/<id>/report.md      fixture: runs/_fixtures/stale-owners-s1-stale-observation
 # (A failing run exits with code 1 on purpose, so the command doubles as a CI check; npm prints
 #  an error line for that. Add --fixtures fixtures to put the new fixture in the committed CI gate.)
-npm run lab -- replay runs/_fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
-npm run lab -- compare fixtures --agents v0,v1,v2 --trials 3
-npm run lab -- experiment --seeds 5 --trials 3        # full validation experiment
+node --import tsx src/cli.ts replay runs/_fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
+node --import tsx src/cli.ts compare fixtures --agents v0,v1,v2 --trials 3
+node --import tsx src/cli.ts experiment --seeds 5 --trials 3        # full validation experiment
 npm test                                               # unit + end-to-end tests
 ```
 

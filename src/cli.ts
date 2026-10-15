@@ -17,6 +17,7 @@ import { closeBrowser, runOnce } from "./lab/runner.ts";
 import { exportDashboard, serveDashboard } from "./ui/server.ts";
 import { LabData } from "./ui/data.ts";
 import { compareRuns, type DiffReport } from "./lab/diff.ts";
+import { spawnSync } from "node:child_process";
 import { cpSync } from "node:fs";
 import { SEED_LEADS, createLeadTask, requestedValues, taskById, type Task } from "./lab/task.ts";
 import { recordSite } from "./record/site.ts";
@@ -76,6 +77,7 @@ Commands:
                                         env var (default LAB_SITE_PASSWORD) and never written to disk.
   rediagnose [dirs...]                  Re-apply the current classifier rules to stored runs (default runs/)
   providers                             List model providers and whether their API key is set
+  doctor                                Check environment: node, browsers, ffmpeg/flite, .env keys, and repository state
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
 
 Model selection (live mode): --agent-model and --stagehand-model take "provider:model", or a
@@ -209,6 +211,34 @@ async function main(): Promise<number> {
         }
       }
       console.log(`Re-diagnosed ${total} runs; ${changed} changed.`);
+      return 0;
+    }
+    case "doctor": {
+      console.log("Walkcast doctor — environment check");
+      const major = Number(process.versions.node.split(".")[0]);
+      console.log(`  Node ${process.versions.node}: ${major >= 22 ? "PASS" : "FAIL"} (need >=22)`);
+      const envFile = ".env";
+      console.log(`  .env: ${existsSync(envFile) ? "present" : "missing — copy .env.example => .env"}`);
+      const apiKeys = ["ANTHROPIC_API_KEY","OPENAI_API_KEY","OPENROUTER_API_KEY","GROQ_API_KEY","AI_GATEWAY_API_KEY","GEMINI_API_KEY","MISTRAL_API_KEY","DEEPSEEK_API_KEY","XAI_API_KEY","HF_TOKEN","TOGETHER_API_KEY","FIREWORKS_API_KEY","CEREBRAS_API_KEY"];
+      console.log("  AI provider keys:");
+      for (const key of apiKeys) {
+        console.log(`    ${key.padEnd(22)} ${process.env[key]?.trim() ? "set" : "empty"}`);
+      }
+      const chromePath = process.env.LAB_CHROME_PATH;
+      console.log(`  LAB_CHROME_PATH: ${chromePath ? (existsSync(chromePath) ? "ok (" + chromePath + ")" : "path set but missing: " + chromePath) : "unset (Stagehand uses playwright chromium)"}`);
+      const playwrightCache = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "ms-playwright") : undefined;
+      console.log(`  Playwright cache: ${playwrightCache && existsSync(playwrightCache) ? "present" : "missing — run npx playwright install chromium"}`);
+      const ffmpegBin = process.env.LAB_FFMPEG || "ffmpeg";
+      const ffprobe = process.env.LAB_FFPROBE || "ffprobe";
+      const filterProbe = spawnSync(ffmpegBin, ["-hide_banner","-filters"], { encoding: "utf8" });
+      const encProbe = spawnSync(ffmpegBin, ["-hide_banner","-encoders"], { encoding: "utf8" });
+      const hasFlite = filterProbe.status === 0 && /\bflite\b/.test(filterProbe.stdout || "") && /libx264/.test(encProbe.stdout || "");
+      console.log(`  ffmpeg: ${filterProbe.status === 0 ? "present" : "missing"} (${ffmpegBin})`);
+      console.log(`  flite voice + libx264: ${hasFlite ? "ready (narration OK)" : "MISSING (captions only)"}`);
+      const gitInfo = spawnSync("git", ["status","--porcelain"], { cwd: process.cwd(), encoding: "utf8" });
+      const dirty = gitInfo.status === 0 ? gitInfo.stdout.split(/\r?\n/).filter(Boolean).length : 0;
+      console.log(`  repo dirty files: ${dirty} (WIP is expected; not an error)`);
+      if (major < 22) return 1;
       return 0;
     }
     case "providers": {

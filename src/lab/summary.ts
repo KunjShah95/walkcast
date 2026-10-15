@@ -15,7 +15,12 @@ export function renderSummary(s: ExperimentSummary): string {
   const lines: string[] = [];
   lines.push("# Experiment summary", "");
   lines.push(`> ${s.meta.caveat}`, "");
-  lines.push(`Seeds per fault: ${s.meta.seeds} · trials per replay: ${s.meta.trials} · baseline: ${s.meta.baseline} · candidates: ${s.meta.candidates.join(", ")}`, "");
+  lines.push("## Model", "");
+lines.push(`Model selection: ${typeof s.meta.models === "object" && s.meta.models ? `agent=${(s.meta.models as any).agent}, stagehand=${(s.meta.models as any).stagehand}` : "defaults from LAB_AGENT_MODEL/LAB_STAGEHAND_MODEL"}`, "");
+lines.push(`Model mode: ${s.meta.modelMode ?? "default (scripted for replay)"}. Live-token accounting only applies to runs whose mode is "live".`, "");
+
+lines.push("## Run shape", "");
+lines.push(`Seeds per fault: ${s.meta.seeds} · trials per replay: ${s.meta.trials} · baseline: ${s.meta.baseline} · candidates: ${s.meta.candidates.join(", ")}`, "");
 
   lines.push("## Failure detection and attribution (baseline runs)", "");
   lines.push("| Fault | Runs | Failed (oracle) | Correct primary cause | Spurious causes | Unexplained |", "|---|---|---|---|---|---|");
@@ -53,6 +58,6 @@ export function renderSummary(s: ExperimentSummary): string {
     });
     lines.push(`| ${f} | ${cells.join(" | ")} |`);
   }
-  lines.push("", "## Cost", "", `Agent runs: ${s.cost.agentRuns} · model calls: ${s.cost.modelCalls} (live tokens in/out: ${s.cost.liveInputTokens}/${s.cost.liveOutputTokens}) · median run: ${s.cost.medianRunMs} ms · p95 run: ${s.cost.p95RunMs} ms`, "");
+  lines.push("", "## Cost", "", `Agent runs: ${s.cost.agentRuns} · model calls: ${s.cost.modelCalls} · live tokens in/out: ${s.cost.liveInputTokens}/${s.cost.liveOutputTokens} · median run: ${s.cost.medianRunMs} ms · p95 run: ${s.cost.p95RunMs} ms`, "");
   return lines.join("\n");
 }

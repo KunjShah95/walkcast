@@ -4,6 +4,8 @@ import { isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
 import { Experiments } from "./views/Experiments.tsx";
+import { RecordLightHalo } from "./components/RecordLightHalo.tsx";
+import { FilmGrain } from "./components/FilmGrain.tsx";
 import { Fixtures } from "./views/Fixtures.tsx";
 import { Overview } from "./views/Overview.tsx";
 import { RunView } from "./views/RunView.tsx";
@@ -54,6 +56,11 @@ export function App() {
   const [index, setIndex] = useState<LabIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [animations, setAnimations] = useState(() => (typeof localStorage !== "undefined" && localStorage.getItem("walkcast:animations") === "1"));
+  useEffect(() => {
+    try { localStorage.setItem("walkcast:animations", animations ? "1" : "0"); } catch { /* ignore storage failures */ }
+  }, [animations]);
+
   useEffect(() => {
     loadIndex().then(setIndex, (e: Error) => setError(e.message));
     const onHash = () => setRoute(parse(location.hash));
@@ -86,7 +93,8 @@ export function App() {
           className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-6 gap-y-2 py-3"
           style={{ paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: "max(16px, env(safe-area-inset-right, 0px))" }}
         >
-          <button type="button" onClick={() => go({ view: "overview" })} className="flex items-center gap-2.5">
+          <button type="button" onClick={() => go({ view: "overview" })} className="relative flex items-center gap-2.5">
+              {animations && <RecordLightHalo />}
             <Mark />
             <span className="font-display text-[19px] font-semibold tracking-tight">Walkcast</span>
           </button>
@@ -113,7 +121,11 @@ export function App() {
                 {isSnapshot ? "snapshot" : "live"} · indexed {ago(Date.parse(index.generatedAt))}
               </span>
             )}
-            <ThemeToggle />
+            <button title="Toggle animated effects (halo, film grain)" aria-pressed={animations} onClick={() => setAnimations((v) => !v)}
+        className={cn("rounded-md border px-2.5 py-1 text-[12px] transition-colors",
+          animations ? "border-signal bg-signal-soft text-signal" : "border-line text-ink-3 hover:text-ink hover:bg-panel-2")}>
+        {animations ? "Animations on" : "Animations off"}
+      </button>
           </div>
         </div>
       </header>
@@ -144,6 +156,8 @@ export function App() {
         {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} />}
         {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
       </main>
+
+{animations && <FilmGrain />}
     </div>
   );
 }

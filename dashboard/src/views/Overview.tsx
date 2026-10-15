@@ -3,9 +3,9 @@ import type { Route } from "../App.tsx";
 import { Empty, FindingChip, Panel, PanelHeader, SpotlightCard, Verdict } from "../components/ui.tsx";
 import { FAULT_LABEL, faultLabel, ago, cn, label, ms } from "../lib/format.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
+
 import { TASKS } from "../lib/agents.ts";
 import { useState } from "react";
-
 export function Overview({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
   const runs = index.runs;
   if (runs.length === 0) {

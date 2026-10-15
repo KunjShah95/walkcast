@@ -122,9 +122,13 @@ header nav a{font-size:14.5px;text-decoration:none;color:var(--ink-2);padding:8p
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;background:var(--ink);color:var(--paper);font:500 15px var(--body);padding:13px 22px;text-decoration:none;cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .15s}
 .btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px -10px color-mix(in srgb,var(--ink) 60%,transparent)}
 .btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}.btn.small{padding:8px 16px;font-size:14px}
-.hero{padding:96px 0 48px;text-align:center}
+.hero{padding:96px 0 48px;text-align:center;position:relative}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(60% 50% at 50% 30%,rgb(49 80 201/.10),transparent 70%);mix-blend-mode:screen}
+.hero .btn{position:relative;overflow:hidden}
+.hero .btn::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-100%);animation:shimmer 3.2s ease-in-out infinite}
 .hero .eyebrow{justify-content:center}
-.hero h1{font-size:clamp(44px,7.2vw,92px);max-width:14ch;margin:22px auto 0}
+.hero h1{font-size:clamp(52px,8vw,104px);max-width:12ch;margin:22px auto 0;font-weight:700;letter-spacing:-0.03em;line-height:.95}
+.hero h1 em{font-style:normal;background:linear-gradient(120deg,var(--signal),#8a5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .lede{font-size:clamp(17px,1.7vw,21px);color:var(--ink-2);max-width:56ch;margin:26px auto 34px}
 .urlform{display:flex;gap:6px;max-width:620px;margin:0 auto;background:var(--panel);border-radius:999px;padding:6px;box-shadow:var(--shadow),inset 0 0 0 1px var(--line);transition:box-shadow .2s}
 .urlform input{flex:1;min-width:0;border:0;background:transparent;font:15px var(--mono);color:var(--ink);padding:10px 18px;outline:none}
@@ -145,17 +149,17 @@ header nav a{font-size:14.5px;text-decoration:none;color:var(--ink-2);padding:8p
 .transcript li.on{background:#000;color:var(--caption)}
 .transcript li.on time{color:var(--caption)}
 .transcript time{font:12px var(--mono);color:#8f887d;padding-top:2px}
-section.band{padding:104px 0}
-section.band h2{font-size:clamp(34px,4.6vw,56px);max-width:20ch;margin-top:16px}
-section.band .intro{color:var(--ink-2);max-width:60ch;margin:18px 0 0;font-size:18px}
+section.band{padding:104px 0;text-align:center}
+section.band h2{font-size:clamp(34px,4.6vw,56px);max-width:20ch;margin:16px auto 0}
+section.band .intro{color:var(--ink-2);max-width:60ch;margin:18px auto 0;font-size:18px}
 .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:44px;counter-reset:s;padding:0;list-style:none}
-.card{background:var(--panel);border-radius:20px;padding:26px;box-shadow:var(--shadow),inset 0 0 0 1px var(--line)}
+.card{background:var(--panel);border-radius:20px;padding:26px;box-shadow:var(--shadow),inset 0 0 0 1px var(--line);text-align:center}
 .steps .card::before{counter-increment:s;content:counter(s,decimal-leading-zero);display:block;font:italic 480 44px/1 var(--display);color:var(--ember);margin-bottom:22px}
 .card h3{font-size:24px;margin-bottom:8px}.card p{margin:0;color:var(--ink-2);font-size:15.5px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:44px}
 .gridstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px;margin-top:44px}
 .file{display:inline-block;font:500 12.5px var(--mono);color:var(--paper);background:var(--ink);padding:4px 10px;border-radius:999px;margin-bottom:18px}
-.checks{list-style:none;padding:0;margin:36px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 36px}
+.checks{list-style:none;padding:0;margin:36px auto 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 36px;max-width:820px;text-align:left}
 .checks li{padding-left:30px;position:relative;color:var(--ink-2);font-size:16.5px}.checks li strong{color:var(--ink);font-weight:600}
 .checks li::before{content:"✓";position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--pass) 14%,transparent);color:var(--pass);font:600 12px/20px var(--body);text-align:center}
 .stat{font:560 clamp(34px,8vw,52px)/1 var(--display);letter-spacing:-.03em}.stat small{font:14px/1.45 var(--body);letter-spacing:0;color:var(--ink-2);display:block;margin-top:12px}
@@ -190,7 +194,7 @@ a.card .more{font:500 13px var(--mono);color:var(--ember);margin-top:16px;displa
 @media (max-width:900px){.stage{grid-template-columns:1fr}.transcript{border-left:0;border-top:1px solid rgb(255 255 255/.06)}.transcript ol{max-height:260px}.gridstats{grid-template-columns:repeat(2,minmax(0,1fr))}.article{grid-template-columns:minmax(0,1fr)}.side{position:static}.guide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:680px){.hero{padding-top:56px}.urlform{flex-direction:column;border-radius:22px}.urlform .btn{width:100%}.steps,.grid2,.checks,.guide-grid{grid-template-columns:1fr}header nav a.hide-sm{display:none}section.band{padding:72px 0}}
 @media (max-width:400px){header nav a:not(.btn){display:none}.brand{font-size:19px}.auth .card{padding:24px 20px}.auth h1{font-size:34px}}
-@media (prefers-reduced-motion:no-preference){.hero h1,.hero .lede,.urlform{animation:rise .8s cubic-bezier(.2,.7,.2,1) both}.hero .lede{animation-delay:.08s}.urlform{animation-delay:.16s}@keyframes rise{from{opacity:0;transform:translateY(12px)}}}
+@media (prefers-reduced-motion:no-preference){.hero h1,.hero .lede,.urlform{animation:rise .8s cubic-bezier(.2,.7,.2,1) both}.hero .lede{animation-delay:.08s}.urlform{animation-delay:.16s}@keyframes rise{from{opacity:0;transform:translateY(12px)}}} @keyframes shimmer{100%{transform:translateX(100%)}}
 @media (prefers-reduced-motion:reduce){.stage figcaption::before{animation:none}}
 :focus-visible{outline:2px solid var(--signal);outline-offset:2px}`;
 
@@ -539,7 +543,7 @@ export function guidesIndexPage(siteUrl: string, user: { email: string } | null)
     ],
   });
   const body = `
-<div class="wrap">
+<div class="wrap" style="text-align:center">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Guides</nav>
   <p class="eyebrow">Guides</p>
   <h1 style="font-size:clamp(36px,5vw,58px);max-width:18ch">Website video walkthroughs, by use case</h1>

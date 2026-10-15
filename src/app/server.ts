@@ -267,7 +267,7 @@ ${refresh}`,
 
 function leadsPage(leads: Lead[]): string {
   // The owner is shown only on each lead's own page.
-  const rows = leads.map((l) => `<tr><td><a href="/leads/${l.id}">${l.id}</a></td><td>${l.contact}</td><td>${l.company}</td></tr>`).join("");
+  const rows = leads.map((l) => `<tr><td><a href="/leads/${l.id}">${l.id}</a></td><td>${escapeHtml(l.contact)}</td><td>${escapeHtml(l.company)}</td></tr>`).join("");
   return page(
     "Leads",
     `<p><a id="new-lead" href="/leads/new">New lead</a></p>
@@ -284,9 +284,9 @@ function leadDetailPage(lead: Lead, created: boolean, updated: boolean, relabel:
     `${created ? `<p role="status" class="toast">Lead created ✓</p>` : ""}${updated ? `<p role="status" class="toast">Lead updated ✓</p>` : ""}
 <dl id="lead">
   <dt>ID</dt><dd data-field="id">${lead.id}</dd>
-  <dt>Contact</dt><dd data-field="contact">${lead.contact}</dd>
-  <dt>Company</dt><dd data-field="company">${lead.company}</dd>
-  <dt>${ownerLabel}</dt><dd data-field="${ownerField}">${lead.owner}</dd>
+  <dt>Contact</dt><dd data-field="contact">${escapeHtml(lead.contact)}</dd>
+  <dt>Company</dt><dd data-field="company">${escapeHtml(lead.company)}</dd>
+  <dt>${ownerLabel}</dt><dd data-field="${ownerField}">${escapeHtml(lead.owner)}</dd>
 </dl>
 <p><a id="edit-lead" href="/leads/${lead.id}/edit">Edit lead</a> · <a href="/leads">Back to leads</a></p>`,
   );
@@ -300,7 +300,7 @@ function editLeadPage(lead: Lead, active: Set<FaultId>, ownersRefreshMs: number)
   const options = OWNERS_ALPHABETICAL.map((o) => `<option value="${o}"${o === lead.owner ? " selected" : ""}>${o}</option>`).join("");
   return page(
     `Edit lead ${lead.id}`,
-    `<p>${lead.company} · ${lead.contact}</p>
+    `<p>${escapeHtml(lead.company)} · ${escapeHtml(lead.contact)}</p>
 <form id="edit-form" method="post" action="/leads/${lead.id}">
   <label for="owner">Owner</label>
   <select id="owner" name="${ownerField}"><option value="">Select owner</option>${options}</select>
@@ -360,9 +360,20 @@ function redirect(res: ServerResponse, location: string, headers: Record<string,
 }
 
 function safeNext(next: string | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/leads";
+  const fallback = "/leads";
+  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback;
+  try {
+    const base = "http://same.invalid";
+    const url = new URL(next, base);
+    return url.origin === base ? url.pathname + url.search + url.hash : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 function escapeAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
@@ -376,9 +387,14 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
-async function readForm(req: IncomingMessage): Promise<Record<string, string>> {
+async function readForm(req: IncomingMessage, limit = 32_768): Promise<Record<string, string>> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let total = 0;
+  for await (const chunk of req) {
+    total += (chunk as Buffer).byteLength;
+    if (total > limit) throw new Error("Request too large.");
+    chunks.push(chunk as Buffer);
+  }
   return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString("utf8")));
 }
 

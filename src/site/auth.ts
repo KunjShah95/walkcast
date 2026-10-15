@@ -70,11 +70,12 @@ export class Auth extends Sessions {
 
   // ---------------------------------------------------------------- email + password
 
-  async signUp(emailRaw: string, password: string, name?: string): Promise<User> {
+  async signUp(emailRaw: string, password: string, name?: string, ip?: string): Promise<User> {
     const email = normalizeEmail(emailRaw);
     if (!email) throw new AuthError(400, "Enter a valid email address.");
     if (password.length < 8) throw new AuthError(400, "Use a password of at least 8 characters.");
     if (password.length > 200) throw new AuthError(400, "That password is too long.");
+    if (ip) await this.throttle("signup", ip, email);
     const user: User = {
       id: randomBytes(9).toString("base64url"),
       email,
@@ -87,8 +88,8 @@ export class Auth extends Sessions {
       await this.store.insertUser(user);
     } catch (e) {
       if (!(e instanceof DuplicateError)) throw e;
-      const existing = await this.store.userByEmail(email);
-      throw new AuthError(409, existing?.password ? "An account with this email already exists. Sign in instead." : "This email signs in with Google.");
+      
+      throw new AuthError(409, "An account with this email already exists. Sign in instead.");
     }
     return user;
   }

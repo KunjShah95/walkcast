@@ -286,6 +286,33 @@ export const GUIDES: Guide[] = [
       ["Can new hires search the videos?", "Each video comes with a transcript and captions as text, so putting the transcript next to the video in your wiki makes it searchable."],
     ],
   },
+  {
+    slug: "video-walkthrough-behind-login",
+    label: "Recording behind a login",
+    title: "Record a Narrated Video Walkthrough Behind a Login",
+    h1: "Recording behind a login",
+    description: "How Walkcast signs in, records the pages behind authentication, and how credentials are kept out of the artifacts.",
+    audience: "Anyone recording an app, admin panel or staging site that requires authentication.",
+    intro: ["Most walkthroughs start at a login. If the tool can't authenticate, it can't reach the pages that matter.", "Walkcast signs in during the recording, records the authenticated session, and never saves the password in the trace."],
+    steps: [
+      ["Prepare a test account", "Use a dedicated demo or editor account with the permissions a viewer should see."],
+      ["Start the recording", "Paste the URL, enter username and password when prompted, then recording begins after login."],
+      ["Verify coverage", "Check the page list for protected routes and revisit any that need fresh interactions."],
+    ],
+    settings: [
+      ["Redact credentials", "Secrets longer than 3 characters are scrubbed from traces, captions and logs."],
+      ["Separate worker", "For multi-user hosting, seal credentials with LAB_SECRET_KEY rather than a per-process key."],
+    ],
+    afterwards: ["Share the link or revoke it.", "Spot-check the transcript for sensitive text."],
+    pitfalls: [
+      "Recording with an admin account exposes menus real users never see.",
+      "Pasting a password in a bug report or fixture leaks it.",
+    ],
+    faq: [
+      ["Are credentials stored?", "Site passwords are sealed with AES-GCM and cleared when the job ends."],
+      ["Can it pass 2FA?", "No. CAPTCHA and two-factor prompts are respected, not bypassed."],
+    ],
+  },
 ];
 
 export function guideBySlug(slug: string): Guide | undefined {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "./data.ts";
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../app/faults.ts";
@@ -206,7 +206,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
         await auth.startSession(res, r.user);
         return json(201, { user: publicUser(r.user), next });
       }
-      const created = await auth.signUp(String(b.email ?? ""), String(b.password ?? ""), name);
+      const created = await auth.signUp(String(b.email ?? ""), String(b.password ?? ""), name, clientIp(req));
       await auth.startSession(res, created);
       return json(201, { user: publicUser(created), next });
     }
@@ -347,7 +347,8 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       }
       const abs = data.safe(rel);
       const type = abs ? TYPES[extname(abs).toLowerCase()] : undefined;
-      if (!abs || !type || !existsSync(abs) || rel.startsWith("recordings")) return json(404, { error: "not found" });
+      const inRecordings = !!abs && (abs === join(data.root, "recordings") || abs.startsWith(join(data.root, "recordings") + sep));
+      if (!abs || !type || !existsSync(abs) || inRecordings) return json(404, { error: "not found" });
       return streamFile(req, res, abs, type, "private, max-age=3600");
     }
     if (url.pathname === "/app" || url.pathname === "/app/") return send(200, "text/html; charset=utf-8", html);
@@ -462,7 +463,14 @@ function clientIp(req: IncomingMessage): string {
 
 /** Serve a file with byte-range support, so video players can seek. */
 function streamFile(req: IncomingMessage, res: ServerResponse, abs: string, type: string, cache: string): void {
-  const size = statSync(abs).size;
+  let size: number;
+  try {
+    const st = statSync(abs);
+    if (!st.isFile()) { res.writeHead(404); res.end(); return; }
+    size = st.size;
+  } catch {
+    res.writeHead(404); res.end(); return;
+  }
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
   if (range && (range[1] || range[2])) {
     const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
@@ -473,11 +481,13 @@ function streamFile(req: IncomingMessage, res: ServerResponse, abs: string, type
       return;
     }
     res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Cache-Control": cache });
-    createReadStream(abs, { start, end }).pipe(res);
+    const s = createReadStream(abs, { start, end }).on("error", () => { if (!res.headersSent) { res.writeHead(500); } res.end(); });
+    s.pipe(res);
     return;
   }
   res.writeHead(200, { "Content-Type": type, "Cache-Control": cache, "Accept-Ranges": "bytes", "Content-Length": size });
-  createReadStream(abs).pipe(res);
+  const s = createReadStream(abs).on("error", () => { if (!res.headersSent) { res.writeHead(500); } res.end(); });
+  s.pipe(res);
 }
 
 export interface ExportOptions {

@@ -2,6 +2,9 @@
   "name": "walkcast",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "walkcast": "bin/walkcast.mjs"
+  },
   "description": "Turn browser-agent failures into classified, reproducible regression fixtures.",
   "type": "module",
   "license": "MIT",
@@ -10,13 +13,17 @@
   },
   "scripts": {
     "lab": "tsx src/cli.ts",
-    "app": "tsx src/app/main.ts",
+    "app": "node --import tsx src/cli.ts app",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit && tsc -p dashboard --noEmit",
     "experiment": "tsx src/cli.ts experiment",
     "ui:build": "vite build --config dashboard/vite.config.ts",
     "ui:dev": "vite --config dashboard/vite.config.ts",
-    "ui": "npm run ui:build && tsx src/cli.ts ui"
+    "ui": "npm run ui:build && tsx src/cli.ts ui",
+    "cli": "node --import tsx src/cli.ts",
+    "doctor": "node --import tsx src/cli.ts doctor",
+    "walkcast": "node bin/walkcast.mjs",
+    "qa": "npm run typecheck && npm run ui:build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",

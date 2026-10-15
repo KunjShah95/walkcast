@@ -35,7 +35,7 @@ export class LocalMedia implements MediaStore {
   constructor(readonly dir: string) {}
   async publish(): Promise<void> {}
   async locate(id: string, file: string) {
-    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file)) return null;
+    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file) || id === "." || id === ".." || file === "." || file === ".." || id.includes("..") || file.includes("..")) return null;
     const path = join(this.dir, id, file);
     return existsSync(path) ? { path } : null;
   }
@@ -72,7 +72,7 @@ export class S3Media implements MediaStore {
   }
 
   async locate(id: string, file: string) {
-    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file)) return null;
+    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file) || id === "." || id === ".." || file === "." || file === ".." || id.includes("..") || file.includes("..")) return null;
     // Short-lived: long enough to watch a recording, short enough that a leaked link expires.
     return { redirect: presignGet(await this.config(), this.key(id, file), 15 * 60) };
   }
