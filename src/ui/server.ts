@@ -12,7 +12,8 @@ import { runOnce } from "../lab/runner.ts";
 import { configuredProviders } from "../llm/providers.ts";
 import { recordSite } from "../record/site.ts";
 import { Auth, AuthError, defaultAuthFile, publicUser, safeNext } from "../site/auth.ts";
-import { FAVICON, assetPath, authPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../site/pages.ts";
+import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../site/pages.ts";
+import { guideBySlug } from "../site/guides.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "dashboard", "dist", "index.html");
 const TYPES: Record<string, string> = {
@@ -93,6 +94,11 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     try {
       // ---------------------------------------------------------------- public site
       if (url.pathname === "/" && req.method === "GET") return send(200, "text/html; charset=utf-8", landingPage(siteUrl, user));
+      if (url.pathname === "/guides" || url.pathname === "/guides/") return send(200, "text/html; charset=utf-8", guidesIndexPage(siteUrl, user));
+      if (url.pathname.startsWith("/guides/")) {
+        const guide = guideBySlug(url.pathname.slice("/guides/".length).replace(/\/$/, ""));
+        if (guide) return send(200, "text/html; charset=utf-8", guidePage(siteUrl, guide, user));
+      }
       if (url.pathname === "/robots.txt") return send(200, "text/plain; charset=utf-8", robotsTxt(siteUrl), "max-age=3600");
       if (url.pathname === "/sitemap.xml") return send(200, "application/xml; charset=utf-8", sitemapXml(siteUrl), "max-age=3600");
       if (url.pathname === "/llms.txt") return send(200, "text/plain; charset=utf-8", llmsTxt(siteUrl), "max-age=3600");

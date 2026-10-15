@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { GUIDES, GUIDES_UPDATED, type Guide } from "./guides.ts";
 
 /**
  * The public site: a server-rendered landing page (full content in the HTML, no client
@@ -151,7 +152,20 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:var(--ink-3);f
 @media (max-width:900px){.stage{grid-template-columns:1fr}.transcript{border-left:0;border-top:1px solid var(--line)}.transcript ol{max-height:260px}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:680px){.hero{padding-top:44px}.urlform{flex-direction:column}.urlform .btn{width:100%}.steps,.grid2,.checks{grid-template-columns:1fr}header nav a.hide-sm{display:none}}
 @media (prefers-reduced-motion:no-preference){.hero h1,.hero .lede,.urlform{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}.hero .lede{animation-delay:.08s}.urlform{animation-delay:.16s}@keyframes rise{from{opacity:0;transform:translateY(10px)}}}
-:focus-visible{outline:2px solid var(--signal);outline-offset:2px}`;
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.crumbs{font:13px var(--mono);color:var(--ink-3);margin:36px 0 18px}.crumbs a{color:var(--ink-2);text-decoration:none}.crumbs a:hover{text-decoration:underline}
+.article{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:56px;padding-bottom:64px}
+.article h1{font-size:clamp(36px,5vw,58px);max-width:20ch}.article .lede{font-size:19px;color:var(--ink-2);margin:18px 0 8px;max-width:62ch}
+.prose{max-width:68ch}.prose h2{font-size:30px;margin:44px 0 12px}.prose p,.prose li{color:var(--ink-2);font-size:17px}.prose li{margin:6px 0}.prose strong{color:var(--ink)}
+.prose ol.howto{list-style:none;padding:0;counter-reset:h}.prose ol.howto li{counter-increment:h;position:relative;padding:14px 0 14px 52px;border-top:1px solid var(--line);margin:0}
+.prose ol.howto li::before{content:counter(h);position:absolute;left:0;top:14px;width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--paper);font:600 15px/32px var(--display);text-align:center}
+.prose table{border-collapse:collapse;width:100%;font-size:15px}.prose td,.prose th{border-top:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}.prose th{font:500 12px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);width:9rem}
+.meta{font:13px var(--mono);color:var(--ink-3)}
+.side{position:sticky;top:84px;align-self:start;display:grid;gap:16px}.side ul{list-style:none;padding:0;margin:8px 0 0}.side li a{display:block;padding:6px 0;text-decoration:none;color:var(--ink-2);font-size:14.5px}.side li a:hover,.side li a[aria-current]{color:var(--ink)}
+.guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:32px}
+a.card{text-decoration:none;display:block;transition:border-color .15s}a.card:hover{border-color:var(--signal)}a.card .more{font:500 13px var(--mono);color:var(--signal);margin-top:14px;display:block}
+@media (max-width:900px){.article{grid-template-columns:1fr}.side{position:static}.guide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:680px){.guide-grid{grid-template-columns:1fr}}`;
 
 const MARK = `<svg width="28" height="28" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="6" fill="currentColor"/><path d="M4 15h4l2-6 3 10 2-7 2 3h5" fill="none" stroke="var(--paper)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="15" cy="12" r="2.4" fill="#ffe57a" stroke="#13232b" stroke-width=".8"/></svg>`;
 
@@ -159,7 +173,7 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
   const url = `${o.siteUrl}${o.path}`;
   const nav = o.user
     ? `<a href="/app#record" class="btn small">Open the app</a>`
-    : `<a href="/#how" class="hide-sm">How it works</a><a href="/#faq" class="hide-sm">FAQ</a><a href="/login">Sign in</a><a href="/signup" class="btn small">Get started</a>`;
+    : `<a href="/guides" class="hide-sm">Guides</a><a href="/#faq" class="hide-sm">FAQ</a><a href="/login">Sign in</a><a href="/signup" class="btn small">Get started</a>`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -194,7 +208,7 @@ ${o.head ?? ""}
 <a href="#main" class="eyebrow" style="position:absolute;left:-9999px">Skip to content</a>
 <header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${NAME} home">${MARK}<span>${NAME}</span></a><nav aria-label="Main">${nav}</nav></div></header>
 <main id="main">${o.body}</main>
-<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · MIT licensed</span><span><a href="/llms.txt">llms.txt</a> · <a href="/sitemap.xml">Sitemap</a> · <a href="/app">Dashboard</a></span></div></footer>
+<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · MIT licensed</span><span><a href="/guides">Guides</a> · <a href="/llms.txt">llms.txt</a> · <a href="/sitemap.xml">Sitemap</a> · <a href="/app">Dashboard</a></span></div></footer>
 </body>
 </html>`;
 }
@@ -334,6 +348,13 @@ export function landingPage(siteUrl: string, user: { email: string } | null): st
   </div>
 </div></section>
 
+<section class="band" id="guides"><div class="wrap">
+  <p class="eyebrow">Guides</p>
+  <h2>What people make walkthroughs for</h2>
+  <p class="intro">Practical guides for each use case: what to show, how many pages, which account to use and where to put the video afterwards.</p>
+  <div class="guide-grid">${GUIDES.map(guideCard).join("")}</div>
+</div></section>
+
 <section class="band" id="faq"><div class="wrap">
   <p class="eyebrow">Questions</p>
   <h2>Frequently asked questions</h2>
@@ -394,6 +415,119 @@ fetch("/auth/${mode}",{method:"POST",headers:{"Content-Type":"application/json"}
   });
 }
 
+// --------------------------------------------------------------------------------- guides
+
+function guideCard(g: Guide): string {
+  return `<a class="card" href="/guides/${g.slug}"><h3>${esc(g.label)}</h3><p>${esc(g.description)}</p><span class="more">Read the guide →</span></a>`;
+}
+
+export function guidesIndexPage(siteUrl: string, user: { email: string } | null): string {
+  const title = "Website Video Walkthrough Guides by Use Case | Walkcast";
+  const description = "Guides to making narrated website walkthrough videos for product demos, onboarding, client handovers, QA evidence, help centers and internal training.";
+  const head = jsonLd({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${siteUrl}/guides#page`,
+        url: `${siteUrl}/guides`,
+        name: "Website video walkthrough guides",
+        description,
+        hasPart: GUIDES.map((g) => ({ "@type": "Article", headline: g.h1, url: `${siteUrl}/guides/${g.slug}` })),
+      },
+      breadcrumbs(siteUrl, [["Guides", "/guides"]]),
+    ],
+  });
+  const body = `
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Guides</nav>
+  <p class="eyebrow">Guides</p>
+  <h1 style="font-size:clamp(36px,5vw,58px);max-width:18ch">Website video walkthroughs, by use case</h1>
+  <p class="lede" style="font-size:19px;color:var(--ink-2);max-width:62ch">${esc(description)}</p>
+  <div class="guide-grid" style="margin-bottom:72px">${GUIDES.map(guideCard).join("")}</div>
+</div>`;
+  return layout({ siteUrl, path: "/guides", title, description, body, head, user });
+}
+
+export function guidePage(siteUrl: string, g: Guide, user: { email: string } | null): string {
+  const url = `${siteUrl}/guides/${g.slug}`;
+  const head = jsonLd({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        "@id": `${url}#article`,
+        headline: g.h1,
+        description: g.description,
+        url,
+        mainEntityOfPage: url,
+        datePublished: GUIDES_UPDATED,
+        dateModified: GUIDES_UPDATED,
+        image: `${siteUrl}/assets/og.png`,
+        author: { "@type": "Organization", name: NAME, url: `${siteUrl}/` },
+        publisher: { "@type": "Organization", name: NAME, url: `${siteUrl}/`, logo: { "@type": "ImageObject", url: `${siteUrl}/favicon.svg` } },
+        about: g.label,
+        audience: { "@type": "Audience", audienceType: g.audience },
+      },
+      {
+        "@type": "HowTo",
+        "@id": `${url}#howto`,
+        name: g.h1,
+        description: g.description,
+        tool: [{ "@type": "HowToTool", name: NAME }],
+        step: g.steps.map(([name, text], i) => ({ "@type": "HowToStep", position: i + 1, name, text, url: `${url}#step-${i + 1}` })),
+      },
+      { "@type": "FAQPage", "@id": `${url}#faq`, mainEntity: g.faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
+      breadcrumbs(siteUrl, [["Guides", "/guides"], [g.label, `/guides/${g.slug}`]]),
+    ],
+  });
+  const others = GUIDES.filter((o) => o.slug !== g.slug);
+  const body = `
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/guides">Guides</a> / ${esc(g.label)}</nav>
+  <div class="article">
+    <article class="prose">
+      <p class="eyebrow">Guide · ${esc(g.label)}</p>
+      <h1>${esc(g.h1)}</h1>
+      <p class="lede">${esc(g.description)}</p>
+      <p class="meta">For: ${esc(g.audience)} · Updated <time datetime="${GUIDES_UPDATED}">${GUIDES_UPDATED}</time></p>
+      ${g.intro.map((p) => `<p>${esc(p)}</p>`).join("")}
+      <h2>Step by step</h2>
+      <ol class="howto">${g.steps.map(([t, d], i) => `<li id="step-${i + 1}"><strong>${esc(t)}.</strong> ${esc(d)}</li>`).join("")}</ol>
+      <h2>Settings that work</h2>
+      <table><tbody>${g.settings.map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
+      <h2>After recording</h2>
+      <ul>${g.afterwards.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
+      <h2>Mistakes to avoid</h2>
+      <ul>${g.pitfalls.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
+      <h2>Questions</h2>
+      <div class="faq" style="margin-top:8px">${g.faq.map(([q, a]) => `<details open><summary><h3 style="font:inherit;margin:0">${esc(q)}</h3></summary><p>${esc(a)}</p></details>`).join("")}</div>
+      <div class="card" style="margin-top:40px">
+        <h3>Record one now</h3>
+        <p>Paste your site's link. You get a narrated MP4, captions and a transcript in about two minutes.</p>
+        <form class="urlform" action="/start" method="get" style="margin-top:14px;box-shadow:none">
+          <label for="guide-url" style="position:absolute;left:-9999px">Your website's link</label>
+          <input id="guide-url" name="url" type="url" inputmode="url" placeholder="https://your-app.com/login" required>
+          <button class="btn" type="submit">Make my walkthrough</button>
+        </form>
+      </div>
+    </article>
+    <aside class="side" aria-label="More guides">
+      <div class="card"><p class="eyebrow">Example</p><video controls playsinline preload="none" poster="/assets/demo-poster.jpg" style="margin-top:10px;border-radius:8px;width:100%"><source src="/assets/demo.mp4" type="video/mp4"><source src="/assets/demo.webm" type="video/webm"><track kind="captions" src="/assets/demo.vtt" srclang="en" label="Narration" default></video><p style="margin-top:8px;font-size:13.5px">An unedited recording of a demo CRM.</p></div>
+      <div class="card"><p class="eyebrow">Other guides</p><ul>${others.map((o) => `<li><a href="/guides/${o.slug}">${esc(o.label)}</a></li>`).join("")}</ul></div>
+    </aside>
+  </div>
+</div>`;
+  return layout({ siteUrl, path: `/guides/${g.slug}`, title: g.title, description: g.description, body, head, user });
+}
+
+function breadcrumbs(siteUrl: string, trail: [string, string][]): unknown {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: [["Home", "/"] as [string, string], ...trail].map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: `${siteUrl}${path}` })),
+  };
+}
+
 // --------------------------------------------------------------------------------- crawler files
 
 /** Search engines and AI assistants are welcome on public pages; the app, API and auth are off-limits. */
@@ -423,6 +557,8 @@ export function sitemapXml(siteUrl: string): string {
       <video:family_friendly>yes</video:family_friendly>
     </video:video>
   </url>
+  <url><loc>${siteUrl}/guides</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+${GUIDES.map((g) => `  <url><loc>${siteUrl}/guides/${g.slug}</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>`).join("\n")}
   <url><loc>${siteUrl}/signup</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>${siteUrl}/llms.txt</loc><changefreq>weekly</changefreq><priority>0.3</priority></url>
 </urlset>
@@ -457,6 +593,8 @@ ${NAME} began as a lab for browser AI agents: it records an agent's run, diagnos
 ## Links
 
 - [Home](${siteUrl}/): what it does, an example walkthrough with transcript, FAQ
+- [Guides by use case](${siteUrl}/guides)
+${GUIDES.map((g) => `- [${g.label}](${siteUrl}/guides/${g.slug}): ${g.description}`).join("\n")}
 - [Create an account](${siteUrl}/signup): sign up with Google or email and password
 - [Example video](${siteUrl}/assets/demo.mp4): an unedited narrated walkthrough of a demo CRM
 - [Example captions](${siteUrl}/assets/demo.vtt)

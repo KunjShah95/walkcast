@@ -137,3 +137,26 @@ test("an exposed server refuses private and loopback targets", async () => {
   }
   assert.equal(await privateTarget("http://93.184.215.14/", true), null);
 });
+
+test("guides: unique titles and descriptions, valid structured data, all in the sitemap", async () => {
+  const { GUIDES } = await import("../src/site/guides.ts");
+  const { guidePage, guidesIndexPage } = await import("../src/site/pages.ts");
+  assert.ok(GUIDES.length >= 6);
+  for (const key of ["slug", "title", "h1", "description"] as const) {
+    assert.equal(new Set(GUIDES.map((g) => g[key])).size, GUIDES.length, `${key} must be unique`);
+  }
+  const sitemap = sitemapXml("https://lab.example");
+  for (const g of GUIDES) {
+    assert.ok(g.title.length <= 70, `title short enough for search results: ${g.title}`);
+    assert.ok(g.description.length >= 110 && g.description.length <= 200, `description length: ${g.slug}`);
+    assert.ok(sitemap.includes(`<loc>https://lab.example/guides/${g.slug}</loc>`));
+    const html = guidePage("https://lab.example", g, null);
+    assert.equal((html.match(/<h1/g) ?? []).length, 1);
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]!);
+    assert.deepEqual(ld["@graph"].map((n: { "@type": string }) => n["@type"]), ["Article", "HowTo", "FAQPage", "BreadcrumbList"]);
+    // Every other guide is linked from this one.
+    for (const o of GUIDES) if (o.slug !== g.slug) assert.ok(html.includes(`href="/guides/${o.slug}"`));
+  }
+  assert.ok(guidesIndexPage("https://lab.example", null).includes("CollectionPage"));
+  assert.ok(landingPage("https://lab.example", null).includes(`href="/guides/${GUIDES[0]!.slug}"`));
+});
