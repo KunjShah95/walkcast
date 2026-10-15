@@ -76,6 +76,9 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
   const task: TaskId = options.task ?? "create-lead";
   const state: AppState = { leads: (options.seedLeads ?? []).map((l) => ({ ...l, createdAt: 0 })), ledger: [] };
   const sessions = new Map<string, Session>();
+  // session-expiry fires once per app: any later sign-in (from the "expired" page or a plain
+  // /login) gets a session that stays valid, so the fault is recoverable however the agent re-auths.
+  let expiredOnce = false;
   const timings = {
     ownersRefreshMs: seededInt(seed, 300, 1200),
     submitDelayMs: seededInt(seed + 1, 1000, 3000),
@@ -103,7 +106,7 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
         return send(res, 401, loginPage(body.next ?? "/leads", false, "Invalid username or password"));
       }
       const sid = randomUUID();
-      const hadExpired = body.expired === "1";
+      const hadExpired = body.expired === "1" || expiredOnce;
       sessions.set(sid, { createdAt: Date.now(), formServed: false, listServed: false, timedOut: new Set(), reauthenticated: hadExpired });
       return redirect(res, safeNext(body.next), { "Set-Cookie": `sid=${sid}; HttpOnly; Path=/; SameSite=Lax` });
     }
@@ -137,6 +140,7 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
       const body = await readForm(req);
       if (active.has("session-expiry") && session.formServed && !session.reauthenticated) {
         sessions.delete(sid);
+        expiredOnce = true;
         recordRejected(req, path, body, "rejected-auth");
         return redirect(res, `/login?next=${encodeURIComponent("/leads/new")}&expired=1`);
       }
@@ -173,6 +177,7 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
       if (!lead) return send(res, 404, page("Not found", `<p>Lead not found</p>`));
       if (active.has("session-expiry") && session.formServed && !session.reauthenticated) {
         sessions.delete(sid);
+        expiredOnce = true;
         recordRejected(req, path, body, "rejected-auth");
         return redirect(res, `/login?next=${encodeURIComponent(`/leads/${lead.id}/edit`)}&expired=1`);
       }
@@ -193,6 +198,7 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
       if (!lead) return send(res, 404, page("Not found", `<p>Lead not found</p>`));
       if (task === "lookup-owner" && active.has("session-expiry") && session.listServed && !session.reauthenticated) {
         sessions.delete(sid);
+        expiredOnce = true;
         return redirect(res, `/login?next=${encodeURIComponent(path)}&expired=1`);
       }
       if (task === "lookup-owner" && active.has("gateway-timeout") && !session.timedOut.has(lead.id)) {

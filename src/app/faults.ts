@@ -14,7 +14,7 @@ export const FAULTS = {
   },
   "gateway-timeout": {
     description:
-      "POST /leads commits, then responds 504 Gateway Timeout after a seeded 1-3 s delay (the gateway gives up while the backend succeeds). Retrying without checking creates a duplicate.",
+      "The write commits, then the response is a 504 Gateway Timeout after a seeded 1-3 s delay (the gateway gives up while the backend succeeds). Applies to creating a lead (POST /leads), saving an edit (POST /leads/:id) and, for lookups, the first read of each lead. Retrying a write without checking creates a duplicate.",
     taskPossible: true,
   },
   "silent-owner-drop": {
@@ -24,7 +24,7 @@ export const FAULTS = {
   },
   "session-expiry": {
     description:
-      "The session expires after the new-lead form is served. The POST is rejected with a redirect to /login; nothing is saved until the agent re-authenticates and resubmits.",
+      "The session expires once, after the form (or, for lookups, the list) is served: the next write or read is redirected to /login and nothing is saved. Any later sign-in stays valid, so an agent that re-authenticates and redoes the step succeeds.",
     taskPossible: true,
   },
   "ui-drift": {

@@ -6,6 +6,7 @@ import { type Scenario, describeScenario } from "../app/faults.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
+import { scrub } from "../capture/secrets.ts";
 import { causes, symptoms, type FindingLabel } from "./classifier.ts";
 import { runOnce, type RunResult } from "./runner.ts";
 import type { Task } from "./task.ts";
@@ -109,7 +110,7 @@ export async function writeFixture(result: RunResult, task: Task, fixturesDir: s
       ],
     },
   };
-  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(scrub(manifest), null, 2));
   copyFileSync(join(result.runDir, "trace.jsonl"), join(dir, "original-trace.jsonl"));
   copyFileSync(join(result.runDir, "report.md"), join(dir, "original-report.md"));
   if (result.model) copyFileSync(join(result.runDir, "model-calls.jsonl"), join(dir, "model-calls.jsonl"));

@@ -101,16 +101,6 @@ async function createLead(tools: BrowserTools, task: CreateLeadTask, config: Age
   const think = () => tools.page.waitForTimeout(config.thinkMs);
   const { contact, company, owner } = task.params;
 
-  const login = async (): Promise<void> => {
-    const obs = await tools.observe();
-    await tools.fill(byName(obs, "Username"), CREDENTIALS.username, obs);
-    await tools.fill(byName(obs, "Password"), CREDENTIALS.password, obs);
-    const before = tools.page.url();
-    await tools.click(byName(obs, "Sign in"), obs);
-    await tools.waitForNavigation(before, 5000).catch(() => undefined);
-  };
-
-  const onLoginPage = () => new URL(tools.page.url()).pathname === "/login";
   const leadExists = async (): Promise<number | undefined> => {
     const html = await tools.fetchText("/leads");
     const match = html.match(new RegExp(`<a href="/leads/(\\d+)">\\d+</a></td><td>${escapeRe(contact)}</td><td>${escapeRe(company)}</td>`));
@@ -154,7 +144,7 @@ async function createLead(tools: BrowserTools, task: CreateLeadTask, config: Age
 
   // ---- the task
   await tools.goto(task.startPath);
-  if (onLoginPage()) await login();
+  if (onLoginPage(tools)) await login(tools);
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     await fillForm();
@@ -183,12 +173,12 @@ async function createLead(tools: BrowserTools, task: CreateLeadTask, config: Age
       continue;
     }
 
-    if (onLoginPage()) {
+    if (onLoginPage(tools)) {
       if (config.onSessionLoss === "assume-saved") {
-        await login();
+        await login(tools);
         return tools.done(true, `Submitted the lead for ${company}; the session was refreshed afterwards.`);
       }
-      await login();
+      await login(tools);
       const existing = config.readBackBeforeRetry ? await leadExists() : undefined;
       if (existing) {
         await tools.goto(`/leads/${existing}`);

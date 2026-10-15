@@ -100,7 +100,8 @@ const { positionals, values } = parseArgs({
     "i-am-authorized": { type: "boolean", default: false },
     "pace-ms": { type: "string" },
     "against": { type: "string" },
-    fixtures: { type: "string", default: "fixtures" },
+    // New failures go to runs/_fixtures; pass --fixtures fixtures to add one to the committed CI gate.
+    fixtures: { type: "string", default: join("runs", "_fixtures") },
     out: { type: "string" },
     screenshots: { type: "boolean", default: false },
     video: { type: "boolean", default: false },
@@ -176,6 +177,7 @@ async function main(): Promise<number> {
             leads: result.appState?.leads ?? [],
             expectation: result.expectation,
             requestedValues: requestedValues(task),
+            agentError: result.agentError ?? null,
           });
           total++;
           if (JSON.stringify(result.diagnosis) !== before) {
@@ -270,6 +272,10 @@ async function main(): Promise<number> {
       });
       console.log(`${result.diagnosis.verdict.toUpperCase()}  symptoms=[${symptoms(result.diagnosis).join(", ")}] causes=[${causes(result.diagnosis).join(", ")}]`);
       console.log(`report: ${join(result.runDir, "report.md")}`);
+      if (result.agentError) {
+        console.log(`agent error: ${result.agentError}  (no fixture saved: this is a harness/infra failure, not agent behaviour)`);
+        return 1;
+      }
       if (result.diagnosis.verdict === "fail") {
         mkdirSync(values.fixtures!, { recursive: true });
         const fixture = await writeFixture(result, task, resolve(values.fixtures!));

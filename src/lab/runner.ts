@@ -121,21 +121,24 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     return stagehandSession(spec, gateway);
   }
   }
-  await session.context.addInitScript("window.__name = (fn) => fn;");
-  recorder.attach(session.context, session.page);
-  const tools = new BrowserTools(session.page, recorder, app.url);
-
   const started = Date.now();
   let agentError: string | null = null;
   try {
-    await session.run(tools, task);
-  } catch (error) {
-    agentError = error instanceof Error ? error.message.split("\n")[0]! : String(error);
-    if (!recorder.claim()) await tools.done(false, `Agent crashed: ${agentError}`);
+    await session.context.addInitScript("window.__name = (fn) => fn;");
+    recorder.attach(session.context, session.page);
+    const tools = new BrowserTools(session.page, recorder, app.url);
+    try {
+      await session.run(tools, task);
+    } catch (error) {
+      agentError = error instanceof Error ? error.message.split("\n")[0]! : String(error);
+      if (!recorder.claim()) await tools.done(false, `Agent crashed: ${agentError}`);
+    }
+  } finally {
+    // Always release the browser and the test app, whatever happened above.
+    await session.close().catch(() => undefined);
+    await app.close();
   }
   const durationMs = Date.now() - started;
-  await session.close();
-  await app.close();
 
   const claim = recorder.claim() ?? null;
   const oracle = evaluateOracle(task, app.state, claim ?? undefined);
@@ -147,6 +150,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     leads: app.state.leads,
     expectation,
     requestedValues: requestedValues(task),
+    agentError,
   });
 
   recorder.flush();
@@ -197,23 +201,51 @@ async function scriptedSession(spec: AgentSpec & { kind: "scripted" }, runDir: s
 async function stagehandSession(spec: AgentSpec & { kind: "stagehand" }, gateway: ModelGateway): Promise<Session> {
   const port = await freePort();
   const shBrowser = await localBrowser.launch({ headless: true, port, executablePath: chromePath(), viewport: { width: 1280, height: 800 } });
-  const pw = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-  const stagehand = await Stagehand.create({ browser: shBrowser, model: gateway.clientLLM(), logging: { level: "off" } });
+  let pw: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
+  let stagehand: Stagehand | undefined;
+  try {
+    pw = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    stagehand = await Stagehand.create({ browser: shBrowser, model: gateway.clientLLM(), logging: { level: "off" } });
+  } catch (error) {
+    // Don't leave Chrome running when setup fails half-way.
+    await stagehand?.close().catch(() => undefined);
+    await pw?.close().catch(() => undefined);
+    await shBrowser.close().catch(() => undefined);
+    throw error;
+  }
+  return attachStagehand(spec, gateway, shBrowser, pw, stagehand);
+}
+
+async function attachStagehand(
+  spec: AgentSpec & { kind: "stagehand" },
+  gateway: ModelGateway,
+  shBrowser: Awaited<ReturnType<typeof localBrowser.launch>>,
+  pw: Awaited<ReturnType<typeof chromium.connectOverCDP>>,
+  stagehand: Stagehand,
+): Promise<Session> {
+  const closeAll = async () => {
+    await stagehand.close().catch(() => undefined);
+    await pw.close().catch(() => undefined);
+    await shBrowser.close().catch(() => undefined);
+  };
+  let shPage: Awaited<ReturnType<typeof shBrowser.context.newPage>>;
+  let page: Page;
   const context = pw.contexts()[0]!;
-  const known = new Set(context.pages());
-  const pagePromise = context.waitForEvent("page", { predicate: (p) => !known.has(p), timeout: 10000 });
-  const shPage = await shBrowser.context.newPage();
-  const page = await pagePromise;
+  try {
+    const known = new Set(context.pages());
+    const pagePromise = context.waitForEvent("page", { predicate: (p) => !known.has(p), timeout: 10000 });
+    shPage = await shBrowser.context.newPage();
+    page = await pagePromise;
+  } catch (error) {
+    await closeAll();
+    throw error;
+  }
   return {
     context,
     page,
     browserVersion: pw.version(),
     run: (tools, task) => runStagehandAgent({ tools, stagehand, page: shPage, gateway }, task, spec),
-    close: async () => {
-      await stagehand.close().catch(() => undefined);
-      await pw.close().catch(() => undefined);
-      await shBrowser.close().catch(() => undefined);
-    },
+    close: closeAll,
   };
 }
 

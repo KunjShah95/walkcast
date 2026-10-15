@@ -26,8 +26,9 @@ export function defaultSelection(): ModelSelection {
 export function backendFor(spec: string): ModelBackend {
   const specs = spec.split(",").map((s) => s.trim()).filter(Boolean);
   if (specs.length === 0) throw new Error(`Empty model spec '${spec}'`);
-  // A single spec fails fast (e.g. missing key); chain members are built on first use, so a
-  // provider without credentials is just a failed link and the chain moves on.
+  // A single spec is built now (OpenAI-compatible providers reject a missing key here; Anthropic's
+  // SDK only fails on the first call). Chain members are built on first use, so a provider
+  // without credentials is just a failed link and the chain moves on.
   return specs.length === 1 ? single(specs[0]!) : new FallbackBackend(specs.map((s) => new LazyBackend(s)));
 }
 
@@ -101,8 +102,9 @@ export class RoutedBackend implements ModelBackend {
     this.name = agentBackend.name === stagehandBackend.name ? agentBackend.name : `agent=${agentBackend.name}; stagehand=${stagehandBackend.name}`;
   }
 
+  /** Which member of the agent channel's fallback chain answered last (if it is a chain). */
   get lastServed(): string | undefined {
-    return undefined;
+    return (this.agentBackend as Partial<FallbackBackend>).lastServed;
   }
 
   agent(request: AgentRequest): Promise<AgentResponse> {

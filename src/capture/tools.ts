@@ -248,7 +248,8 @@ export class BrowserTools {
       observedInStep: observation.stepId,
       observedName: observedLabel,
       nameAtAction: labelAtAction,
-      stale: labelAtAction !== observedLabel,
+      // A missing element or option is a locator problem, not a stale observation.
+      stale: labelAtAction !== null && labelAtAction !== observedLabel,
       observationAgeMs: this.recorder.now() - observation.at,
       fingerprintChanged: fp !== observation.fingerprint,
     };

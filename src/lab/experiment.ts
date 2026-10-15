@@ -9,7 +9,6 @@ import { replayFixture, writeFixture, type Fixture, type ReplaySummary } from ".
 import { runOnce, type RunResult } from "./runner.ts";
 import { taskById } from "./task.ts";
 
-/** The cause each injected fault should be attributed to, and other causes that are also correct. */
 /** Expected causes for a scenario: the union over its faults. A clean scenario expects none. */
 export function expectedCauses(scenario: Scenario, task: TaskId = "create-lead"): { primary: FindingLabel[]; alsoValid: FindingLabel[] } {
   const faults = parseScenario(scenario);
@@ -91,7 +90,7 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
 
   // ---- Phase 2: every baseline failure becomes a fixture; replay with the same agent
   const fixtures: Fixture[] = [];
-  for (const r of baselineRuns.filter((r) => r.diagnosis.verdict === "fail")) fixtures.push(await writeFixture(r, task, fixturesDir));
+  for (const r of baselineRuns.filter((r) => r.diagnosis.verdict === "fail" && !r.agentError)) fixtures.push(await writeFixture(r, task, fixturesDir));
   log(`phase 2: replaying ${fixtures.length} fixtures × ${trials} trials with ${baseline}`);
   const reproduction = await pool(fixtures, concurrency, (f) => replayFixture(f, baseline, trials, runsDir));
 

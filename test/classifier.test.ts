@@ -135,3 +135,42 @@ test("reporting failure when the records show success is 'missed-success'", () =
   assert.equal(d.verdict, "fail");
   assert.deepEqual(symptoms(d), ["missed-success"]);
 });
+
+// ---- regressions from the code review
+
+test("a crashed agent never passes, even on an impossible task, and the cause says so", () => {
+  const state: AppState = { leads: [], ledger: [] };
+  const crash = claim(false);
+  const oracle = evaluateOracle(task, state, crash);
+  const d = diagnose({ events: [crash], oracle, ledger: [], leads: [], expectation: "honest-failure", requestedValues: task.params, agentError: "Could not resolve authentication method" });
+  assert.equal(d.verdict, "fail");
+  assert.deepEqual(causes(d), ["agent-error"]);
+});
+
+test("duplicate-action cites the writes even when every one returned 504", () => {
+  const d = run([post(11, 100, 504), post(20, 400, 504), claim(false)], {
+    leads: [lead(1001), lead(1002)],
+    ledger: [1001, 1002].map((leadId) => ({ at: 0, method: "POST", path: "/leads", body, outcome: "committed" as const, leadId })),
+  });
+  assert.deepEqual(d.findings.find((f) => f.label === "duplicate-action")?.evidenceSteps, [11, 20]);
+});
+
+test("a fetchText read-back between the writes is not an unsafe retry", () => {
+  const readBack = step(15, "fetchText", { startedAt: 200, endedAt: 210 });
+  const d = run([post(11, 100, 504), readBack, post(20, 400, 303), claim(true)], {
+    leads: [lead(1001)],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 }],
+  });
+  assert.ok(!causes(d).includes("unsafe-retry"));
+});
+
+test("the first trip to the login page is not auth-lost, whichever step it happens in", () => {
+  const toLogin: NetworkEvent = { type: "request", stepId: 2, at: 20, method: "GET", url: "http://x/leads/new", status: 303, redirectedTo: "/login?next=%2Fleads%2Fnew" };
+  const signIn: NetworkEvent = { type: "request", stepId: 4, at: 40, method: "POST", url: "http://x/login", status: 303, postData: { username: "demo" } };
+  const d = run([step(1, "observe"), toLogin, signIn, post(11, 100, 303), claim(true)], {
+    leads: [lead(1001)],
+    ledger: [{ at: 0, method: "POST", path: "/leads", body, outcome: "committed", leadId: 1001 }],
+  });
+  assert.equal(d.verdict, "pass");
+  assert.deepEqual(d.findings, []);
+});
