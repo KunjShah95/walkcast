@@ -167,13 +167,13 @@ function Account() {
   );
 }
 
-/** The mark: a recorder trace with one highlighted fault. */
+/** The mark: a play button with a record light. */
 function Mark() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
-      <rect x="0.5" y="0.5" width="25" height="25" rx="6" fill="var(--ink)" />
-      <path d="M4 15h4l2-6 3 10 2-7 2 3h5" fill="none" stroke="var(--paper)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="15" cy="12" r="2.4" fill="var(--highlight)" stroke="var(--ink)" strokeWidth="0.8" />
+      <rect x="0.5" y="0.5" width="25" height="25" rx="7" fill="var(--ink)" />
+      <path d="M10 8.2v9.6l7.6-4.8z" fill="var(--paper)" />
+      <circle cx="20.2" cy="5.8" r="2.7" fill="var(--rec)" stroke="var(--ink)" strokeWidth="1" />
     </svg>
   );
 }

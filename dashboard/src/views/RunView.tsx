@@ -365,7 +365,9 @@ function StepCard({
   const shot = step.screenshot ? fileUrl(runDir, step.screenshot) : undefined;
   const instruction = typeof step.args.instruction === "string" ? step.args.instruction : null;
   const args = Object.entries(step.args).filter(([k]) => k !== "instruction");
-  const result = step.result as Record<string, unknown> | undefined;
+  // Step results are objects for most tools, but plain values for some (waitForNavigation returns
+  // the URL, readValue a string): only look inside objects.
+  const result = step.result !== null && typeof step.result === "object" ? (step.result as Record<string, unknown>) : undefined;
 
   return (
     <article

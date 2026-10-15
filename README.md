@@ -278,8 +278,10 @@ npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
 - **Fixtures** with copyable replay commands, and **Experiments** with detection, reproduction
   and the regression (pass^k) matrix.
 
-The look is an instrument report on engineering graph paper: highlighter for evidence, red only for
-failure, condensed display type, mono for data. Light and dark themes are both supported. Interaction
+The look is a screening room rather than graph paper: warm paper in light mode and a dim theatre
+in dark mode, a soft spotlight and faint film grain instead of a grid, Fraunces for headings,
+Geist for text and Geist Mono for timecodes and data. A red record light is the brand mark, the
+active transcript line looks like a subtitle, and red text still only ever means failure. Interaction
 patterns follow Aceternity UI's idioms (sticky-header timeline with scroll beam, bento overview,
 cursor spotlight cards), reimplemented here with Tailwind and Motion. Stack: Vite, React 19,
 Tailwind 4, Motion; built to a single file.

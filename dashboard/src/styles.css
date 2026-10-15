@@ -1,87 +1,93 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
-@import "@fontsource/ibm-plex-sans-condensed/500.css";
-@import "@fontsource/ibm-plex-sans-condensed/600.css";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/fraunces/wght-italic.css";
 
 /*
-  Layout: a forensic instrument report on engineering graph paper. Summary tiles first,
-  then the run as a time-ordered recording; evidence is marked with a highlighter.
-  Light = instrument paper, dark = oscilloscope.
+  Look: a screening room. Warm paper (light) or a dim theatre (dark), a soft spotlight and film
+  grain instead of a grid; Fraunces for headings, Geist for text, Geist Mono for timecodes and data.
+  Red is the record light; evidence is marked like a caption; red text still only means failure.
 */
 :root {
-  --paper: #f2f5f3;
-  --panel: #fbfcfb;
-  --panel-2: #eef2f0;
-  --grid: rgb(19 70 78 / 0.065);
-  --grid-major: rgb(19 70 78 / 0.11);
-  --ink: #13232b;
-  --ink-2: #566a70;
-  --ink-3: #8a9ba0;
-  --line: #d3dcd9;
-  --signal: #0e6b77;
-  --signal-soft: rgb(14 107 119 / 0.1);
-  --highlight: #ffe57a;
-  --highlight-ink: #3d3200;
-  --fail: #c2342c;
-  --fail-soft: rgb(194 52 44 / 0.09);
-  --pass: #2c7a4c;
-  --pass-soft: rgb(44 122 76 / 0.1);
-  --warn: #a26400;
-  --warn-soft: rgb(162 100 0 / 0.1);
-  --shadow: 0 1px 0 rgb(19 35 43 / 0.04), 0 8px 24px -16px rgb(19 35 43 / 0.25);
-  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --paper: #f7f3ec;
+  --panel: #fffdf9;
+  --panel-2: #f2ede4;
+  --ink: #1c1917;
+  --ink-2: #57534e;
+  --ink-3: #8a837a;
+  --line: #e7e0d4;
+  --signal: #3150c9;
+  --signal-soft: rgb(49 80 201 / 0.09);
+  --rec: #e5484d;
+  --ember: #c2410c;
+  --highlight: #ffe58a;
+  --highlight-ink: #3d3000;
+  --fail: #b42318;
+  --fail-soft: rgb(180 35 24 / 0.08);
+  --pass: #24713f;
+  --pass-soft: rgb(36 113 63 / 0.09);
+  --warn: #9a5b00;
+  --warn-soft: rgb(154 91 0 / 0.1);
+  --shadow: 0 1px 2px rgb(28 25 23 / 0.04), 0 12px 32px -18px rgb(28 25 23 / 0.28);
+  --spot: rgb(255 214 170 / 0.45);
+  --grain-opacity: 0.045;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-body: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #0c1413;
-    --panel: #111b19;
-    --panel-2: #16221f;
-    --grid: rgb(110 220 190 / 0.045);
-    --grid-major: rgb(110 220 190 / 0.085);
-    --ink: #dbe6e2;
-    --ink-2: #93a7a1;
-    --ink-3: #64776f;
-    --line: #22302c;
-    --signal: #62d0bd;
-    --signal-soft: rgb(98 208 189 / 0.12);
-    --highlight: rgb(244 207 92 / 0.2);
-    --highlight-ink: #f6d777;
-    --fail: #ff7b6f;
-    --fail-soft: rgb(255 123 111 / 0.12);
-    --pass: #71d29b;
-    --pass-soft: rgb(113 210 155 / 0.12);
-    --warn: #ecb34d;
-    --warn-soft: rgb(236 179 77 / 0.12);
-    --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.8);
+    --paper: #121110;
+    --panel: #1a1917;
+    --panel-2: #23211e;
+    --ink: #f3efe8;
+    --ink-2: #b6afa4;
+    --ink-3: #7f786e;
+    --line: #2f2c28;
+    --signal: #93a7ff;
+    --signal-soft: rgb(147 167 255 / 0.12);
+    --rec: #ff6369;
+    --ember: #ff8a5c;
+    --highlight: rgb(255 214 74 / 0.2);
+    --highlight-ink: #ffd84a;
+    --fail: #ff7b72;
+    --fail-soft: rgb(255 123 114 / 0.12);
+    --pass: #6fd39a;
+    --pass-soft: rgb(111 211 154 / 0.12);
+    --warn: #f2b84b;
+    --warn-soft: rgb(242 184 75 / 0.12);
+    --shadow: 0 1px 0 rgb(0 0 0 / 0.35), 0 16px 40px -20px rgb(0 0 0 / 0.85);
+    --spot: rgb(255 170 110 / 0.07);
+    --grain-opacity: 0.07;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --paper: #0c1413;
-  --panel: #111b19;
-  --panel-2: #16221f;
-  --grid: rgb(110 220 190 / 0.045);
-  --grid-major: rgb(110 220 190 / 0.085);
-  --ink: #dbe6e2;
-  --ink-2: #93a7a1;
-  --ink-3: #64776f;
-  --line: #22302c;
-  --signal: #62d0bd;
-  --signal-soft: rgb(98 208 189 / 0.12);
-  --highlight: rgb(244 207 92 / 0.2);
-  --highlight-ink: #f6d777;
-  --fail: #ff7b6f;
-  --fail-soft: rgb(255 123 111 / 0.12);
-  --pass: #71d29b;
-  --pass-soft: rgb(113 210 155 / 0.12);
-  --warn: #ecb34d;
-  --warn-soft: rgb(236 179 77 / 0.12);
-  --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.8);
+    --paper: #121110;
+  --panel: #1a1917;
+  --panel-2: #23211e;
+  --ink: #f3efe8;
+  --ink-2: #b6afa4;
+  --ink-3: #7f786e;
+  --line: #2f2c28;
+  --signal: #93a7ff;
+  --signal-soft: rgb(147 167 255 / 0.12);
+  --rec: #ff6369;
+  --ember: #ff8a5c;
+  --highlight: rgb(255 214 74 / 0.2);
+  --highlight-ink: #ffd84a;
+  --fail: #ff7b72;
+  --fail-soft: rgb(255 123 114 / 0.12);
+  --pass: #6fd39a;
+  --pass-soft: rgb(111 211 154 / 0.12);
+  --warn: #f2b84b;
+  --warn-soft: rgb(242 184 75 / 0.12);
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.35), 0 16px 40px -20px rgb(0 0 0 / 0.85);
+  --spot: rgb(255 170 110 / 0.07);
+  --grain-opacity: 0.07;
   color-scheme: dark;
 }
 
@@ -97,6 +103,8 @@
   --color-signal-soft: var(--signal-soft);
   --color-highlight: var(--highlight);
   --color-highlight-ink: var(--highlight-ink);
+  --color-rec: var(--rec);
+  --color-ember: var(--ember);
   --color-fail: var(--fail);
   --color-fail-soft: var(--fail-soft);
   --color-pass: var(--pass);
@@ -117,13 +125,9 @@ body,
 
 body {
   background-color: var(--paper);
-  /* engineering graph paper: 8px minor, 40px major */
-  background-image:
-    linear-gradient(var(--grid-major) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px;
+  /* a soft spotlight from above instead of a grid */
+  background-image: radial-gradient(1200px 520px at 50% -160px, var(--spot), transparent 70%);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 14px;
@@ -131,10 +135,30 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* film grain, very faint; fixed so it doesn't scroll with content */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 h1,
 h2,
 h3 {
   text-wrap: balance;
+}
+
+.font-display {
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
 }
 
 .tabular {
@@ -149,7 +173,7 @@ h3 {
   color: var(--ink-3);
 }
 
-/* highlighter mark for evidence */
+/* evidence is marked like a subtitle highlight */
 .evidence {
   background: linear-gradient(transparent 12%, var(--highlight) 12%, var(--highlight) 88%, transparent 88%);
   color: var(--highlight-ink);
