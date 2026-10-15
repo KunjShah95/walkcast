@@ -12,6 +12,7 @@ import { configuredProviders } from "../llm/providers.ts";
 import { createMedia, type MediaStore } from "../media/store.ts";
 import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
+import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
 import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, landingPage, llmsTxt, robotsTxt, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
 import { createStore, type Job, type Store } from "../store/index.ts";
@@ -82,7 +83,11 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   const store = o.store ?? createStore(root);
   const media = o.media ?? createMedia(root);
   const data = new LabData(root);
-  const auth = new Auth(store, siteUrl);
+  // Supabase Auth when SUPABASE_URL + SUPABASE_ANON_KEY are set; otherwise built-in accounts.
+  const supabaseCfg = supabaseAuthConfig();
+  const auth: Auth | SupabaseAuth = supabaseCfg ? new SupabaseAuth(store, siteUrl, supabaseCfg) : new Auth(store, siteUrl);
+  const authOptions = async () =>
+    auth.kind === "supabase" ? await auth.options() : { google: Boolean(auth.google), forgot: false, confirmEmail: false, signupDisabled: false };
   const html = dashboardHtml();
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
@@ -171,11 +176,19 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       if (!asset) return json(404, { error: "not found" });
       return streamFile(req, res, asset.path, asset.type, "public, max-age=86400");
     }
-    if (url.pathname === "/signup" || url.pathname === "/login") {
+    if (url.pathname === "/signup" || url.pathname === "/login" || url.pathname === "/forgot" || url.pathname === "/reset") {
+      const mode = url.pathname.slice(1) as "signup" | "login" | "forgot" | "reset";
+      if ((mode === "forgot" || mode === "reset") && auth.kind !== "supabase") return send(404, "text/plain; charset=utf-8", "Password reset needs Supabase Auth on this server.");
       const target = url.searchParams.get("url");
       const next = safeNext(url.searchParams.get("next") ?? (target ? `/app#record?url=${encodeURIComponent(target)}` : null));
-      if (user) return redirect(next);
-      return send(200, "text/html; charset=utf-8", authPage(siteUrl, url.pathname === "/signup" ? "signup" : "login", { google: Boolean(auth.google), next, ...(target ? { url: target } : {}) }));
+      if (user && mode !== "reset") return redirect(next);
+      const opts = await authOptions();
+      const notice = url.searchParams.get("notice") ?? undefined;
+      return send(
+        200,
+        "text/html; charset=utf-8",
+        authPage(siteUrl, mode, { google: opts.google, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
+      );
     }
     if (url.pathname === "/start") {
       const target = url.searchParams.get("url") ?? "";
@@ -185,22 +198,56 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     // ---------------------------------------------------------------- accounts
     if (url.pathname === "/auth/signup" && req.method === "POST") {
       const b = await readJson(req);
-      const created = await auth.signUp(String(b.email ?? ""), String(b.password ?? ""), typeof b.name === "string" ? b.name : undefined);
+      const next = safeNext(typeof b.next === "string" ? b.next : null);
+      const name = typeof b.name === "string" ? b.name : undefined;
+      if (auth.kind === "supabase") {
+        const r = await auth.signUp(res, String(b.email ?? ""), String(b.password ?? ""), name, clientIp(req), next);
+        if ("confirmEmail" in r) return json(200, { message: "Check your email: we sent you a link to confirm your address. Open it in this browser to finish signing up." });
+        await auth.startSession(res, r.user);
+        return json(201, { user: publicUser(r.user), next });
+      }
+      const created = await auth.signUp(String(b.email ?? ""), String(b.password ?? ""), name);
       await auth.startSession(res, created);
-      return json(201, { user: publicUser(created) });
+      return json(201, { user: publicUser(created), next });
     }
     if (url.pathname === "/auth/login" && req.method === "POST") {
       const b = await readJson(req);
       const found = await auth.signIn(String(b.email ?? ""), String(b.password ?? ""), clientIp(req));
       await auth.startSession(res, found);
-      return json(200, { user: publicUser(found) });
+      return json(200, { user: publicUser(found), next: safeNext(typeof b.next === "string" ? b.next : null) });
+    }
+    if (url.pathname === "/auth/forgot" && req.method === "POST" && auth.kind === "supabase") {
+      const b = await readJson(req);
+      await auth.forgot(res, String(b.email ?? ""), clientIp(req));
+      return json(200, { message: "If an account exists for that address, we've emailed a link to reset the password. Open it in this browser." });
+    }
+    if (url.pathname === "/auth/reset" && req.method === "POST" && auth.kind === "supabase") {
+      const b = await readJson(req);
+      const updated = await auth.resetPassword(req, res, String(b.password ?? ""));
+      await auth.startSession(res, updated);
+      return json(200, { user: publicUser(updated), next: "/app#record" });
     }
     if (url.pathname === "/auth/logout") {
       await auth.endSession(req, res);
       return redirect("/");
     }
-    if (url.pathname === "/auth/google") return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
-    if (url.pathname === "/auth/google/callback") {
+    if (url.pathname === "/auth/google") {
+      if (auth.kind === "supabase" && !(await auth.options()).google) throw new AuthError(503, "Google sign-in isn't turned on in this Supabase project.");
+      return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
+    }
+    // Supabase Auth sends the browser back here after Google, an email confirmation or a reset link.
+    if (url.pathname === "/auth/callback" && auth.kind === "supabase") {
+      try {
+        const r = await auth.callback(req, res, url);
+        if ("recovery" in r) return redirect("/reset");
+        await auth.startSession(res, r.user);
+        return redirect(safeNext(r.next));
+      } catch (e) {
+        if (!(e instanceof AuthError)) throw e;
+        return redirect(`/login?notice=${encodeURIComponent(e.message)}`);
+      }
+    }
+    if (url.pathname === "/auth/google/callback" && auth.kind === "local") {
       try {
         const { user: signedIn, next } = await auth.googleCallback(req, url);
         await auth.startSession(res, signedIn);
@@ -210,7 +257,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
         return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
       }
     }
-    if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: Boolean(auth.google), authRequired: requireAuth });
+    if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: (await authOptions()).google, provider: auth.kind, authRequired: requireAuth });
 
     // Everything below is the dashboard: its data (recordings of signed-in pages, traces) and its
     // actions need an account when accounts are on.
@@ -324,7 +371,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   await new Promise<void>((r) => server.listen(port, host, r));
   if (o.unref) server.unref();
   const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
-  log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: requireAuth });
+  log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: requireAuth ? auth.kind : "off" });
   return {
     url: address,
     store,

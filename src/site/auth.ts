@@ -16,15 +16,56 @@ const STATE_COOKIE = "lab_oauth_state";
 const SESSION_DAYS = 30;
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number; maxmem?: number }) => Promise<Buffer>;
 
-export class Auth {
+/**
+ * The app's own sessions, whoever verified the identity (the built-in password store or Supabase
+ * Auth): an opaque random cookie whose SHA-256 is stored, so sessions can be revoked instantly
+ * and nothing has to verify a JWT on every request.
+ */
+export class Sessions {
   constructor(
     readonly store: Store,
     readonly siteUrl: string,
-    readonly google = googleConfig(),
   ) {}
 
   get secure(): boolean {
     return this.siteUrl.startsWith("https://");
+  }
+
+  async startSession(res: ServerResponse, user: User): Promise<void> {
+    const token = randomBytes(32).toString("base64url");
+    await this.store.createSession(sha256(token), user.id, new Date(Date.now() + SESSION_DAYS * 86_400_000));
+    appendCookie(res, cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure));
+  }
+
+  async endSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const token = readCookie(req, COOKIE);
+    if (token) await this.store.deleteSession(sha256(token));
+    appendCookie(res, cookie(COOKIE, "", 0, this.secure));
+  }
+
+  async user(req: IncomingMessage): Promise<User | null> {
+    const token = readCookie(req, COOKIE);
+    if (!token || token.length > 100) return null;
+    return this.store.sessionUser(sha256(token));
+  }
+
+  /** Per address+account (so one shared proxy IP can't lock everyone out) and per address overall. */
+  protected async throttle(kind: string, ip: string, email: string): Promise<void> {
+    if ((await this.store.hit(`${kind}:${ip}|${email}`, 15 * 60_000)) > 10 || (await this.store.hit(`${kind}:${ip}`, 15 * 60_000)) > 50) {
+      throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
+    }
+  }
+}
+
+/** Built-in accounts: scrypt passwords in the store, and Google sign-in with our own OAuth client. */
+export class Auth extends Sessions {
+  readonly kind = "local" as const;
+  constructor(
+    store: Store,
+    siteUrl: string,
+    readonly google = googleConfig(),
+  ) {
+    super(store, siteUrl);
   }
 
   // ---------------------------------------------------------------- email + password
@@ -54,10 +95,7 @@ export class Auth {
 
   async signIn(emailRaw: string, password: string, ip: string): Promise<User> {
     const email = normalizeEmail(emailRaw) ?? "?";
-    // Per address+account (so one shared proxy IP can't lock everyone out) and per address overall.
-    if ((await this.store.hit(`login:${ip}|${email}`, 15 * 60_000)) > 10 || (await this.store.hit(`login:${ip}`, 15 * 60_000)) > 50) {
-      throw new AuthError(429, "Too many attempts. Try again in a few minutes.");
-    }
+    await this.throttle("login", ip, email);
     const user = await this.store.userByEmail(email);
     // Same work and same message whether or not the account exists.
     const ok = await verifyPassword(password, user?.password ?? (await dummyHash()));
@@ -135,26 +173,6 @@ export class Auth {
       throw e;
     }
   }
-
-  // ---------------------------------------------------------------- sessions
-
-  async startSession(res: ServerResponse, user: User): Promise<void> {
-    const token = randomBytes(32).toString("base64url");
-    await this.store.createSession(sha256(token), user.id, new Date(Date.now() + SESSION_DAYS * 86_400_000));
-    res.setHeader("Set-Cookie", [cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure)]);
-  }
-
-  async endSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const token = readCookie(req, COOKIE);
-    if (token) await this.store.deleteSession(sha256(token));
-    res.setHeader("Set-Cookie", cookie(COOKIE, "", 0, this.secure));
-  }
-
-  async user(req: IncomingMessage): Promise<User | null> {
-    const token = readCookie(req, COOKIE);
-    if (!token || token.length > 100) return null;
-    return this.store.sessionUser(sha256(token));
-  }
 }
 
 export class AuthError extends Error {
@@ -191,7 +209,7 @@ export function safeNext(next: string | null | undefined): string {
   }
 }
 
-function normalizeEmail(email: string): string | null {
+export function normalizeEmail(email: string): string | null {
   const e = email.trim().toLowerCase();
   return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 254 ? e : null;
 }
@@ -215,11 +233,18 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 let dummy: Promise<string> | undefined;
 const dummyHash = () => (dummy ??= hashPassword(randomBytes(12).toString("hex")));
 
-function sha256(s: string): string {
+export function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-function cookie(name: string, value: string, maxAge: number, secure: boolean): string {
+/** Add Set-Cookie headers without dropping ones already set on this response. */
+export function appendCookie(res: ServerResponse, ...cookies: string[]): void {
+  const existing = res.getHeader("Set-Cookie");
+  const list = existing === undefined ? [] : Array.isArray(existing) ? existing.map(String) : [String(existing)];
+  res.setHeader("Set-Cookie", [...list, ...cookies]);
+}
+
+export function cookie(name: string, value: string, maxAge: number, secure: boolean): string {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 

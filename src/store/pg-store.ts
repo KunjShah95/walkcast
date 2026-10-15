@@ -41,18 +41,22 @@ export class PgStore implements Store {
     const [r] = await this.sql`select * from users where google_sub = ${sub}`;
     return r ? toUser(r) : null;
   }
+  async userByAuthId(authId: string) {
+    const [r] = await this.sql`select * from users where auth_id = ${authId}`;
+    return r ? toUser(r) : null;
+  }
   async insertUser(u: User) {
     try {
-      await this.sql`insert into users (id, email, name, password_hash, google_sub, created_at)
-        values (${u.id}, ${u.email}, ${u.name ?? null}, ${u.password ?? null}, ${u.google ?? null}, ${u.createdAt})`;
+      await this.sql`insert into users (id, email, name, password_hash, google_sub, auth_id, created_at)
+        values (${u.id}, ${u.email}, ${u.name ?? null}, ${u.password ?? null}, ${u.google ?? null}, ${u.authId ?? null}, ${u.createdAt})`;
     } catch (e) {
       if ((e as { code?: string }).code === "23505") throw new DuplicateError("email taken");
       throw e;
     }
   }
   async updateUser(u: User) {
-    await this.sql`update users set email = ${u.email}, name = ${u.name ?? null}, password_hash = ${u.password ?? null}, google_sub = ${u.google ?? null}
-      where id = ${u.id}`;
+    await this.sql`update users set email = ${u.email}, name = ${u.name ?? null}, password_hash = ${u.password ?? null}, google_sub = ${u.google ?? null},
+      auth_id = ${u.authId ?? null} where id = ${u.id}`;
   }
 
   // ---------------------------------------------------------------- sessions
@@ -200,6 +204,7 @@ function toUser(r: Row): User {
     ...(r.name ? { name: String(r.name) } : {}),
     ...(r.password_hash ? { password: String(r.password_hash) } : {}),
     ...(r.google_sub ? { google: String(r.google_sub) } : {}),
+    ...(r.auth_id ? { authId: String(r.auth_id) } : {}),
     createdAt: iso(r.created_at)!,
   };
 }

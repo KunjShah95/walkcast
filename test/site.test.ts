@@ -17,6 +17,7 @@ function fakeRes() {
   let status = 0;
   const res = {
     setHeader: (k: string, v: unknown) => (headers[k.toLowerCase()] = v),
+    getHeader: (k: string) => headers[k.toLowerCase()],
     writeHead: (s: number, h: Record<string, unknown>) => {
       status = s;
       for (const [k, v] of Object.entries(h)) headers[k.toLowerCase()] = v;

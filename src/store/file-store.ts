@@ -51,9 +51,12 @@ export class FileStore implements Store {
   async userByGoogle(sub: string) {
     return this.data.users.find((u) => u.google === sub) ?? null;
   }
+  async userByAuthId(authId: string) {
+    return this.data.users.find((u) => u.authId === authId) ?? null;
+  }
   insertUser(user: User) {
     return this.write(() => {
-      if (this.data.users.some((u) => u.email.toLowerCase() === user.email.toLowerCase())) throw new DuplicateError("email taken");
+      if (this.data.users.some((u) => u.email.toLowerCase() === user.email.toLowerCase() || (user.authId && u.authId === user.authId))) throw new DuplicateError("email taken");
       this.data.users.push({ ...user });
     });
   }

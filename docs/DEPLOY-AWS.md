@@ -56,7 +56,14 @@ smoke-tests it, and the queue/store code is tested against Postgres 16.
    Every table has Row Level Security enabled with no policies, and the `anon` /
    `authenticated` roles have no privileges on them: the public Supabase APIs can't read users,
    sessions or jobs. Only the server, over the connection string, can.
-3. **Storage:** create a private bucket `recordings`. Under **Storage → S3 Connection**, create an
+3. **Auth:** Walkcast signs users in through Supabase Auth. Under **Authentication → URL
+   Configuration** set the Site URL to `https://your-domain` and add
+   `https://your-domain/auth/callback` to the Redirect URLs. Under **Authentication → Providers**,
+   enable Google (paste the OAuth client from Google Cloud; Google's redirect URI is the one
+   Supabase displays) and keep **Confirm email** on. Configure custom SMTP before launch:
+   Supabase's built-in mailer is rate-limited and meant for testing. Pass `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY` to the web service.
+4. **Storage:** create a private bucket `recordings`. Under **Storage → S3 Connection**, create an
    access key; note the region. Set `SUPABASE_URL`, `SUPABASE_S3_ACCESS_KEY_ID`,
    `SUPABASE_S3_SECRET_ACCESS_KEY`, `SUPABASE_S3_REGION` (and `SUPABASE_STORAGE_BUCKET` if not
    `recordings`). Media is served through 15-minute presigned links after an ownership check.
@@ -101,7 +108,7 @@ variables, with secrets from Secrets Manager:
 | `LAB_SECRET_KEY` | `openssl rand -base64 32`, the same on web and workers (secret). Seals site passwords in the queue; they are opened only by the worker and cleared when the job ends |
 | `LAB_SITE_URL` | `https://your-domain` (canonical URLs, OAuth redirect, `Secure` cookies) |
 | `LAB_TRUST_PROXY` | `1` (client IP from the ALB's `X-Forwarded-For`, for sign-in throttling) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional; redirect URI `https://your-domain/auth/google/callback` |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | sign-in through Supabase Auth (the anon/publishable key is public by design; it can't read the RLS-protected tables) |
 | Storage | the `SUPABASE_S3_*` or `MEDIA_S3_*` variables above |
 | Limits | `LAB_MAX_ACTIVE_JOBS` (1 per user), `LAB_RECORDINGS_PER_DAY` (20), `LAB_RUNS_PER_DAY` (100), `LAB_JOB_DEADLINE_MS` |
 

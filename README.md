@@ -37,7 +37,8 @@ Environment variables you may want (none are required to start):
 | `SUPABASE_URL`, `SUPABASE_S3_*` or `MEDIA_S3_*` | Recording media in Supabase Storage or S3 (default: `recordings/` on disk) |
 | `LAB_SECRET_KEY`, `LAB_WORKER=off` | Separate queue workers (see [Production](#production-supabase--aws)) |
 | `LAB_SITE_URL`, `LAB_HOST`, `LAB_TRUST_PROXY=1` | Hosting the web app (public URL, bind address, behind a reverse proxy) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google" |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Sign-in through Supabase Auth (email confirmation, password reset, Google set up in Supabase) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in for the built-in accounts (without Supabase Auth) |
 | `LAB_ALLOW_PRIVATE=1`, `LAB_ALLOW_LIVE_RUNS=1` | On a hosted server: allow recording private addresses / paid live-model runs |
 | `LAB_CHROME_PATH` | Chrome for Testing, for the Stagehand agents |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Live model runs (`npm run lab -- providers` lists them all) |
@@ -335,24 +336,45 @@ credentials are registered as secrets, so nothing on disk contains them.
 | Path | What |
 | --- | --- |
 | `/` | Server-rendered landing page: hero with a URL box, the real demo walkthrough with a clickable transcript, how it works, outputs, guardrails, the agent lab, FAQ |
-| `/signup`, `/login` | Accounts: **Continue with Google** or email + password |
+| `/signup`, `/login`, `/forgot`, `/reset` | Accounts: **Continue with Google** or email + password (Supabase Auth) |
 | `/app` | The dashboard (Overview, Fault replay, Record, Runs, Fixtures, Experiments, Compare) |
 | `/robots.txt`, `/sitemap.xml`, `/llms.txt` | Crawler files |
 
 Pasting a link on the landing page goes to `/start?url=…`: signed-in users land on the Record page
 with the link filled in; everyone else signs up first and is brought back to it.
 
-**Accounts** (`src/site/auth.ts`): passwords hashed with scrypt; sessions are random tokens in an
-`HttpOnly; SameSite=Lax` cookie (`Secure` on https) and only their SHA-256 is stored, in
-`.lab/users.json` (git-ignored); sign-in errors don't reveal whether an email exists; 10 attempts
-per 15 minutes per address; cross-site POSTs are refused. Starting runs or recordings needs a
-signed-in account (`LAB_AUTH=off` turns that off for local use); viewing does not.
+**Sign-in with Supabase Auth** (`src/site/supabase-auth.ts`), used whenever `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`) are set:
 
-**Google sign-in** uses the OAuth 2.0 authorization-code flow with a `state` cookie, and only
-accepts Google accounts with a verified email (an existing email account is linked). To enable
-it, create an OAuth client ("Web application") in Google Cloud Console, add the authorized
-redirect URI `<LAB_SITE_URL>/auth/google/callback`, then set `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET`. Until then the button is shown disabled with an explanation.
+- Supabase holds the passwords, confirms email addresses, sends password-reset mail and runs
+  Google sign-in. Walkcast calls Supabase Auth's REST API from the server; every redirect flow
+  (Google, email confirmation, password reset) uses PKCE, so a code is only usable in the browser
+  that started the flow.
+- Once Supabase vouches for a user, Walkcast starts its own session (a random `HttpOnly;
+  SameSite=Lax` cookie, `Secure` on https, only its SHA-256 stored) and signs the Supabase session
+  out: no Supabase tokens live in the browser, sessions are revocable at once, and nothing verifies
+  a JWT per request.
+- Pages: sign-up ("check your email" when confirmation is on), sign-in, **Forgot your password?**
+  and a set-new-password page. The Google button follows the project's provider settings.
+- Accounts made before the switch are linked on first Supabase sign-in by email and keep their
+  recordings, but only when the address is proven (the project confirms emails, or the user came
+  through Google). With "Confirm email" off, Supabase marks every address confirmed, so that
+  alone isn't trusted.
+- Setup in the Supabase dashboard: **Authentication → URL Configuration**: set Site URL to
+  `LAB_SITE_URL` and add `<LAB_SITE_URL>/auth/callback` to Redirect URLs. **Authentication →
+  Providers → Google**: paste your Google OAuth client id/secret (Google's authorized redirect URI
+  is the one Supabase shows there). Keep **Confirm email** on.
+
+**Built-in accounts** (`src/site/auth.ts`), used without Supabase (or with
+`LAB_AUTH_PROVIDER=local`): scrypt passwords in the store, and optional Google sign-in with your
+own OAuth client (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect URI
+`<LAB_SITE_URL>/auth/google/callback`). No email confirmation or password reset, so use these
+for local or private setups.
+
+Either way: sign-in errors don't reveal whether an email exists, attempts are throttled per
+address and account (shared across instances through the store), cross-site POSTs are refused,
+and the dashboard's data and actions need a signed-in account (`LAB_AUTH=off` turns that off for
+local use).
 
 **Hosting it**: set `LAB_SITE_URL=https://your-domain` (canonical URLs, sitemap, OAuth redirect)
 and `LAB_HOST=0.0.0.0`, and put it behind TLS. When the server is reachable from other machines,

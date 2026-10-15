@@ -13,6 +13,8 @@ export interface User {
   /** scrypt$N$salt$hash, absent for Google-only accounts. */
   password?: string;
   google?: string;
+  /** Supabase Auth user id (auth.users.id) when Supabase handles sign-in. */
+  authId?: string;
   createdAt: string;
 }
 
@@ -62,6 +64,7 @@ export interface Store {
   userByEmail(email: string): Promise<User | null>;
   userById(id: string): Promise<User | null>;
   userByGoogle(sub: string): Promise<User | null>;
+  userByAuthId(authId: string): Promise<User | null>;
   /** Throws DuplicateError when the email is taken (unique index; no check-then-insert race). */
   insertUser(user: User): Promise<void>;
   updateUser(user: User): Promise<void>;

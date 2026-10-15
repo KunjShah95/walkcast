@@ -38,6 +38,10 @@ for (const [name, open] of backends) {
         const u = await s.userByGoogle("g-1");
         assert.equal(u?.id, "u1");
         assert.equal(u?.password, undefined);
+        // Supabase Auth link (migration 2): look up by auth id, one account per auth id.
+        await s.insertUser({ id: "u3", email: "sb@example.com", authId: "11111111-2222-3333-4444-555555555555", createdAt: new Date().toISOString() });
+        assert.equal((await s.userByAuthId("11111111-2222-3333-4444-555555555555"))?.email, "sb@example.com");
+        await assert.rejects(s.insertUser({ id: "u4", email: "other@example.com", authId: "11111111-2222-3333-4444-555555555555", createdAt: new Date().toISOString() }));
       } finally {
         await s.close();
       }
