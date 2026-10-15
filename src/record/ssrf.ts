@@ -8,9 +8,11 @@ import type { BrowserContext } from "playwright";
  * network. Checked for the first URL and, through a request route, for every request the browser
  * makes afterwards (redirects, iframes, images, scripts).
  *
- * Limits: the browser resolves names itself, so a hostile DNS server that answers differently on
- * the second lookup (DNS rebinding) can still slip through; for a public deployment, also run the
- * recorder behind an egress proxy or firewall that blocks private ranges.
+ * Partial mitigation for DNS rebinding: allowed (public) lookups are never cached, so a hostname
+ * is re-resolved on every request (redirects, iframes, images, scripts) and a second lookup that
+ * returns a private address is caught the next time. Only negative results are briefly cached, so
+ * a blocked host stays fail-closed and cheap. For a public deployment, still also block private
+ * ranges at the network/egress layer; this code path alone cannot guarantee correctness.
  */
 const PRIVATE = new BlockList();
 for (const [net, prefix] of [
@@ -36,13 +38,26 @@ for (const [net, prefix] of [
 
 /** IPv4-mapped/compatible IPv6 (::ffff:127.0.0.1, ::ffff:7f00:1) as the IPv4 address it carries. */
 function unmap(address: string): string {
-  const m = /^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
-  if (m) return m[1]!;
-  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(address);
-  if (hex) {
-    const hi = Number.parseInt(hex[1]!, 16);
-    const lo = Number.parseInt(hex[2]!, 16);
-    return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  // dotted-quad embeddings with any known prefix
+  const dotted = /::(?:ffff(?::0)?:)?(\d+\.\d+\.\d+\.\d+)$/i.exec(address)
+              || /^64:ff9b::(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+  if (dotted) return dotted[1]!;
+  const toIp = (hi: string, lo: string) => {
+    const h = Number.parseInt(hi, 16);
+    const l = Number.parseInt(lo, 16);
+    return `${h >> 8}.${h & 255}.${l >> 8}.${l & 255}`;
+  };
+  // hex-pair embeddings: ::7f00:1, ::ffff:7f00:1, ::ffff:0:7f00:1, 64:ff9b::7f00:1, 64:ff9b::0:7f00:1
+  const prefixes: Array<[RegExp, (m: RegExpExecArray) => string]> = [
+    [/^::ffff:0:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i, (m) => toIp(m[1]!, m[2]!)],
+    [/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i, (m) => toIp(m[1]!, m[2]!)],
+    [/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i, (m) => toIp(m[1]!, m[2]!)],
+    [/^64:ff9b::0:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i, (m) => toIp(m[1]!, m[2]!)],
+    [/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i, (m) => toIp(m[1]!, m[2]!)],
+  ];
+  for (const [re, fn] of prefixes) {
+    const m = re.exec(address);
+    if (m) return fn(m);
   }
   return address;
 }
@@ -57,16 +72,31 @@ export function isPrivateAddress(address: string): boolean {
 
 const cache = new Map<string, { at: number; blocked: string | null }>();
 
+/**
+ * DNS rebinding mitigation: a name that returned a public address on the first lookup can
+ * return a private one on the second one. We never trust an "allowed" result across a cache
+ * window, so every request re-resolves, which is what `guardContext` relies on to keep a
+ * private address out even after a rebind. Only negative results (host resolves to a private
+ * or unresolvable address) are kept briefly, so a blocked host stays cheaply and fail-closed.
+ */
+const BLOCKED_TTL_MS = 60_000;
+
 /** Why `hostname` may not be visited (it is, or resolves to, a private address), or null. */
 export async function blockedHost(hostname: string): Promise<string | null> {
   const host = hostname.replace(/^\[|\]$/g, "");
   const hit = cache.get(host);
-  if (hit && Date.now() - hit.at < 60_000) return hit.blocked;
+  if (hit && hit.blocked !== null && Date.now() - hit.at < BLOCKED_TTL_MS) return hit.blocked;
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true, verbatim: true }).catch(() => [])).map((a) => a.address);
   const bad = addresses.length === 0 ? null : addresses.find(isPrivateAddress);
   const blocked = addresses.length === 0 ? `Could not resolve ${host}.` : bad ? `${host} resolves to a private or local address (${bad}).` : null;
-  cache.set(host, { at: Date.now(), blocked });
+  if (blocked !== null) cache.set(host, { at: Date.now(), blocked });
+  else cache.delete(host);
   return blocked;
+}
+
+/** Clear the blocked-host cache. Intended for tests (and forced re-validation). */
+export function clearBlockedHostCache(): void {
+  cache.clear();
 }
 
 /** Abort every browser request to a private or local address. Returns the list of blocked URLs. */
