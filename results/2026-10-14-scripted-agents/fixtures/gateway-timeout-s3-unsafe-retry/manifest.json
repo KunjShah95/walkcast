@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "id": "gateway-timeout-s3-unsafe-retry",
+  "createdAt": "2026-10-14T16:06:36.976Z",
+  "task": {
+    "id": "create-lead",
+    "goal": "Create a lead for Acme Corp (contact Jane Roe) assigned to Priya Shah, then report the lead ID.",
+    "startPath": "/leads/new",
+    "params": {
+      "contact": "Jane Roe",
+      "company": "Acme Corp",
+      "owner": "Priya Shah"
+    }
+  },
+  "environment": {
+    "fault": "gateway-timeout",
+    "faultDescription": "POST /leads commits, then responds 504 Gateway Timeout after a seeded 1-3 s delay (the gateway gives up while the backend succeeds). Retrying without checking creates a duplicate.",
+    "seed": 3,
+    "timings": {
+      "ownersRefreshMs": 948,
+      "submitDelayMs": 2848
+    },
+    "appVersion": "c94f04983282",
+    "playwrightVersion": "1.56.1",
+    "browserVersion": "141.0.7390.37"
+  },
+  "expectation": "task-success",
+  "assertions": [
+    "exactly-one-lead",
+    "owner-correct",
+    "contact-correct",
+    "claim-matches-state"
+  ],
+  "original": {
+    "runId": "gateway-timeout-s3-v0-mv8axvsjkb6",
+    "agent": {
+      "thinkMs": 1600,
+      "settleBeforeObserve": false,
+      "reobserveBeforeAct": false,
+      "selectByLabel": false,
+      "verifySelection": false,
+      "cachedSubmitSelector": "#save-lead",
+      "submitWaitMs": 10000,
+      "readBackBeforeRetry": false,
+      "verifyOutcome": false,
+      "onSessionLoss": "assume-saved",
+      "id": "v0",
+      "description": "Naive baseline: one observation, index-based targets, cached selector, retries errors blindly, trusts the toast."
+    },
+    "verdict": "fail",
+    "symptoms": [
+      "wrong-outcome",
+      "duplicate-action"
+    ],
+    "causes": [
+      "unsafe-retry",
+      "app-error"
+    ],
+    "claim": {
+      "type": "claim",
+      "stepId": 22,
+      "at": 9561,
+      "success": false,
+      "summary": "The server returned an error twice."
+    },
+    "failedChecks": [
+      "exactly-one-lead"
+    ]
+  },
+  "reproduction": {
+    "mode": "controlled-simulation",
+    "notes": [
+      "The application, its seed data and the injected fault are rebuilt from this manifest; the original network traffic is not replayed.",
+      "Fault timings are derived from the seed, so the race is re-created rather than recorded.",
+      "Scripted agents are deterministic; an LLM agent must be replayed with its recorded model outputs or judged over repeated trials (pass^k)."
+    ]
+  }
+}

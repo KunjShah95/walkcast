@@ -1,0 +1,9 @@
+node_modules
+dashboard/dist
+runs
+recordings
+results/*/runs
+.lab
+.git
+*.html
+docs/screenshots

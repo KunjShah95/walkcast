@@ -1,0 +1,9 @@
+node_modules/
+runs/
+results/*/runs/
+dashboard/dist/
+failure-lab.html
+walkcast.html
+recordings/
+.lab/
+.env

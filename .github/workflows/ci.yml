@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Postgres for the store/queue tests (the same SQL Supabase runs).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: walkcast
+          POSTGRES_PASSWORD: walkcast
+          POSTGRES_DB: walkcast_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U walkcast" --health-interval 2s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://walkcast:walkcast@127.0.0.1:5432/walkcast_test
+      LAB_LOG: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: ffmpeg with the flite voice (narration tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # Stagehand v4 loads its runtime as an extension over CDP, which needs a recent Chrome.
+      - name: Install Chrome for Testing
+        run: |
+          npx -y @puppeteer/browsers install chrome@stable --path "$HOME/cft" | tail -1 > cft.txt
+          echo "LAB_CHROME_PATH=$(awk '{print $2}' cft.txt)" >> "$GITHUB_ENV"
+      - run: npm run typecheck
+      - run: npm run ui:build
+      - run: npm test
+      - name: Migrations apply cleanly and are idempotent
+        env:
+          SUPABASE_DB_URL: ${{ env.TEST_DATABASE_URL }}
+        run: npm run lab -- db migrate && npm run lab -- db migrate
+
+  # The production image builds and its health check answers.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t walkcast:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --init --name wc -p 4320:4320 -e LAB_AUTH=off walkcast:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4320/healthz && break; sleep 2; done
+          curl -fsS http://127.0.0.1:4320/readyz
+          curl -fsS http://127.0.0.1:4320/ | grep -q "narrated video walkthrough"
+          docker stop -t 30 wc && docker logs wc | tail -5
+
+  # Release gate: every committed regression fixture must pass with the current agent.
+  regression-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Replay fixtures against the current agent (v1)
+        run: npm run lab -- compare fixtures --agents v1 --trials 3
+      - name: Export the dashboard for this run
+        if: always()
+        run: npm run ui:build && npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
+      - name: Upload dashboard and run reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walkcast
+          path: |
+            walkcast.html
+            runs/**/report.md
