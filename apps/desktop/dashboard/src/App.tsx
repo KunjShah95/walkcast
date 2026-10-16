@@ -290,11 +290,6 @@ function Sidebar({
             </ul>
           </div>
         ))}
-        <div className="mt-4 grid gap-0.5">
-          <a href="/guides" className="flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] text-ink-2 hover:bg-panel-2 hover:text-ink">
-            Guides
-          </a>
-        </div>
       </div>
 
       <div className="border-t border-line p-3">
