@@ -1,8 +1,14 @@
 name: ci
 
+# PRs are tested once (pull_request); pushes only for main, so a PR branch does not run twice.
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
