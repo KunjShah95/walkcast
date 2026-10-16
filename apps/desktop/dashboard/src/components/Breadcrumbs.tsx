@@ -26,8 +26,6 @@ function crumbsFor(route: Route): Crumb[] {
       return [LAB, { label: "Fixtures", current: true }];
     case "experiments":
       return [LAB, { label: "Experiments", current: true }];
-    case "audit":
-      return [LAB, { label: "Vibecode audit", current: true }];
     case "run": {
       const name = (route.dir.split("/").pop() ?? route.dir).replace(/^run-?/i, "");
       return [LAB, { label: "Runs", route: { view: "runs" } }, { label: name || "run", current: true }];

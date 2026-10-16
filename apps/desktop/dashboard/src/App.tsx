@@ -17,7 +17,6 @@ import { Simulator } from "./views/Simulator.tsx";
 import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
-import { Audit } from "./views/Audit.tsx";
 
 export type Route =
   | { view: "dashboard" }
@@ -28,7 +27,6 @@ export type Route =
   | { view: "runs" }
   | { view: "fixtures" }
   | { view: "experiments" }
-  | { view: "audit" }
   | { view: "run"; dir: string }
   | { view: "compare"; base: string; cand: string };
 
@@ -42,7 +40,7 @@ function parse(hash: string): Route {
   if (h.startsWith("library/")) return { view: "library", dir: decodeURIComponent(h.slice(8)) };
   if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
   if (h === "overview") return { view: "dashboard" };
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "audit" || h === "library" || h === "settings" || h === "dashboard")
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "library" || h === "settings" || h === "dashboard")
     return { view: h };
   return { view: "dashboard" };
 }
@@ -72,7 +70,6 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
       { view: "fixtures", label: "Fixtures", count: (i) => i.fixtures.length },
       { view: "experiments", label: "Experiments", count: (i) => i.experiments.length },
       { view: "simulator", label: "Fault replay" },
-      { view: "audit", label: "Vibecode audit" },
     ],
   },
 ];
@@ -88,7 +85,6 @@ const TITLES: Record<Route["view"], string> = {
   simulator: "Fault replay",
   fixtures: "Fixtures",
   experiments: "Experiments",
-  audit: "Vibecode audit",
 };
 
 export function App() {
@@ -226,7 +222,6 @@ export function App() {
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
                 {route.view === "settings" && <Settings me={me} />}
-                {route.view === "audit" && <Audit />}
                 {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
             </div>
           </main>
