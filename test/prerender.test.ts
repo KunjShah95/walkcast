@@ -26,7 +26,7 @@ test("prerender writes every public page, the crawler files and the assets", () 
   const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg"];
   for (const route of routes) assert.ok(existsSync(join(out, routeFile(route))), `missing ${route}`);
   for (const f of files) assert.ok(existsSync(join(out, f)), `missing ${f}`);
-  assert.equal(written.length, routes.length + files.length + 9, "every page, plus 5 demo/social assets and 4 fonts");
+  assert.equal(written.length, routes.length + files.length + 7, "every page, plus 5 demo/social assets and 2 fonts");
 });
 
 test("the export is stamped with the site URL, not localhost", () => {
@@ -86,7 +86,7 @@ test("media and fonts are copied so the pages render without the Node server", (
   for (const f of ["assets/demo.mp4", "assets/demo.webm", "assets/demo.vtt", "assets/demo-poster.jpg", "assets/og.png"]) {
     assert.ok(readFileSync(join(out, f)).length > 0, f);
   }
-  for (const f of ["assets/fonts/geist.woff2", "assets/fonts/geist-mono.woff2", "assets/fonts/fraunces.woff2", "assets/fonts/fraunces-italic.woff2"]) {
+  for (const f of ["assets/fonts/schibsted-grotesk.woff2", "assets/fonts/jetbrains-mono.woff2"]) {
     assert.ok(readFileSync(join(out, f)).length > 0, f);
   }
 });

@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Page, chromium } from "playwright";
+import { type Page } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
-import { buildMedia, speechMs, type MediaResult } from "./media.ts";
+import { buildMedia, speechMs, type MediaResult, type Voice } from "./media.ts";
+import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";
 
@@ -37,6 +38,8 @@ export interface RecordOptions {
   signal?: AbortSignal;
   /** Called as the recording advances ("Signing in", "Page 3 of 8"). */
   onProgress?: (message: string) => void;
+  /** Narration voice (default: LAB_VOICE, else slt). */
+  voice?: Voice;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -105,10 +108,11 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   let videoStart = 0;
 
   options.signal?.throwIfAborted();
-  // Chromium's own sandbox needs a non-root user and unprivileged user namespaces; turn it on with
-  // LAB_CHROMIUM_SANDBOX=1 where the container allows it (see docs/DEPLOY-AWS.md).
-  const browser = await chromium.launch({ headless: true, chromiumSandbox: process.env.LAB_CHROMIUM_SANDBOX === "1" });
-  const abort = () => void browser.close().catch(() => undefined);
+  // Reuse a warm Chromium instance for the worker/process lifetime; this is the 1–2 s launch
+  // that decided whether a recording "starts" instantly (docs/SCALING.md §4.3).
+  const browser = await getBrowser();
+  let contextRef: Awaited<ReturnType<typeof browser.newContext>> | null = null;
+  const abort = () => void contextRef?.close().catch(() => undefined);
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
     const context = await browser.newContext({
@@ -116,6 +120,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       recordVideo: { dir, size: { width: 1280, height: 800 } },
       serviceWorkers: "block",
     });
+    contextRef = context;
     if (options.blockPrivate) blockedRequests = await guardContext(context);
     await context.addInitScript("window.__name = (fn) => fn;");
     const page = await context.newPage();
@@ -128,19 +133,23 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     } finally {
       const video = page.video();
       await context.close().catch(() => undefined);
+      contextRef = null;
       const raw = video ? await video.path().catch(() => null) : null;
       if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
     }
   } finally {
+    if (contextRef) await contextRef.close().catch(() => undefined);
     options.signal?.removeEventListener("abort", abort);
-    await browser.close().catch(() => undefined);
+    // Only in disabled mode does this process own a browser; warm mode keeps it ready for
+    // the next recording (docs/SCALING.md §4.3).
+    if (process.env.LAB_WARM_BROWSER === "0") await browser.close().catch(() => undefined);
   }
   options.signal?.throwIfAborted();
 
   recorder.flush();
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
   options.onProgress?.("Adding narration and encoding the video");
-  const media = await buildMedia(dir, captions);
+  const media = await buildMedia(dir, captions, options.voice);
   const result: RecordingResult = {
     ...(options.owner ? { owner: options.owner } : {}),
     ...(blockedRequests.length ? { blockedRequests } : {}),

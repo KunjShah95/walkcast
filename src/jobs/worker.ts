@@ -6,10 +6,14 @@ import { unregisterSecret } from "../capture/secrets.ts";
 import { type TaskId, isTaskId, normalizeScenario } from "../app/faults.ts";
 import { log } from "../ops/log.ts";
 import type { MediaStore } from "../media/store.ts";
+import type { Voice } from "../record/media.ts";
 import { RecordError, recordSite } from "../record/site.ts";
+import { closeWarmBrowser } from "../record/browser.ts";
 import { runOnce } from "../lab/runner.ts";
 import { taskById } from "../lab/task.ts";
-import type { Job, Store } from "../store/types.ts";
+import { withCredentials } from "../llm/credentials.ts";
+import type { Job, JobKind, Store } from "../store/types.ts";
+import { progressThrottle } from "./progress.ts";
 import { open } from "./secret-box.ts";
 
 export interface WorkerOptions {
@@ -21,7 +25,12 @@ export interface WorkerOptions {
   leaseMs?: number;
   /** Hard limit per job; the browser is killed when it passes. */
   deadlineMs?: number;
+  /** Base idle poll interval; doubles on every empty poll up to maxPollMs. */
   pollMs?: number;
+  /** Cap for the idle poll backoff. A busy worker resets to pollMs on the next claim or poke. */
+  maxPollMs?: number;
+  /** Optional kind affinity: prefer `record`/`lab` jobs when claiming; scales out dedicated fleets. */
+  kind?: "record" | "lab";
 }
 
 /**
@@ -38,11 +47,20 @@ export class Worker {
   private readonly leaseMs: number;
   private readonly deadlineMs: number;
   private readonly pollMs: number;
+  private readonly maxPollMs: number;
+  private readonly kind?: JobKind;
 
   constructor(private readonly o: WorkerOptions) {
     this.leaseMs = o.leaseMs ?? 60_000;
     this.deadlineMs = o.deadlineMs ?? Number(process.env.LAB_JOB_DEADLINE_MS ?? 6 * 60_000);
     this.pollMs = o.pollMs ?? 2000;
+    this.maxPollMs = o.maxPollMs ?? Number(process.env.LAB_WORKER_MAX_POLL_MS ?? 10_000);
+    let kind: JobKind | undefined;
+    if (o.kind === "record") kind = "record";
+    else if (o.kind === "lab") kind = "run";
+    else if (process.env.LAB_WORKER_KIND === "record") kind = "record";
+    else if (process.env.LAB_WORKER_KIND === "lab") kind = "run";
+    this.kind = kind;
   }
 
   start(): this {
@@ -77,27 +95,35 @@ export class Worker {
       }
     }
     await this.loop;
+    await closeWarmBrowser().catch(() => undefined);
+    return;
   }
 
   private async run(): Promise<void> {
+    let delay = this.pollMs;
     while (!this.stopping) {
       let job: Job | null = null;
       try {
-        job = await this.o.store.claim(this.id, this.leaseMs);
+        job = await this.o.store.claim(this.id, this.leaseMs, this.kind);
       } catch (e) {
         log.error("queue.claim_failed", { error: String(e) });
       }
       if (!job) {
+        // Idle: back off so a big worker fleet does not multiply the claim queries by one per
+        // poll tick. Jitter desynchronizes workers that woke on the same broadcast.
         await new Promise<void>((resolve) => {
-          const t = setTimeout(resolve, this.pollMs);
+          const wait = Math.round(delay * (0.9 + 0.2 * Math.random()));
+          const t = setTimeout(resolve, wait);
           this.wake = () => {
             clearTimeout(t);
             resolve();
           };
         });
         this.wake = null;
+        delay = Math.min(this.maxPollMs, delay * 2);
         continue;
       }
+      delay = this.pollMs;
       const abort = new AbortController();
       const done = this.execute(job, abort);
       this.current = { job, abort, done };
@@ -109,37 +135,58 @@ export class Worker {
   private async execute(job: Job, abort: AbortController): Promise<void> {
     const started = Date.now();
     log.info("job.started", { job: job.id, kind: job.kind, attempt: job.attempts, worker: this.id });
-    let progress: string | undefined;
+    // Progress is written at stage cadence, not on the lease beat: the app polls every 1-4 s
+    // (dashboard/src/lib/api.ts), so a label that only moved every 20 s read as a frozen screen
+    // for the whole time the user was watching. The throttle keeps that off the database's back.
+    const progress = progressThrottle((p) => this.o.store.setProgress(job.id, this.id, p), 1000);
+    // Ownership is only real while a heartbeat confirms it. `confirmed` is the last time the
+    // store agreed this worker still owns the job; if the store stays silent past 80% of a lease
+    // (DB stall, network partition), stop the work instead of finishing blind — a fenced finish
+    // would discard the result anyway, and the work would repeat on another worker.
+    let confirmed = Date.now();
     const beat = setInterval(() => {
-      this.o.store.heartbeat(job.id, this.id, this.leaseMs, progress).then(
+      this.o.store.heartbeat(job.id, this.id, this.leaseMs).then(
         (mine) => {
           // Someone else owns it now (our lease lapsed): stop rather than race them.
           if (!mine) abort.abort(new Error("lease lost"));
+          else confirmed = Date.now();
         },
         () => undefined,
       );
     }, Math.max(1000, this.leaseMs / 3));
+    const margin = setInterval(() => {
+      if (Date.now() - confirmed > this.leaseMs * 0.8) {
+        abort.abort(new Error("lease unconfirmed: no heartbeat acknowledgement within the lease margin"));
+      }
+    }, 2000);
     const deadline = setTimeout(() => abort.abort(new Error(`took longer than ${Math.round(this.deadlineMs / 1000)} s`)), this.deadlineMs);
+    // Flush before finalizing in both directions: on failure the last label is what tells the
+    // user (and the log) where the job died.
+    const finish = async (outcome: Parameters<Store["finish"]>[2]) => {
+      await progress.flush();
+      await this.o.store.finish(job.id, this.id, outcome);
+    };
     try {
-      const result = job.kind === "record" ? await this.record(job, abort.signal, (p) => (progress = p)) : await this.labRun(job);
-      await this.o.store.finish(job.id, this.id, { status: "succeeded", result });
+      const result = job.kind === "record" ? await this.record(job, abort.signal, (p) => progress.push(p)) : await this.labRun(job);
+      await finish({ status: "succeeded", result });
       log.info("job.succeeded", { job: job.id, kind: job.kind, ms: Date.now() - started });
     } catch (e) {
       const message = e instanceof Error ? e.message.split("\n")[0]! : String(e);
       if (this.stopping && abort.signal.aborted) return; // handed back by stop()
       // Bad input won't get better on retry; crashes and timeouts get one more try.
       const retry = !(e instanceof RecordError) && !abort.signal.aborted;
-      await this.o.store.finish(job.id, this.id, { status: "failed", error: abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message, retry }).catch(() => undefined);
+      await finish({ status: "failed", error: abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message, retry }).catch(() => undefined);
       log.warn("job.failed", { job: job.id, kind: job.kind, ms: Date.now() - started, error: message, retry });
     } finally {
       clearInterval(beat);
+      clearInterval(margin);
       clearTimeout(deadline);
       unregisterSecret("site_password", "site_username");
     }
   }
 
   private async record(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
-    const input = job.input as { url: string; username?: string; maxPages?: number; blockPrivate?: boolean };
+    const input = job.input as { url: string; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice };
     const password = job.secret ? open(job.secret) : undefined;
     // Object storage: record into a temp dir and upload. Local: write straight into recordings/.
     const outDir = this.o.media.kind === "local" ? join(this.o.root, "recordings") : mkdtempSync(join(tmpdir(), "walkcast-"));
@@ -149,6 +196,7 @@ export class Worker {
         ...(input.username ? { username: input.username } : {}),
         ...(password ? { password } : {}),
         maxPages: Number(input.maxPages ?? 8),
+        ...(input.voice ? { voice: input.voice } : {}),
         authorized: true,
         outDir,
         blockPrivate: Boolean(input.blockPrivate),
@@ -171,41 +219,30 @@ export class Worker {
 
   private async labRun(job: Job): Promise<Record<string, unknown>> {
     const input = job.input as { agent: string; fault: string; seed: number; task: string; modelMode?: "live" | "replay" | "scripted" };
-    // Per-user credentials: when the job owner connected OpenRouter, run models on their key.
-    const prevOR = process.env.OPENROUTER_API_KEY;
-    const prevCG = process.env.CHATGPT_ACCESS_TOKEN;
+    // Per-job credential scope: the owner's connected keys answer the model providers' lookups
+    // for this run only, so a key never leaks into other code paths of this process.
+    const credentials: Parameters<typeof withCredentials>[0] = {};
     if (job.owner) {
       try {
         const u = await this.o.store.userById(job.owner);
-        if (u?.openrouterKey) {
-          const { open: openSecret } = await import("./secret-box.ts");
-          process.env.OPENROUTER_API_KEY = openSecret(u.openrouterKey);
-        }
+        if (u?.openrouterKey) credentials.OPENROUTER_API_KEY = open(u.openrouterKey);
         if (u?.chatgpt) {
           const cg = await import("../site/chatgpt.ts");
-          const tok = await cg.ensureChatGPTAccessToken(u, this.o.store);
-          process.env.CHATGPT_ACCESS_TOKEN = tok;
-          // Persist refreshed tokens handled inside ensure.
+          credentials.CHATGPT_ACCESS_TOKEN = await cg.ensureChatGPTAccessToken(u, this.o.store);
         }
       } catch { /* best effort */ }
     }
-    try {
-    const r = await runOnce({
-      fault: normalizeScenario(input.fault),
-      seed: input.seed,
-      agent: input.agent,
-      task: taskById(isTaskId(input.task) ? (input.task as TaskId) : "create-lead"),
-      outDir: join(this.o.root, "runs"),
-      screenshots: true,
-      ...(input.modelMode ? { modelMode: input.modelMode } : {}),
+    return withCredentials(credentials, async () => {
+      const r = await runOnce({
+        fault: normalizeScenario(input.fault),
+        seed: input.seed,
+        agent: input.agent,
+        task: taskById(isTaskId(input.task) ? (input.task as TaskId) : "create-lead"),
+        outDir: join(this.o.root, "runs"),
+        screenshots: true,
+        ...(input.modelMode ? { modelMode: input.modelMode } : {}),
+      });
+      return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}` };
     });
-    return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}` };
-    } finally {
-      // Restore previous environment so per-user credentials don't leak between jobs.
-      if (prevOR === undefined) delete process.env.OPENROUTER_API_KEY;
-      else process.env.OPENROUTER_API_KEY = prevOR;
-      if (prevCG === undefined) delete process.env.CHATGPT_ACCESS_TOKEN;
-      else process.env.CHATGPT_ACCESS_TOKEN = prevCG;
-    }
   }
 }

@@ -67,7 +67,26 @@ export class S3Media implements MediaStore {
     for (const file of files) {
       const path = join(localDir, file);
       if (!existsSync(path)) continue;
-      await putObject(cfg, this.key(id, file), readFileSync(path), MEDIA_TYPES[extname(file)] ?? "application/octet-stream");
+      const body = readFileSync(path);
+      const type = MEDIA_TYPES[extname(file)] ?? "application/octet-stream";
+      const key = this.key(id, file);
+      // Transient network hiccups (TLS reset, S3 outage, expired role creds mid-batch) must not
+      // turn a finished 3-minute recording into a failure — PUT is idempotent, so retrying just
+      // overwrites the same key (docs/SYSTEM-DESIGN.md §3: two-resource writes).
+      let last: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          // Refresh credentials between attempts in case the first one lapsed mid-upload.
+          const currentCfg = await this.config();
+          await putObject(currentCfg, key, body, type);
+          last = undefined;
+          break;
+        } catch (e) {
+          last = e;
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
+        }
+      }
+      if (last) throw (last instanceof Error ? last : new Error(String(last)));
     }
   }
 

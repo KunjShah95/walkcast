@@ -9,8 +9,9 @@
  * no rewrite rules, plus the crawler files, the fonts, the demo media, and a 404.
  *
  * What it cannot produce, because it needs a running process: `/app` (the dashboard talks to
- * `/api`), the auth pages (POST targets with per-session state), and `/api/*`. Those stay on the
- * Node server in the Docker image. `vercel.ts` rewrites those paths there.
+ * `/api`), the auth pages (POST targets with per-session state), and `/api/*`. Those come from the
+ * Node server: `npm run dev` locally, and on Vercel the same server bundled into a function
+ * (src/deploy/vercel-build.ts) that answers every path without a static file.
  */
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -87,8 +88,8 @@ export function prerender({ siteUrl, outDir }: PrerenderOptions): string[] {
 
   for (const [route, fn] of RAW) file(route, fn(siteUrl));
 
-  // 404. `noindex` is already in the markup; the header needs a host-level rule, which
-  // `vercel.ts` sets.
+  // 404 for static hosts. `noindex` is in the markup; on Vercel unknown paths reach the server
+  // function instead, which sends its own 404 with an X-Robots-Tag header.
   file("404.html", notFoundPage(siteUrl));
   file("favicon.svg", FAVICON);
   for (const [name] of Object.entries({
@@ -98,7 +99,7 @@ export function prerender({ siteUrl, outDir }: PrerenderOptions): string[] {
     if (asset) file(`assets/${name}`, readFileSync(asset.path));
     else throw new Error(`missing asset: ${name}`);
   }
-  for (const name of ["fonts/geist.woff2", "fonts/geist-mono.woff2", "fonts/fraunces.woff2", "fonts/fraunces-italic.woff2"]) {
+  for (const name of ["fonts/schibsted-grotesk.woff2", "fonts/jetbrains-mono.woff2"]) {
     const asset = assetPath(name);
     if (!asset) throw new Error(`missing font: ${name}`);
     mkdirSync(join(outDir, "assets", "fonts"), { recursive: true });

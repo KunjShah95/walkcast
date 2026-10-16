@@ -1,5 +1,3 @@
-import { Bot, Brain, Compass, Database, DoorClosed, Flag, Globe, LayoutPanelTop, Server, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
-import type { ComponentType } from "react";
 import { FAULT_INFO, FAULT_NODE } from "../lib/agents.ts";
 import { cn } from "../lib/format.ts";
 
@@ -10,22 +8,21 @@ interface NodeDef {
   x: number;
   y: number;
   title: string;
-  icon: ComponentType<{ className?: string }>;
 }
 
 /** The agent pipeline: decision side on the left, the application under test on the right. */
 const NODES: NodeDef[] = [
-  { id: "task", x: 80, y: 220, title: "Task", icon: Flag },
-  { id: "model", x: 250, y: 80, title: "Model", icon: Brain },
-  { id: "agent", x: 250, y: 220, title: "Agent loop", icon: Bot },
-  { id: "stagehand", x: 425, y: 220, title: "Stagehand act()", icon: Sparkles },
-  { id: "browser", x: 600, y: 220, title: "Browser", icon: Compass },
-  { id: "page", x: 775, y: 220, title: "Page", icon: LayoutPanelTop },
-  { id: "gateway", x: 775, y: 370, title: "Gateway", icon: Globe },
-  { id: "auth", x: 600, y: 370, title: "Session", icon: DoorClosed },
-  { id: "api", x: 425, y: 370, title: "Leads API", icon: Server },
-  { id: "db", x: 250, y: 370, title: "Database", icon: Database },
-  { id: "oracle", x: 80, y: 370, title: "Oracle", icon: ShieldCheck },
+  { id: "task", x: 80, y: 220, title: "Task" },
+  { id: "model", x: 250, y: 80, title: "Model" },
+  { id: "agent", x: 250, y: 220, title: "Agent loop" },
+  { id: "stagehand", x: 425, y: 220, title: "Stagehand act()" },
+  { id: "browser", x: 600, y: 220, title: "Browser" },
+  { id: "page", x: 775, y: 220, title: "Page" },
+  { id: "gateway", x: 775, y: 370, title: "Gateway" },
+  { id: "auth", x: 600, y: 370, title: "Session" },
+  { id: "api", x: 425, y: 370, title: "Leads API" },
+  { id: "db", x: 250, y: 370, title: "Database" },
+  { id: "oracle", x: 80, y: 370, title: "Oracle" },
 ];
 
 const W = 130;
@@ -53,7 +50,6 @@ function pathFor(edge: string): string | null {
 }
 
 function reversePath(from: string, to: string): string | null {
-  // Straight edges reverse trivially; curved ones are only drawn one way.
   const d = edgePath(from, to);
   if (!d || !d.includes(" L ")) return d;
   const [, sx, sy, ex, ey] = d.match(/M ([\d.-]+) ([\d.-]+) L ([\d.-]+) ([\d.-]+)/) ?? [];
@@ -149,7 +145,6 @@ export function Pipeline({
         );
       })}
       {NODES.map((n) => {
-        const Icon = n.icon;
         const st = status[n.id] ?? "idle";
         const dim = n.id === "stagehand" && !stagehand;
         const nodeFaults = faults.filter((f) => FAULT_NODE[f] === n.id);
@@ -159,12 +154,11 @@ export function Pipeline({
             <foreignObject x={n.x - W / 2} y={n.y - H / 2} width={W} height={H}>
               <div
                 className={cn(
-                  "flex h-full items-center gap-2 rounded-lg border-[1.5px] bg-panel px-2.5 transition-[border-color,box-shadow] duration-200",
+                  "flex h-full items-center rounded-lg border-[1.5px] bg-panel px-2.5 transition-[border-color] duration-200",
                   highlight === n.id && "shadow-[0_0_0_4px_var(--highlight)]",
                 )}
                 style={{ borderColor: ring, boxShadow: st === "fail" ? "0 0 0 4px var(--fail-soft)" : st === "warn" ? "0 0 0 4px var(--warn-soft)" : undefined }}
               >
-                <Icon className="size-4 shrink-0 text-ink-2" />
                 <div className="min-w-0 leading-tight">
                   <div className="truncate font-display text-[13px] font-semibold">{n.title}</div>
                   <div className="truncate font-mono text-[9.5px] text-ink-3">{subtitle[n.id]}</div>
@@ -179,7 +173,8 @@ export function Pipeline({
                   title={`Remove fault: ${FAULT_INFO[f]?.what}`}
                   className="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-highlight px-2 py-px font-mono text-[9.5px] font-semibold text-highlight-ink"
                 >
-                  <Zap className="size-2.5 shrink-0" /> {FAULT_INFO[f]?.name ?? f} <X className="size-2.5 shrink-0" />
+                  {FAULT_INFO[f]?.name ?? f}
+                  <span aria-hidden>×</span>
                 </button>
               </foreignObject>
             ))}

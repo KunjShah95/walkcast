@@ -1,4 +1,3 @@
-import { Check, ClipboardCopy, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Panel, PanelHeader } from "../components/ui.tsx";
 import { cn } from "../lib/format.ts";
@@ -71,7 +70,6 @@ export function Audit() {
               disabled={found.length === 0}
               className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[12.5px] text-ink-2 transition-colors hover:bg-panel-2 hover:text-ink disabled:opacity-40"
             >
-              <RotateCcw className="size-3.5" />
               Reset
             </button>
           </div>
@@ -125,7 +123,7 @@ function Row({ tell, on, onToggle }: { tell: Tell; on: boolean; onToggle: () => 
             on ? "border-signal bg-signal text-paper" : "border-line bg-panel",
           )}
         >
-          {on && <Check className="size-3" />}
+          {on && <span className="text-[11px] font-bold">✓</span>}
         </span>
         <span className="min-w-0">
           <span className="flex items-baseline gap-2">
@@ -187,7 +185,6 @@ function CopyPrompt({ found }: { found: number[] }) {
       }}
       className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-3 py-2 text-[13px] font-medium text-paper transition-opacity hover:opacity-90"
     >
-      {state === "copied" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
       {state === "copied" ? "Copied" : state === "select" ? "Selected — press Ctrl+C" : "Copy prompt"}
     </button>
   );

@@ -7,6 +7,8 @@
  * "openrouter:anthropic/claude-opus-5-5". Model IDs are passed through verbatim; check each
  * provider's model list, they change often.
  */
+import { lookup } from "./credentials.ts";
+
 export interface ProviderInfo {
   id: string;
   label: string;
@@ -220,7 +222,7 @@ export function provider(id: string): ProviderInfo {
 
 export function apiKey(info: ProviderInfo): string | undefined {
   for (const name of info.apiKeyEnv) {
-    const value = process.env[name];
+    const value = lookup(name);
     if (value) return value;
   }
   return undefined;

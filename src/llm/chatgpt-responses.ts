@@ -1,4 +1,5 @@
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
+import { lookup } from "./credentials.ts";
 import { RateLimiter } from "./rate-limit.ts";
 
 // ChatGPT plan usage requires stream: true and store: false; requests cannot carry system-role
@@ -7,7 +8,7 @@ import { RateLimiter } from "./rate-limit.ts";
 interface ChatGPTResolved { accessToken: string; }
 
 function accessToken(): string {
-  const t = process.env.CHATGPT_ACCESS_TOKEN;
+  const t = lookup("CHATGPT_ACCESS_TOKEN");
   if (!t) throw new Error("chatgpt: no access token; connect ChatGPT first (this provider requires plan usage).");
   return t;
 }

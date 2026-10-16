@@ -31,7 +31,15 @@ export interface User {
   createdAt: string;
 }
 
-type JobKind = "record" | "run";
+export type JobKind = "record" | "run";
+
+export interface StoreMetrics {
+  /** Window over which the duration figures were computed. */
+  windowMs: number;
+  queue: { depth: number; oldestQueuedMs: number };
+  /** Per-kind durations for jobs that finished inside the window. Empty when no samples. */
+  finished: { kind: JobKind; count: number; p50Ms: number; p95Ms: number }[];
+}
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface Job {
@@ -70,6 +78,18 @@ export interface RecordingRow {
   summary: Record<string, unknown>;
 }
 
+/**
+ * Where a queued job stands. Both numbers come from the same read, because both answer "is the
+ * fleet keeping up": `ahead` is the line the user is standing in, `oldestQueuedMs` is the number
+ * the scale-out alarm watches (docs/SCALING.md §7).
+ */
+export interface QueuePosition {
+  /** Queued jobs created before this one — exactly the jobs a worker claims first (claim is FIFO). */
+  ahead: number;
+  /** How long the oldest queued job has been waiting, in ms; 0 when nothing is queued. */
+  oldestQueuedMs: number;
+}
+
 export interface Store {
   readonly kind: "file" | "postgres";
 
@@ -95,12 +115,29 @@ export interface Store {
   /** Returns the existing job when (owner, idempotencyKey) was already submitted. */
   enqueue(job: NewJob): Promise<Job>;
   /**
+   * Enqueue while enforcing a per-owner active-job limit in one atomic step: the limit check and
+   * the insert are a single statement, so two instances can never both pass a read-then-write
+   * check. Returns the existing job on an idempotent resubmit, and null when the owner is at the
+   * limit.
+   */
+  enqueueLimited(job: NewJob, maxActive: number): Promise<Job | null>;
+  /**
    * Claim the oldest queued job (or one whose worker's lease ran out) for `workerId`. Postgres uses
    * FOR UPDATE SKIP LOCKED so any number of workers can poll without taking the same job.
    */
-  claim(workerId: string, leaseMs: number): Promise<Job | null>;
-  /** Extend the lease while the job runs; false if the job is no longer this worker's. */
-  heartbeat(jobId: string, workerId: string, leaseMs: number, progress?: string): Promise<boolean>;
+  claim(workerId: string, leaseMs: number, kind?: JobKind): Promise<Job | null>;
+  /**
+   * Extend the lease while the job runs; false if the job is no longer this worker's. This is the
+   * ownership beat only — a user-visible progress label goes through `setProgress`, so the two
+   * can run at their own cadences (20 s lease vs. per-stage).
+   */
+  heartbeat(jobId: string, workerId: string, leaseMs: number): Promise<boolean>;
+  /**
+   * Record what the job is doing right now, fenced by ownership like every other transition: a
+   * worker whose lease was stolen writes nothing. Called at stage cadence, so the app's 1–4 s
+   * poll sees movement instead of a stale label.
+   */
+  setProgress(jobId: string, workerId: string, progress: string): Promise<void>;
   finish(jobId: string, workerId: string, outcome: { status: "succeeded"; result: Record<string, unknown> } | { status: "failed"; error: string; retry: boolean }): Promise<void>;
   /** Hand a job back to the queue (graceful shutdown) without counting an attempt. */
   release(jobId: string, workerId: string): Promise<void>;
@@ -110,6 +147,17 @@ export interface Store {
   /** Jobs that are queued or running for an owner (for per-user concurrency limits). */
   activeJobs(owner: string | null): Promise<number>;
   queueDepth(): Promise<number>;
+  /**
+   * The queue position of a job created at `createdAt`. Claim order is FIFO by creation time, so
+   * the count is exactly the number of jobs a worker takes before it. Takes the timestamp rather
+   * than the id so both backends answer without a second lookup, and a job id of the wrong shape
+   * can't turn a status poll into an error.
+   */
+  queuePosition(createdAt: string): Promise<QueuePosition>;
+  /** Cheap queue counters (depth + oldest wait) for the scale-out alarm and ops endpoints. */
+  queueStats(): Promise<{ depth: number; oldestQueuedMs: number }>;
+  /** Duration percentiles for jobs that finished within the window, for honest capacity planning. */
+  metrics(windowMs?: number): Promise<StoreMetrics>;
 
   // recordings index
   saveRecording(row: RecordingRow): Promise<void>;

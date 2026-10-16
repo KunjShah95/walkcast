@@ -1,4 +1,4 @@
-import type { LabIndex, RunDetail } from "./types.ts";
+import type { LabIndex, RecordingSummary, RunDetail } from "./types.ts";
 
 /** Data source: baked into an exported file, or fetched from `lab ui`. */
 interface Baked {
@@ -43,12 +43,20 @@ export function fileUrl(runDir: string, absolutePath: string): string | undefine
   return `/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+export type Voice = "slt" | "awb" | "kal" | "rms";
+
 export interface Capabilities {
   live: boolean;
   running?: string | null;
+  queue?: number | null;
   stagehand?: boolean;
   providers?: string[];
   liveModels?: boolean;
+  limits?: { activeJobsPerUser: number; recordingsPerDay: number; runsPerDay: number };
+  usage?: { recordingsToday: number };
+  voices?: { available: boolean; list: Voice[]; editable: boolean };
+  /** Set when this deployment can't run recordings or lab runs at all. */
+  jobsUnavailable?: string | null;
 }
 
 export async function loadCapabilities(): Promise<Capabilities> {
@@ -68,6 +76,10 @@ export interface JobStatus {
   progress: string | null;
   error: string | null;
   result: { dir?: string; id?: string } | null;
+  startedAt?: string | null;
+  createdAt?: string;
+  /** Present while queued: the job's place in line. */
+  queue?: { ahead: number; oldestQueuedMs: number; waitingMs: number };
 }
 
 /**
@@ -111,7 +123,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean },
+  input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
@@ -119,7 +131,16 @@ export function startRecording(
 
 export class SignInRequired extends Error {}
 
-export async function loadMe(): Promise<{ user: { email: string; name?: string } | null; google: boolean; authRequired: boolean } | null> {
+export interface Me {
+  user: { email: string; name?: string; google?: boolean; openrouter?: boolean; chatgpt?: boolean } | null;
+  google: boolean;
+  openrouter?: boolean;
+  chatgpt?: boolean;
+  provider?: "local" | "supabase";
+  authRequired: boolean;
+}
+
+export async function loadMe(): Promise<Me | null> {
   if (baked) return null;
   try {
     const res = await fetch("/api/me");
@@ -127,4 +148,27 @@ export async function loadMe(): Promise<{ user: { email: string; name?: string }
   } catch {
     return null;
   }
+}
+
+/** A short spoken sample of a narration voice. */
+export function voicePreviewUrl(voice: Voice): string {
+  return `/api/voices/${voice}.wav`;
+}
+
+async function recordingCall(id: string, what: "narration" | "voiceover", init: RequestInit): Promise<RecordingSummary> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/${what}`, { method: "POST", ...init });
+  const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.recording) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  return body.recording;
+}
+
+/** Re-speak an edited script with a chosen voice. */
+export function renarrate(id: string, captions: { start: number; end: number; text: string }[], voice: Voice): Promise<RecordingSummary> {
+  return recordingCall(id, "narration", { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ captions, voice }) });
+}
+
+/** Replace the narration with the user's own recording. */
+export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSummary> {
+  return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
 }

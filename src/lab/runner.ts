@@ -54,18 +54,25 @@ export interface RunResult {
   agentError: string | null;
   browserVersion: string;
   runDir: string;
+  cost?: { mode: string; calls: number; inputTokens: number; outputTokens: number };
 }
 
 /** One Playwright browser per process for scripted agents; each run gets its own context. */
 let sharedBrowser: Promise<Browser> | undefined;
 
 export function browser(): Promise<Browser> {
-  sharedBrowser ??= chromium.launch({ headless: true });
+  // The memo must never hold a rejected launch: a transient failure at first launch (no profile
+  // dir, OOM) would otherwise reject every later job in this worker. Reset on failure so the next
+  // caller launches again.
+  sharedBrowser ??= chromium.launch({ headless: true }).catch((e) => {
+    sharedBrowser = undefined;
+    throw e;
+  });
   return sharedBrowser;
 }
 
 export async function closeBrowser(): Promise<void> {
-  if (sharedBrowser) await (await sharedBrowser).close();
+  if (sharedBrowser) await (await sharedBrowser).close().catch(() => undefined);
   sharedBrowser = undefined;
 }
 
@@ -136,9 +143,20 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   } finally {
     // Always release the browser and the test app, whatever happened above.
     await session.close().catch(() => undefined);
+    // Scripted runs share one browser process per worker. If that process died mid-run (killed
+    // browser, deadline abort), it stays memoized silently, and every later job in this worker
+    // fails with "Target closed" — job succeeded from the queue's view, unrecoverable in fact.
+    // When the process is dead, drop the memo so the next claim launches a fresh browser.
+    if (spec.kind === "scripted") {
+      const b = await browser().catch(() => undefined);
+      if (!b?.isConnected()) await closeBrowser();
+    }
     await app.close();
   }
   const durationMs = Date.now() - started;
+  const cost = gateway
+    ? { mode: gateway.status.mode, calls: gateway.status.calls, inputTokens: gateway.status.inputTokens, outputTokens: gateway.status.outputTokens }
+    : { mode: options.modelMode ?? "live", calls: 0, inputTokens: 0, outputTokens: 0 };
 
   const claim = recorder.claim() ?? null;
   const oracle = evaluateOracle(task, app.state, claim ?? undefined);
@@ -174,6 +192,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     agentError,
     browserVersion: session.browserVersion,
     runDir,
+    cost,
   };
   writeFileSync(join(runDir, "result.json"), JSON.stringify(scrub({ ...result, appState: app.state }), null, 2));
   writeRunReport(result, recorder.events, task);

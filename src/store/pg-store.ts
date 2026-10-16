@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import { DuplicateError, type Job, type NewJob, type RecordingRow, type Store, type User } from "./types.ts";
+import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Store, type StoreMetrics, type User } from "./types.ts";
 
 type Row = Record<string, unknown>;
 
@@ -103,8 +103,27 @@ export class PgStore implements Store {
     return toJob(existing!);
   }
 
-  async claim(workerId: string, leaseMs: number) {
-    // Jobs whose worker vanished (lease expired) and that are out of attempts fail for good.
+  async enqueueLimited(job: NewJob, maxActive: number) {
+    // One statement holds the whole invariant: the active-job count and the insert, so two
+    // instances racing the same owner cannot both pass a read-then-write check.
+    const [inserted] = await this.sql`
+      insert into jobs (kind, owner, input, secret, idempotency_key, max_attempts)
+      select ${job.kind}, ${job.owner}, ${this.sql.json(job.input as postgres.JSONValue)}, ${job.secret ?? null}, ${job.idempotencyKey ?? null}, ${job.maxAttempts ?? 2}
+      where (select count(*)::int from jobs j
+             where j.owner is not distinct from ${job.owner} and j.status in ('queued', 'running')) < ${maxActive}
+      on conflict (owner, idempotency_key) where idempotency_key is not null do nothing
+      returning *`;
+    if (inserted) return toJob(inserted);
+    // No row: either the owner was at the limit, or an idempotent resubmit hit the conflict.
+    if (job.idempotencyKey) {
+      const existing = await this.jobByKey(job.owner, job.idempotencyKey);
+      if (existing) return existing;
+    }
+    return null;
+  }
+
+  async claim(workerId: string, leaseMs: number, kind?: JobKind) {
+    // Retirement sweep on expired, exhausted jobs (lease machinery, same statement family).
     await this.sql`
       update jobs set status = 'failed', error = 'The worker stopped responding too many times.', secret = null, finished_at = now(), locked_by = null, lease_until = null
       where status = 'running' and lease_until < now() and attempts >= max_attempts`;
@@ -114,20 +133,33 @@ export class PgStore implements Store {
       where id = (
         select id from jobs
         where status = 'queued' or (status = 'running' and lease_until < now())
-        order by created_at
+        order by
+          case when ${kind ?? null}::text is not null and status = 'queued' and kind <> ${kind ?? null} then 1 else 0 end,
+          created_at
         for update skip locked
         limit 1
       )
       returning *`;
+    if (Math.random() < 0.02) {
+      await this.sql`delete from jobs where status in ('succeeded', 'failed', 'cancelled') and finished_at < now() - interval '30 days'`.catch(() => undefined);
+    }
     return r ? toJob(r) : null;
   }
 
-  async heartbeat(jobId: string, workerId: string, leaseMs: number, progress?: string) {
+  async heartbeat(jobId: string, workerId: string, leaseMs: number) {
     const rows = await this.sql`
-      update jobs set lease_until = now() + (${leaseMs} * interval '1 millisecond'), progress = coalesce(${progress ?? null}, progress)
+      update jobs set lease_until = now() + (${leaseMs} * interval '1 millisecond')
       where id = ${jobId} and locked_by = ${workerId} and status = 'running'
       returning id`;
     return rows.length === 1;
+  }
+
+  async setProgress(jobId: string, workerId: string, progress: string) {
+    // Fenced like every other transition: only the worker the store currently believes owns the
+    // job can move the label, so a zombie finishing after its lease was stolen stays invisible.
+    await this.sql`
+      update jobs set progress = ${progress}
+      where id = ${jobId} and locked_by = ${workerId} and status = 'running'`;
   }
 
   async finish(jobId: string, workerId: string, outcome: Parameters<Store["finish"]>[2]) {
@@ -164,8 +196,46 @@ export class PgStore implements Store {
     return Number(r!.n);
   }
   async queueDepth() {
-    const [r] = await this.sql`select count(*)::int as n from jobs where status = 'queued'`;
-    return Number(r!.n);
+    return (await this.queueStats()).depth;
+  }
+
+  async queueStats() {
+    const [r] = await this.sql`
+      select
+        (select count(*)::int from jobs where status = 'queued') as depth,
+        coalesce((select extract(epoch from (now() - min(created_at))) from jobs where status = 'queued'), 0) as oldest_s`;
+    return { depth: Number(r!.depth), oldestQueuedMs: Math.max(0, Math.round(Number(r!.oldest_s) * 1000)) };
+  }
+
+  async metrics(windowMs = 86_400_000) {
+    const qs = await this.queueStats();
+    const rows = await this.sql`
+      select kind,
+        count(*)::int as n,
+        coalesce(percentile_cont(0.5) within group (order by extract(epoch from (finished_at - started_at)) * 1000), 0) as p50,
+        coalesce(percentile_cont(0.95) within group (order by extract(epoch from (finished_at - started_at)) * 1000), 0) as p95
+      from jobs
+      where status in ('succeeded', 'failed')
+        and started_at is not null and finished_at is not null
+        and finished_at > now() - (${windowMs} * interval '1 millisecond')
+      group by kind
+      order by kind`;
+    const finished = rows.map((r) => ({
+      kind: r.kind as JobKind,
+      count: Number(r.n),
+      p50Ms: Math.round(Number(r.p50)),
+      p95Ms: Math.round(Number(r.p95)),
+    }));
+    return { windowMs, queue: qs, finished };
+  }
+  async queuePosition(createdAt: string) {
+    // One round trip for both numbers. `created_at < $1` is the same ordering claim() uses, so the
+    // count is exactly the jobs taken first; the oldest wait is the scale-out signal.
+    const [r] = await this.sql`
+      select
+        (select count(*)::int from jobs where status = 'queued' and created_at < ${createdAt}::timestamptz) as ahead,
+        coalesce((select extract(epoch from (now() - min(created_at))) from jobs where status = 'queued'), 0) as oldest_s`;
+    return { ahead: Number(r!.ahead), oldestQueuedMs: Math.max(0, Math.round(Number(r!.oldest_s) * 1000)) };
   }
 
   // ---------------------------------------------------------------- recordings

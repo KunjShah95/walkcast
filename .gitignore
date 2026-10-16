@@ -9,3 +9,6 @@ walkcast.html
 recordings/
 .lab/
 .env
+
+.vercel
+.env*

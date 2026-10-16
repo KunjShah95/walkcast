@@ -11,6 +11,13 @@ export function ms(value: number): string {
   return `${Math.floor(value / 60_000)}m ${Math.round((value % 60_000) / 1000)}s`;
 }
 
+/** Format a non-negative number of seconds as "12s" or "2m 03s". */
+export function formatElapsed(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+}
+
 export function ago(epochMs: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - epochMs) / 1000));
   if (s < 60) return `${s}s ago`;

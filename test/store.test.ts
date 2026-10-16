@@ -106,15 +106,61 @@ for (const [name, open] of backends) {
       }
     });
 
+    test("jobs: enqueueLimited holds the per-owner limit against concurrent submits", async () => {
+      const s = await open();
+      try {
+        await s.insertUser(user("u10", "lim@example.com"));
+        // Five concurrent submits, each with its own idempotency key, against a limit of one:
+        // a read-then-write check would let two through; the atomic form permits exactly one.
+        const outcomes = await Promise.all(
+          Array.from({ length: 5 }, (_, i) =>
+            s.enqueueLimited({ kind: "record", owner: "u10", input: { i }, idempotencyKey: `lim-${i}` }, 1),
+          ),
+        );
+        const created = outcomes.filter((j) => j !== null);
+        assert.equal(created.length, 1, `exactly one submit gets through, got ${created.length}`);
+        assert.equal(await s.activeJobs("u10"), 1);
+
+        // An idempotent resubmit of the surviving job still returns it (never counts as a new one).
+        const key = `lim-${outcomes.findIndex((j) => j !== null)}`;
+        const again = await s.enqueueLimited({ kind: "record", owner: "u10", input: {}, idempotencyKey: key }, 1);
+        assert.equal(again?.id, created[0]!.id);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("jobs: an expired, exhausted job is finalized and never blocks the rest of the queue", async () => {
+      const s = await open();
+      try {
+        const a = await s.enqueue({ kind: "record", owner: null, input: { i: 1 }, maxAttempts: 1 });
+        await s.enqueue({ kind: "record", owner: null, input: { i: 2 }, maxAttempts: 1 });
+        await s.claim("w1", 10); // a's single attempt: lease expires 10 ms in
+        await new Promise((r) => setTimeout(r, 30));
+        const b = await s.claim("w2", 60_000);
+        // The dead job was swept and the claim moved on to the queued one, instead of handing
+        // back null with jobs still waiting.
+        assert.notEqual(b?.id, a.id);
+        assert.equal((await s.job(a.id))?.status, "failed");
+        assert.equal(await s.queueDepth(), 0);
+      } finally {
+        await s.close();
+      }
+    });
+
     test("jobs: heartbeat, finish, retry once, expired leases are reclaimed, release on shutdown", async () => {
       const s = await open();
       try {
         const j = await s.enqueue({ kind: "record", owner: null, input: {}, secret: "sealed", maxAttempts: 2 });
         let c = (await s.claim("w1", 60_000))!;
         assert.equal(c.attempts, 1);
-        assert.equal(await s.heartbeat(j.id, "w1", 60_000, "page 2 of 5"), true);
+        assert.equal(await s.heartbeat(j.id, "w1", 60_000), true);
         assert.equal(await s.heartbeat(j.id, "w2", 60_000), false, "not w2's job");
+        await s.setProgress(j.id, "w1", "page 2 of 5");
         assert.equal((await s.job(j.id))?.progress, "page 2 of 5");
+        // A zombie that lost its lease can't move the label: the fence holds.
+        await s.setProgress(j.id, "w2", "forging ahead");
+        assert.equal((await s.job(j.id))?.progress, "page 2 of 5", "not the lease holder's to change");
 
         await s.finish(j.id, "w1", { status: "failed", error: "browser crashed", retry: true });
         assert.equal((await s.job(j.id))?.status, "queued", "retried");
@@ -136,6 +182,72 @@ for (const [name, open] of backends) {
         const done = (await s.claim("w4", 60_000))!;
         await s.finish(done.id, "w4", { status: "succeeded", result: { dir: "x" } });
         assert.deepEqual((await s.job(k.id))?.result, { dir: "x" });
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("jobs: queue position is FIFO by created_at, and counts running jobs out of the line", async () => {
+      const s = await open();
+      try {
+        // Three queued jobs, aged in submission order.
+        const first = (await s.enqueue({ kind: "record", owner: null, input: { i: 1 } }))!;
+        await new Promise((r) => setTimeout(r, 15));
+        const second = (await s.enqueue({ kind: "run", owner: null, input: { i: 2 } }))!;
+        await new Promise((r) => setTimeout(r, 15));
+        const third = (await s.enqueue({ kind: "record", owner: null, input: { i: 3 } }))!;
+
+        const head = await s.queuePosition(first.createdAt);
+        assert.equal(head.ahead, 0, "the oldest queued job is number zero");
+
+        const mid = await s.queuePosition(second.createdAt);
+        assert.equal(mid.ahead, 1, "one job ahead of the second");
+
+        const tail = await s.queuePosition(third.createdAt);
+        assert.equal(tail.ahead, 2);
+
+        // The oldest one leaves the queue (claimed), so the second becomes the head: running
+        // jobs must NOT count as a delay in front of a queued one.
+        const claimed = await s.claim("w9", 60_000);
+        assert.equal(claimed?.id, first.id);
+        const midAfter = await s.queuePosition(second.createdAt);
+        assert.equal(midAfter.ahead, 0, "a running job is out of the line");
+        assert.ok(midAfter.oldestQueuedMs >= 0);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("jobs: claim prefers the affinity kind but falls back when nothing of that kind is queued", async () => {
+      const s = await open();
+      try {
+        const rec = await s.enqueue({ kind: "record", owner: null, input: { i: 1 } });
+        const run = await s.enqueue({ kind: "run", owner: null, input: { i: 2 } });
+        // A record-fleet worker takes the record job even though both are queued oldest-first.
+        assert.equal((await s.claim("w-rec", 60_000, "record"))?.id, rec?.id);
+        // A run-fleet worker takes the run job even though the record is older.
+        assert.equal((await s.claim("w-run", 60_000, "run"))?.id, run?.id);
+        // No more record jobs: the record worker falls back to the mixed queue.
+        const again = await s.enqueue({ kind: "run", owner: null, input: { i: 3 } });
+        assert.equal((await s.claim("w-rec", 60_000, "record"))?.id, again?.id);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("jobs: metrics() reports a finished job's duration percentile", async () => {
+      const s = await open();
+      try {
+        const j = await s.enqueue({ kind: "record", owner: null, input: {} });
+        const job = await s.claim("w4", 60_000, "record");
+        await new Promise((r) => setTimeout(r, 20));
+        await s.finish(job!.id, "w4", { status: "succeeded", result: { dir: "x" } });
+        const m = await s.metrics();
+        const rec = m.finished.find((f) => f.kind === "record");
+        assert.ok(rec, "record kind is present");
+        assert.equal(rec!.count, 1);
+        assert.ok(rec!.p95Ms >= 0);
+        assert.equal(m.queue.depth, 0);
       } finally {
         await s.close();
       }

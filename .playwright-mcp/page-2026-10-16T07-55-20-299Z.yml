@@ -1,0 +1,43 @@
+- generic [active] [ref=f15e1]:
+  - link "Skip to content" [ref=f15e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f15e3]:
+    - generic [ref=f15e4]:
+      - link "Walkcast home" [ref=f15e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f15e10]: Walkcast
+      - link "Back to the site" [ref=f15e11] [cursor=pointer]:
+        - /url: /
+  - main [ref=f15e14]:
+    - generic [ref=f15e17]:
+      - generic [ref=f15e18]:
+        - paragraph [ref=f15e19]: Your site, walked and narrated.
+        - paragraph [ref=f15e20]: An MP4, captions and a transcript, from one link. The password stays in memory.
+        - paragraph [ref=f15e21]:
+          - generic [ref=f15e22]: recording.mp4
+          - generic [ref=f15e23]: recording.webm
+          - generic [ref=f15e24]: captions.vtt
+          - generic [ref=f15e25]: narration.wav
+      - generic [ref=f15e26]:
+        - heading "Sign in" [level=1] [ref=f15e27]
+        - paragraph [ref=f15e28]: Pick up where you left off.
+        - generic "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server to enable." [ref=f15e29]: Continue with Google
+        - paragraph [ref=f15e35]: Google sign-in isn't turned on for this server yet; use email below.
+        - link "Continue with OpenRouter (uses your credits)" [ref=f15e36] [cursor=pointer]:
+          - /url: /auth/openrouter?next=%2Fapp%23record
+        - link "Continue with ChatGPT (uses your plan)" [ref=f15e37] [cursor=pointer]:
+          - /url: /auth/chatgpt?next=%2Fapp%23record
+        - generic [ref=f15e38]: or with email
+        - generic [ref=f15e39]:
+          - generic [ref=f15e40]:
+            - text: Email
+            - textbox "Email" [ref=f15e41]
+          - generic [ref=f15e42]:
+            - text: Password
+            - textbox "Password" [ref=f15e43]
+          - button "Sign in" [ref=f15e44] [cursor=pointer]
+          - alert [ref=f15e45]
+        - paragraph [ref=f15e46]:
+          - text: New here?
+          - link "Create an account" [ref=f15e47] [cursor=pointer]:
+            - /url: /signup?next=%2Fapp%23record

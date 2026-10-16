@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { randomUUID, createHash } from "node:crypto";
+import { createReadStream, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.t
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
 import { FAVICON, assetPath, authPage, comparePage, compareSlugs, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, notFoundPage, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
-import { createStore, type Job, type Store } from "../store/index.ts";
+import { createStore, type Job, type QueuePosition, type Store } from "../store/index.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "dashboard", "dist", "index.html");
 const TYPES: Record<string, string> = {
@@ -426,7 +426,12 @@ export function createApp(o: ServeOptions = {}): App {
         result = await renarrate(dir, captions, voice);
         summary.captions = captions;
       } else {
-        result = await voiceover(dir, await readBody(req, 40_000_000), summary.captions);
+        const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");
+try {
+  result = await voiceover(dir, audioPath, summary.captions);
+} finally {
+  rmSync(audioPath, { force: true });
+}
       }
       summary.media = { ...summary.media, ...result, video: summary.media.video };
       writeFileSync(file, JSON.stringify(summary, null, 2));
@@ -446,12 +451,10 @@ export function createApp(o: ServeOptions = {}): App {
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;
       if (idempotencyKey) {
         const existing = await store.jobByKey(owner, idempotencyKey);
-        if (existing) return json(202, { job: publicJob(existing) });
+        if (existing) return json(202, { job: await withQueue(store, existing) });
       }
-      // Per-user limits, enforced in the store so they hold across instances.
-      if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) {
-        throw new AuthError(429, "You already have a job running. Wait for it to finish.");
-      }
+      // Per-user limits, enforced atomically in the store so they hold across instances: the
+      // daily quota and the active-job ceiling are single statements, not reads the caller races.
       const perDay = kind === "record" ? LIMITS.recordingsPerDay : LIMITS.runsPerDay;
       if ((await store.hit(`quota:${kind}:${owner ?? "local"}`, 86_400_000)) > perDay) {
         throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
@@ -461,16 +464,52 @@ export function createApp(o: ServeOptions = {}): App {
         if (!worker && !sharedKeyConfigured()) throw new AuthError(503, "This server is missing LAB_SECRET_KEY, which separate workers need to receive sign-in details. Ask the operator to set it.");
         secret = seal(b.password);
       }
-      const job = await store.enqueue({ kind, owner, input, secret, idempotencyKey });
+      const job = await store.enqueueLimited({ kind, owner, input, secret, idempotencyKey }, LIMITS.activeJobsPerUser);
+      if (!job) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
       worker?.poke();
       log.info("job.enqueued", { job: job.id, kind, owner });
-      return json(202, { job: publicJob(job) });
+      return json(202, { job: await withQueue(store, job) });
     }
-    const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
+     const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
     if (jobMatch) {
-      const job = await store.job(jobMatch[1]!);
-      if (!job || (requireAuth && job.owner !== owner)) return json(404, { error: "job not found" });
-      return json(200, { job: publicJob(job) });
+      const id = jobMatch[1]!;
+      const ifNone = req.headers["if-none-match"];
+      const cached = statusCache.get(id);
+      if (cached && Date.now() - cached.at < STATUS_TTL_MS) {
+        if (ifNone && String(ifNone).trim() === cached.etag) {
+          res.writeHead(304, { ...securityHeaders, ETag: cached.etag, "Cache-Control": "private, max-age=1" });
+          return void res.end();
+        }
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: cached.etag, "Cache-Control": "private, max-age=1" });
+        return void res.end(cached.body);
+      }
+      const job = await store.job(id);
+      if (!job || (requireAuth && job.owner !== owner)) {
+        statusCache.delete(id);
+        return json(404, { error: "job not found" });
+      }
+      const payload = { job: await withQueue(store, job) };
+      const body = JSON.stringify(payload);
+      const etag = `"${createHash("sha1").update(body).digest("hex").slice(0, 16)}"`;
+      setStatusCache(id, body, etag);
+      if (ifNone && String(ifNone).trim() === etag) {
+        res.writeHead(304, { ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
+        return void res.end();
+      }
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
+      return void res.end(body);
+    }
+    if (url.pathname === "/api/metrics") {
+      let windowMs = 86_400_000;
+      const q = url.searchParams.get("windowMs");
+      if (q) {
+        const n = Number(q);
+        if (!Number.isFinite(n) || n <= 0 || n > 31 * 86_400_000) return json(400, { error: "windowMs must be 1ms..31 days" });
+        windowMs = n;
+      }
+      const snap = await store.metrics(windowMs);
+      // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
+      return json(200, snap);
     }
     if (url.pathname === "/api/run") {
       const detail = data.run(url.searchParams.get("dir") ?? "");
@@ -544,10 +583,38 @@ export function createApp(o: ServeOptions = {}): App {
   };
 }
 
+const STATUS_TTL_MS = Number(process.env.LAB_STATUS_TTL_MS ?? 1500);
+const STATUS_CACHE_MAX = 20_000;
+const statusCache = new Map<string, { body: string; etag: string; at: number }>();
+
+function setStatusCache(id: string, body: string, etag: string) {
+  if (statusCache.size >= STATUS_CACHE_MAX) {
+    const first = statusCache.keys().next().value;
+    if (first) statusCache.delete(first);
+  }
+  statusCache.set(id, { body, etag, at: Date.now() });
+}
+
 function publicJob(job: Job) {
   const { secret: _secret, input, ...rest } = job;
   // Never echo a password back; the URL and settings are fine to show to their owner.
   return { ...rest, input: { ...input } };
+}
+
+/**
+ * A queued job also carries its place in line, so the app can say "1 job ahead of you" instead of
+ * showing an indefinite spinner. The position is a nicety: a job's status must never fail because
+ * the queue counters could not be read.
+ */
+async function withQueue(store: Store, job: Job) {
+  const base = publicJob(job);
+  if (job.status !== "queued") return base;
+  try {
+    const { ahead, oldestQueuedMs }: QueuePosition = await store.queuePosition(job.createdAt);
+    return { ...base, queue: { ahead, oldestQueuedMs, waitingMs: Math.max(0, Date.now() - Date.parse(job.createdAt)) } };
+  } catch {
+    return base;
+  }
 }
 
 function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean): Record<string, unknown> {
@@ -587,18 +654,39 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
   };
 }
 
-async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
-  const chunks: Buffer[] = [];
+async function readBodyToTemp(req: IncomingMessage, limit: number, prefix: string): Promise<string> {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const tmpDir = path.join(os.tmpdir(), "walkcast-voiceover");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const file = path.join(tmpDir, `${randomUUID()}.bin`);
+  const { createWriteStream } = await import("node:fs");
+  // Pipe chunks to disk instead of buffering, so a 40 MB voice doesn't pin the event loop.
+  const out = createWriteStream(file);
   let size = 0;
-  for await (const chunk of req as AsyncIterable<Buffer>) {
-    size += chunk.length;
-    if (size > limit) throw new AuthError(413, "That recording is too large.");
-    chunks.push(chunk);
+  try {
+    for await (const chunk of req as AsyncIterable<Buffer>) {
+      size += chunk.length;
+      if (size > limit) throw new AuthError(413, "That recording is too large.");
+      if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
+    }
+    out.end();
+    await new Promise<void>((resolve, reject) => {
+      out.on("finish", () => resolve());
+      out.on("error", reject);
+    });
+  } catch (e) {
+    fs.rmSync(file, { force: true });
+    if (out && !out.destroyed) out.destroy();
+    throw e;
   }
-  if (!size) throw new AuthError(400, "No audio received.");
-  return Buffer.concat(chunks);
+  if (!size) {
+    fs.rmSync(file, { force: true });
+    throw new AuthError(400, "No audio received.");
+  }
+  return file;
 }
-
 function validateCaptions(raw: unknown): { start: number; end: number; text: string }[] {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) throw new AuthError(400, "The script needs between 1 and 500 lines.");
   return raw.map((c, i) => {

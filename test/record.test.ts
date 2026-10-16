@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+// Keep the browser cold per test so the node process (and Chromium) can exit cleanly.
+process.env.LAB_WARM_BROWSER = "0";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

@@ -291,6 +291,7 @@ async function main(): Promise<number> {
     }
     case "worker": {
       // A queue worker on its own (the web service then runs with LAB_WORKER=off).
+      process.env.LAB_WARM_BROWSER = process.env.LAB_WARM_BROWSER || "1";
       const store = createStore(process.cwd());
       if (store.kind === "file") console.error("Note: with the local file store a separate worker can't share the web server's queue; set SUPABASE_DB_URL.");
       const worker = new Worker({ store, media: createMedia(process.cwd()), root: process.cwd() }).start();

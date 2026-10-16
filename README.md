@@ -36,6 +36,7 @@ Environment variables you may want (none are required to start):
 | `SUPABASE_DB_URL` (or `DATABASE_URL`) | Supabase Postgres for accounts, sessions, the job queue and the recordings index (default: `.lab/store.json`) |
 | `SUPABASE_URL`, `SUPABASE_S3_*` or `MEDIA_S3_*` | Recording media in Supabase Storage or S3 (default: `recordings/` on disk) |
 | `LAB_SECRET_KEY`, `LAB_WORKER=off` | Separate queue workers (see [Production](#production-supabase--aws)) |
+| `LAB_WORKER_MAX_POLL_MS` | Cap for the idle-wait backoff of queue workers (default 10000; see `docs/SCALING.md`) |
 | `LAB_SITE_URL`, `LAB_HOST`, `LAB_TRUST_PROXY=1` | Hosting the web app (public URL, bind address, behind a reverse proxy) |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Sign-in through Supabase Auth (email confirmation, password reset, Google set up in Supabase) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in for the built-in accounts (without Supabase Auth) |
@@ -374,41 +375,28 @@ npm run site:build -- --allow-localhost               # export for local preview
 
 ### Environment variables on Vercel
 
-Three, all set per-environment in the Vercel project (Settings → Environment Variables):
+Set per-environment in the Vercel project (Settings → Environment Variables):
 
 | Variable | Required | What it does |
 | --- | --- | --- |
-| `LAB_SITE_URL` | **yes** | The deployed origin, stamped into every canonical tag, the sitemap, `robots.txt` and the JSON-LD at build time. Missing or localhost fails the build. |
-| `APP_ORIGIN` | for the app | Origin of the Node server that serves `/app`, `/api/*` and the auth pages. Unset means a marketing-only deploy; those paths 404 and the build says so. |
+| `SUPABASE_DB_URL` | **yes** | Accounts, sessions and the job queue. Without it they live in the function's `/tmp` and vanish between instances, so sign-in won't stick. |
+| `LAB_SITE_URL` | recommended | The public origin, stamped into canonical tags, the sitemap, `robots.txt`, the JSON-LD and OAuth redirects. Defaults to the project's production domain. |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, OAuth and model keys | as needed | Same as for `npm run dev` (see `.env.example`). |
 | `VITE_VERCEL_ANALYTICS_DSN` | optional | Dashboard page views. Unset means no analytics and no script loaded. |
-
-Set them on **Production**, **Preview** and **Development** as needed — a preview deploy is a real
-build and will fail without `LAB_SITE_URL` just like production does.
 
 `vercel env pull` writes them to `.env.local` (already gitignored via `.env*`) if you want the same
 values locally. Nothing from `.env` is uploaded: Vercel variables live in the project settings, so
 the repo never carries them.
 
-**What a static host cannot serve**, because it needs a live process: `/app` (the dashboard is a SPA
-that talks to `/api`), the auth pages (POST targets with per-session state), and `/api/*`. `vercel.ts`
-therefore rewrites those paths to the Node server (the Docker image, on ECS or Supabase):
+**One deployment serves the whole site**, the same as `npm run dev` does locally. `npm run
+vercel:build` (the build command in `vercel.ts`) writes `.vercel/output` with the Build Output API:
+the marketing pages as static files, and the Node server (`src/deploy/vercel-function.ts`) bundled
+into one function that answers every path without a static file — `/login`, `/signup`, `/forgot`,
+`/reset`, `/app`, `/auth/*`, `/api/*`, `/files/*`. No second server, no proxy origin.
 
-```sh
-APP_ORIGIN=https://your-node-server.example   # in the Vercel project
-```
-
-Proxying rather than linking to a second hostname keeps it same-origin, so the session cookie still
-applies and the signup form posts to a real handler.
-
-This is `vercel.ts`, not `vercel.json`, for a reason: a rewrite `destination` must be an absolute
-pathname or an external URL, so a static config file cannot interpolate `$APP_ORIGIN`. The rewrite
-simply never matched and every proxied path — including `/login` and `/signup` — fell through to the
-static 404. `vercel.ts` runs during the build, where `process.env` is available.
-
-`APP_ORIGIN` unset is **not** fatal — the marketing site is a static export and deploys on its own,
-so a docs-only deployment still works. The build prints a warning instead: without an origin there
-is nothing behind `/login`, `/signup`, `/forgot`, `/reset`, `/app` or `/api/*`, and those paths 404.
-A value that is set but malformed (not `https://…`) *is* fatal, because that is a typo.
+A function has no Chromium, so **recordings and lab runs** are refused there with a message pointing
+at `npm run dev`. To run them from the deployed site, run `npm run lab -- worker` on any machine with
+the same `SUPABASE_DB_URL` and set `LAB_EXTERNAL_WORKER=1` in the Vercel project.
 `test/vercel-config.test.ts` locks all of that down.
 
 `test/prerender.test.ts` guards the export: every route exists, nothing leaks a `localhost` origin,
@@ -507,8 +495,14 @@ LAB_WORKER=off npm run lab -- ui                 # web: stateless, any number of
 npm run lab -- worker                            # workers: one job each, scale on queue depth
 ```
 
-How the pieces fit (full guide: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md); `docker compose up`
-runs the same shape locally):
+How the pieces fit (full guide: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md); `docs/SCALING.md` covers
+capacity math, worker-fleet scaling and what to build next as job volume grows;
+`docs/SYSTEM-DESIGN.md` states the correctness guarantees — fenced finalization, atomic tenant
+limits, at-least-once execution with idempotent effects — and the failure-domain table;
+`docs/architecture-hld.excalidraw`, `docs/architecture-system.excalidraw`,
+`docs/architecture-lld.excalidraw` are the editable Excalidraw diagrams (HLD, system design,
+and low-level module layout) — open any of them at excalidraw.com;
+`docker compose up` runs the same shape locally):
 
 - **Store** (`src/store/`): one interface, two implementations. `PgStore` (Supabase) keeps users,
   sessions (token hashes only), sign-in throttling and quotas, the job queue and the recordings

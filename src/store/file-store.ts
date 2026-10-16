@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DuplicateError, type Job, type NewJob, type RecordingRow, type Store, type User } from "./types.ts";
+import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Store, type StoreMetrics, type User } from "./types.ts";
 
 interface Data {
   users: User[];
@@ -35,7 +35,20 @@ export class FileStore implements Store {
       mkdirSync(dirname(this.file), { recursive: true });
       const tmp = `${this.file}.${process.pid}.tmp`;
       writeFileSync(tmp, JSON.stringify(this.data), { mode: 0o600 });
-      renameSync(tmp, this.file);
+      // On Windows the rename above a just-written file can fail transiently (EPERM/EBUSY) while
+      // another component (antivirus, indexer) holds it. The swap is the store's atomic commit;
+      // retry the rename with a short backoff instead of failing the write.
+      let tries = 0;
+      for (;;) {
+        try {
+          renameSync(tmp, this.file);
+          break;
+        } catch (e) {
+          const code = (e as NodeJS.ErrnoException).code;
+          if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || ++tries > 4) throw e;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * 2 ** (tries - 1));
+        }
+      }
       return value;
     });
     this.chain = next.catch(() => undefined);
@@ -104,49 +117,74 @@ export class FileStore implements Store {
         const existing = this.data.jobs.find((j) => j.owner === job.owner && j.idempotencyKey === job.idempotencyKey);
         if (existing) return strip(existing);
       }
-      const row = {
-        id: randomUUID(),
-        kind: job.kind,
-        owner: job.owner,
-        status: "queued" as const,
-        input: job.input,
-        secret: job.secret ?? null,
-        result: null,
-        error: null,
-        progress: null,
-        attempts: 0,
-        maxAttempts: job.maxAttempts ?? 2,
-        createdAt: new Date().toISOString(),
-        startedAt: null,
-        finishedAt: null,
-        idempotencyKey: job.idempotencyKey ?? null,
-        lockedBy: null,
-        leaseUntil: null,
-      };
+      const row = newJobRow(job);
       this.data.jobs.push(row);
       return strip(row);
     });
   }
-  claim(workerId: string, leaseMs: number) {
+
+  enqueueLimited(job: NewJob, maxActive: number) {
+    // Count and insert inside one serialized mutation: the check and the write cannot interleave
+    // with another submit, matching the atomic single-statement form PgStore uses.
     return this.write(() => {
-      const now = Date.now();
-      const job = this.data.jobs.find((j) => j.status === "queued" || (j.status === "running" && (j.leaseUntil ?? 0) < now));
-      if (!job) return null;
-      if (job.status === "running" && job.attempts >= job.maxAttempts) {
-        Object.assign(job, { status: "failed", error: "The worker stopped responding too many times.", secret: null, finishedAt: new Date().toISOString() });
-        return null;
+      if (job.idempotencyKey) {
+        const existing = this.data.jobs.find((j) => j.owner === job.owner && j.idempotencyKey === job.idempotencyKey);
+        if (existing) return strip(existing);
       }
-      Object.assign(job, { status: "running", lockedBy: workerId, leaseUntil: now + leaseMs, attempts: job.attempts + 1, startedAt: new Date().toISOString() });
-      return strip(job);
+      const active = this.data.jobs.filter((j) => j.owner === job.owner && (j.status === "queued" || j.status === "running")).length;
+      if (active >= maxActive) return null;
+      const row = newJobRow(job);
+      this.data.jobs.push(row);
+      return strip(row);
     });
   }
-  heartbeat(jobId: string, workerId: string, leaseMs: number, progress?: string) {
+  async claim(workerId: string, leaseMs: number, kind?: JobKind) {
+    return this.write(() => {
+      const now = Date.now();
+      // Scan past dead candidates instead of stopping at the first one (same semantics as PgStore).
+      const candidates = this.data.jobs.filter((j) => {
+        if (j.status === "queued") return true;
+        if (j.status === "running" && (j.leaseUntil ?? 0) < now) return true;
+        return false;
+      });
+      // Retention: age finished jobs off the hot path occasionally, like the sessions table.
+      if (Math.random() < 0.02) {
+        const cutoff = now - 30 * 86_400_000;
+        this.data.jobs = this.data.jobs.filter((j) => j.status === "queued" || j.status === "running" || !j.finishedAt || Date.parse(j.finishedAt) > cutoff || !j.finishedAt);
+      }
+      if (kind) {
+        candidates.sort((a, b) => {
+          const aPref = a.kind === kind ? 0 : 1;
+          const bPref = b.kind === kind ? 0 : 1;
+          if (aPref !== bPref) return aPref - bPref;
+          return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+        });
+      } else {
+        candidates.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+      }
+      for (const job of candidates) {
+        if (job.status === "running" && (job.leaseUntil ?? 0) < now && job.attempts >= job.maxAttempts) {
+          Object.assign(job, { status: "failed", error: "The worker stopped responding too many times.", secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
+          continue;
+        }
+        Object.assign(job, { status: "running", lockedBy: workerId, leaseUntil: now + leaseMs, attempts: job.attempts + 1, startedAt: new Date().toISOString() });
+        return strip(job);
+      }
+      return null;
+    });
+  }
+  heartbeat(jobId: string, workerId: string, leaseMs: number) {
     return this.write(() => {
       const job = this.data.jobs.find((j) => j.id === jobId && j.lockedBy === workerId && j.status === "running");
       if (!job) return false;
       job.leaseUntil = Date.now() + leaseMs;
-      if (progress !== undefined) job.progress = progress;
       return true;
+    });
+  }
+  setProgress(jobId: string, workerId: string, progress: string) {
+    return this.write(() => {
+      const job = this.data.jobs.find((j) => j.id === jobId && j.lockedBy === workerId && j.status === "running");
+      if (job) job.progress = progress;
     });
   }
   finish(jobId: string, workerId: string, outcome: Parameters<Store["finish"]>[2]) {
@@ -176,7 +214,53 @@ export class FileStore implements Store {
     return this.data.jobs.filter((j) => j.owner === owner && (j.status === "queued" || j.status === "running")).length;
   }
   async queueDepth() {
-    return this.data.jobs.filter((j) => j.status === "queued").length;
+    return (await this.queueStats()).depth;
+  }
+
+  async queueStats() {
+    const now = Date.now();
+    const queued = this.data.jobs.filter((j) => j.status === "queued");
+    const oldest = queued.reduce((min, j) => Math.min(min, Date.parse(j.createdAt)), now);
+    return { depth: queued.length, oldestQueuedMs: Math.max(0, now - oldest) };
+  }
+  async metrics(windowMs = 86_400_000) {
+    const qs = await this.queueStats();
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const buckets = new Map<JobKind, number[]>();
+    for (const j of this.data.jobs) {
+      if (!j.startedAt || !j.finishedAt) continue;
+      if (j.status !== "succeeded" && j.status !== "failed") continue;
+      const finishedAt = Date.parse(j.finishedAt);
+      if (finishedAt < cutoff) continue;
+      const startedAt = Date.parse(j.startedAt);
+      const durMs = Math.max(0, finishedAt - startedAt);
+      const arr = buckets.get(j.kind) ?? [];
+      arr.push(durMs);
+      buckets.set(j.kind, arr);
+    }
+    const percentile = (vals: number[], p: number) => {
+      if (!vals.length) return 0;
+      const sorted = [...vals].sort((a, b) => a - b);
+      const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p / 100 * sorted.length) - 1));
+      return sorted[idx]!;
+    };
+    const finished = [...buckets.entries()].map(([kind, vals]) => ({
+      kind,
+      count: vals.length,
+      p50Ms: Math.round(percentile(vals, 50)),
+      p95Ms: Math.round(percentile(vals, 95)),
+    }));
+    return { windowMs, queue: qs, finished };
+  }
+  async queuePosition(createdAt: string) {
+    const now = Date.now();
+    // ISO-8601 UTC strings compare lexicographically in creation order, and claim() walks the
+    // array in that same order, so this count is exactly the jobs taken first.
+    const queued = this.data.jobs.filter((j) => j.status === "queued");
+    const ahead = queued.filter((j) => j.createdAt < createdAt).length;
+    const oldest = queued.reduce((min, j) => Math.min(min, Date.parse(j.createdAt)), now);
+    return { ahead, oldestQueuedMs: Math.max(0, now - oldest) };
   }
 
   saveRecording(row: RecordingRow) {
@@ -203,4 +287,26 @@ export class FileStore implements Store {
 function strip(j: Data["jobs"][number]): Job {
   const { idempotencyKey: _k, lockedBy: _l, leaseUntil: _u, ...job } = j;
   return { ...job };
+}
+
+function newJobRow(job: NewJob): Data["jobs"][number] {
+  return {
+    id: randomUUID(),
+    kind: job.kind,
+    owner: job.owner,
+    status: "queued",
+    input: job.input,
+    secret: job.secret ?? null,
+    result: null,
+    error: null,
+    progress: null,
+    attempts: 0,
+    maxAttempts: job.maxAttempts ?? 2,
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    finishedAt: null,
+    idempotencyKey: job.idempotencyKey ?? null,
+    lockedBy: null,
+    leaseUntil: null,
+  };
 }

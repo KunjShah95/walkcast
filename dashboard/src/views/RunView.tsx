@@ -1,5 +1,4 @@
 import { motion, useScroll, useSpring } from "motion/react";
-import { ArrowLeft, ArrowRight, Bot, Compass, Download, Eye, Flag, Hourglass, MousePointerClick, ScanText, Sparkles, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/FlightStrip.tsx";
@@ -52,8 +51,8 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
   return (
     <div className="grid min-w-0 gap-5 [&>*]:min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button type="button" onClick={() => go({ view: "runs" })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-signal">
-          <ArrowLeft className="size-3.5" /> Runs
+        <button type="button" onClick={() => go({ view: "runs" })} className="text-[13px] text-ink-2 hover:text-signal">
+          ← Runs
         </button>
         <div className="flex flex-wrap gap-2">
           {(() => {
@@ -299,19 +298,14 @@ function Timeline({ detail, evidence, flash }: { detail: RunDetail; evidence: Ma
   );
 }
 
-const ICON = { navigate: Compass, observe: Eye, act: MousePointerClick, wait: Hourglass, read: Download };
+function nodeMark(node: Node): string {
+  if (node.kind === "model") return (node.call.input as { channel?: string })?.channel === "stagehand" ? "St" : "Md";
+  if (node.kind === "claim") return "Rp";
+  const fam = toolFamily(node.step.tool);
+  return ({ navigate: "Go", observe: "Ob", act: "Do", wait: "Wt", read: "Rd" } as Record<string, string>)[fam] ?? "·";
+}
 
 function NodeRail({ node, evidence }: { node: Node; evidence?: Finding[] }) {
-  const Icon =
-    node.kind === "model"
-      ? (node.call.input as { channel?: string })?.channel === "stagehand"
-        ? Sparkles
-        : Bot
-      : node.kind === "claim"
-        ? Flag
-        : node.step.tool === "readValue"
-          ? ScanText
-          : ICON[toolFamily(node.step.tool)];
   const color =
     node.kind === "step"
       ? node.step.error
@@ -335,7 +329,7 @@ function NodeRail({ node, evidence }: { node: Node; evidence?: Finding[] }) {
           className="relative z-10 grid size-8 shrink-0 place-items-center rounded-full border bg-panel"
           style={{ borderColor: color, color, boxShadow: evidence ? "0 0 0 3px var(--highlight)" : undefined }}
         >
-          <Icon className="size-4" />
+          <span className="font-mono text-[10px] font-semibold uppercase">{nodeMark(node)}</span>
         </span>
       </div>
     </div>
@@ -394,7 +388,7 @@ function StepCard({
 
         <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11.5px]">
           <span className="rounded-md bg-panel-2 px-1.5 py-0.5">{pathOf(step.before?.url)}</span>
-          <ArrowRight className={cn("size-3.5", urlChanged ? "text-signal" : "text-ink-3")} />
+          <span className={cn("text-[12px]", urlChanged ? "text-signal" : "text-ink-3")} aria-hidden>→</span>
           <span className={cn("rounded-md px-1.5 py-0.5", urlChanged ? "bg-signal-soft text-signal" : "bg-panel-2")}>{pathOf(step.after?.url)}</span>
           {domChanged && <span className="rounded-md border border-line px-1.5 py-0.5 text-ink-2">page changed</span>}
           {step.after?.fingerprint === "pending" && <span className="rounded-md bg-warn-soft px-1.5 py-0.5 text-warn">navigation pending</span>}
@@ -480,7 +474,7 @@ function StepCard({
                   aria-label="Close"
                   style={{ marginTop: "env(safe-area-inset-top, 0px)" }}
                 >
-                  <X className="size-4" />
+                  <span className="text-lg leading-none" aria-hidden>×</span>
                 </button>
                 <img src={shot} alt={`Page after step ${step.stepId}`} className="max-h-[88vh] max-w-full rounded-lg border border-line" />
               </div>

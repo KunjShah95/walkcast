@@ -1,107 +1,102 @@
 {
  "captions": [
   {
-   "start": 0.02,
-   "end": 3.19,
-   "text": "Opening 127.0.0.1."
+   "start": 0.41,
+   "end": 3.67,
+   "text": "Opening agentic-crm-henna.vercel.app."
   },
   {
-   "start": 3.45,
-   "end": 6.39,
-   "text": "Typing the username into \"Username\"."
+   "start": 10.55,
+   "end": 15.77,
+   "text": "Scrolling through \"Real Estate CRM for Indian Sales Teams — Estate360\"."
   },
   {
-   "start": 6.49,
-   "end": 10.36,
-   "text": "Entering the password. It is hidden on screen and never saved."
+   "start": 16.5,
+   "end": 18.72,
+   "text": "Opening the product page."
   },
   {
-   "start": 10.46,
-   "end": 11.94,
-   "text": "Clicking \"Sign in\"."
+   "start": 21.3,
+   "end": 27.48,
+   "text": "Scrolling through \"Product — Inventory, Bookings, Site Visits, WhatsApp | Estate360\"."
   },
   {
-   "start": 12.04,
-   "end": 13.67,
-   "text": "Sign-in succeeded."
+   "start": 28.17,
+   "end": 30.51,
+   "text": "Opening the pricing page."
   },
   {
-   "start": 13.77,
-   "end": 16.9,
-   "text": "Scrolling through \"Leads \u00b7 MiniCRM\"."
+   "start": 33.07,
+   "end": 38.96,
+   "text": "Scrolling through \"Pricing — Plans from ₹1,499/month | Estate360\"."
   },
   {
-   "start": 17,
-   "end": 19.44,
-   "text": "Opening the leads, new page."
+   "start": 39.65,
+   "end": 41.98,
+   "text": "Opening the contact page."
   },
   {
-   "start": 21.82,
-   "end": 25.03,
-   "text": "Scrolling through \"New lead \u00b7 MiniCRM\"."
+   "start": 44.55,
+   "end": 48.54,
+   "text": "Scrolling through \"Contact — Talk to the Estate360 Team\"."
   },
   {
-   "start": 25.21,
-   "end": 28.28,
-   "text": "Opening the leads, 1001 page."
+   "start": 49.24,
+   "end": 51.28,
+   "text": "Opening the login page."
   },
   {
-   "start": 30.96,
-   "end": 35.01,
-   "text": "Scrolling through \"Lead 1001 \u00b7 MiniCRM\"."
+   "start": 53.99,
+   "end": 57.26,
+   "text": "Scrolling through \"Sign in | Estate360\"."
   },
   {
-   "start": 35.18,
-   "end": 38.28,
-   "text": "Opening the leads, 1002 page."
+   "start": 57.94,
+   "end": 60.13,
+   "text": "Opening the signup page."
   },
   {
-   "start": 40.96,
-   "end": 45.04,
-   "text": "Scrolling through \"Lead 1002 \u00b7 MiniCRM\"."
+   "start": 62.75,
+   "end": 67.35,
+   "text": "Scrolling through \"Start Free — 14-Day Trial | Estate360\"."
   },
   {
-   "start": 45.22,
-   "end": 48.35,
-   "text": "Opening the leads, 1003 page."
-  },
-  {
-   "start": 51.03,
-   "end": 55.12,
-   "text": "Scrolling through \"Lead 1003 \u00b7 MiniCRM\"."
-  },
-  {
-   "start": 55.22,
-   "end": 58.06,
-   "text": "Recording finished. 5 pages visited."
+   "start": 67.45,
+   "end": 70.32,
+   "text": "Recording finished. 6 pages visited."
   }
  ],
  "pages": [
   {
-   "path": "/leads",
-   "title": "Leads \u00b7 MiniCRM",
+   "path": "/",
+   "title": "Real Estate CRM for Indian Sales Teams — Estate360",
    "status": 200
   },
   {
-   "path": "/leads/new",
-   "title": "New lead \u00b7 MiniCRM",
+   "path": "/product",
+   "title": "Product — Inventory, Bookings, Site Visits, WhatsApp | Estate360",
    "status": 200
   },
   {
-   "path": "/leads/1001",
-   "title": "Lead 1001 \u00b7 MiniCRM",
+   "path": "/pricing",
+   "title": "Pricing — Plans from ₹1,499/month | Estate360",
    "status": 200
   },
   {
-   "path": "/leads/1002",
-   "title": "Lead 1002 \u00b7 MiniCRM",
+   "path": "/contact",
+   "title": "Contact — Talk to the Estate360 Team",
    "status": 200
   },
   {
-   "path": "/leads/1003",
-   "title": "Lead 1003 \u00b7 MiniCRM",
+   "path": "/login",
+   "title": "Sign in | Estate360",
+   "status": 200
+  },
+  {
+   "path": "/signup",
+   "title": "Start Free — 14-Day Trial | Estate360",
    "status": 200
   }
  ],
- "durationSeconds": 58
+ "durationSeconds": 71
 }

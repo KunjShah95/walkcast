@@ -27,8 +27,8 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
     <div className="grid gap-4">
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="eyebrow">{index.runs.length} recorded</div>
-          <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">Runs</h1>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">Runs</h1>
+          <p className="mt-1.5 text-[14px] text-ink-2">{index.runs.length} agent runs, each judged by the application's own records.</p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <Segmented
@@ -48,7 +48,13 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
       </div>
 
       {runs.length === 0 ? (
-        <Empty title="No runs match these filters" />
+        index.runs.length === 0 ? (
+          <Empty title="No lab runs yet">
+            Replay a fault from Fault replay, or run <code className="font-mono">npm run lab -- run --fault stale-owners --agent v0</code>.
+          </Empty>
+        ) : (
+          <Empty title="No runs match these filters">Clear a filter to see more.</Empty>
+        )
       ) : (
         <Panel className="overflow-hidden">
           <div className="hidden grid-cols-[5.5rem_4.5rem_minmax(0,11rem)_minmax(0,1fr)_minmax(0,14rem)_6rem] gap-4 border-b border-line px-4 py-2 md:grid">

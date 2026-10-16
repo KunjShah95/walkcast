@@ -1,4 +1,3 @@
-import { FastForward, Pause, Play, RotateCcw, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { type NodeStatus, type Packet, Pipeline } from "../components/Pipeline.tsx";
@@ -414,15 +413,15 @@ function PlayerBar({ player, disabled }: { player: Player; disabled: boolean }) 
         disabled={disabled}
         onClick={() => (player.playing ? player.pause() : player.play())}
         aria-label={player.playing ? "Pause" : "Play"}
-        className="grid size-9 place-items-center rounded-full bg-ink text-paper disabled:opacity-40"
+        className="rounded-lg bg-ink px-3 py-1.5 font-mono text-[12px] text-paper disabled:opacity-40"
       >
-        {player.playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
+        {player.playing ? "Pause" : "Play"}
       </button>
-      <button type="button" disabled={disabled} onClick={() => player.restart(true)} aria-label="Restart" className="grid size-8 place-items-center rounded-lg border border-line text-ink-2 hover:text-signal disabled:opacity-40">
-        <RotateCcw className="size-4" />
+      <button type="button" disabled={disabled} onClick={() => player.restart(true)} aria-label="Restart" className="rounded-lg border border-line px-2.5 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
+        Restart
       </button>
-      <button type="button" disabled={disabled} onClick={() => player.seek(player.duration)} aria-label="Skip to the result" className="grid size-8 place-items-center rounded-lg border border-line text-ink-2 hover:text-signal disabled:opacity-40">
-        <SkipForward className="size-4" />
+      <button type="button" disabled={disabled} onClick={() => player.seek(player.duration)} aria-label="Skip to the result" className="rounded-lg border border-line px-2.5 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
+        End
       </button>
       <label htmlFor="sim-scrub" className="sr-only">
         Position
@@ -451,7 +450,6 @@ function PlayerBar({ player, disabled }: { player: Player; disabled: boolean }) 
             onClick={() => player.setSpeed(s)}
             className={cn("inline-flex items-center gap-0.5 rounded-md px-2 py-0.5 font-mono text-[11.5px]", player.speed === s ? "bg-ink text-paper" : "text-ink-2")}
           >
-            {s > 1 && <FastForward className="size-3" />}
             {s}×
           </button>
         ))}
@@ -501,7 +499,7 @@ function Narration({ captions, t, playing }: { captions: Caption[]; t: number; p
               aria-pressed={speak}
               className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12.5px]", speak ? "border-signal text-signal" : "border-line text-ink-2")}
             >
-              {speak ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />} {speak ? "Speaking" : "Speak"}
+              {speak ? "Speaking" : "Speak"}
             </button>
           ) : null
         }

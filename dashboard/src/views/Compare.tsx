@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
@@ -46,7 +45,7 @@ export function Compare({ base, cand, index, go }: { base: string; cand: string;
 
       <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
         <RunPick label="Baseline" detail={pair[0]} other={cand} runs={runs} onPick={(d) => go({ view: "compare", base: d, cand })} />
-        <ArrowRight className="mx-auto hidden size-5 text-ink-3 md:block" />
+        <span className="mx-auto hidden text-center font-mono text-ink-3 md:block" aria-hidden>→</span>
         <RunPick label="Candidate" detail={pair[1]} other={base} runs={runs} onPick={(d) => go({ view: "compare", base, cand: d })} />
       </div>
 

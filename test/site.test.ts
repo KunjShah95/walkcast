@@ -147,15 +147,14 @@ test("technical SEO: one h1 per page, image alt text, a real 404 and canonical U
   }
 });
 
-test("auth screens drop the marketing chrome but keep the form and a way back", () => {
+test("auth screens keep the navbar but drop the footer sitemap", () => {
   for (const mode of ["login", "signup", "forgot", "reset"] as const) {
     const html = authPage("https://lab.example", mode, { google: false, next: "/app" });
     const header = html.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
     const footer = html.match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? "";
-    // Brand and a way back; no marketing nav, no footer sitemap.
-    assert.match(header, /Back to the site/, `${mode} keeps a way back to the site`);
-    for (const link of ["/how", "/lab", "/guides", "/pricing", "/login", "/signup"]) {
-      assert.ok(!header.includes(`href="${link}"`), `${mode} header is free of ${link}`);
+    // The same navbar as every other page, so a visitor can leave the form for any section.
+    for (const link of ["/", "/how", "/lab", "/guides", "/pricing"]) {
+      assert.ok(header.includes(`href="${link}"`), `${mode} header links to ${link}`);
     }
     assert.equal(footer, "", `${mode} has no footer`);
     assert.match(html, /<form id="auth"/, `${mode} still serves the form`);

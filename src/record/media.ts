@@ -5,6 +5,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
+import { chooseVoiceEngine, type VoiceEngine, type FliteVoice, fliteEngine } from "./voice.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -16,13 +17,20 @@ export interface MediaResult {
   /** Narration audio on its own (WAV). */
   audio: string | null;
   captions: string;
-  voice: "flite" | "none";
+  /** Who speaks: the flite voice, the user's own recording, or nobody (captions only). */
+  voice: "flite" | "own" | "none";
   note: string;
 }
 
 const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
 const FFPROBE = process.env.LAB_FFPROBE ?? "ffprobe";
-const VOICE = process.env.LAB_VOICE ?? "slt";
+/** The flite voices ffmpeg ships with. */
+export const VOICES = ["slt", "awb", "kal", "rms"] as const;
+export type Voice = (typeof VOICES)[number];
+export function isVoice(v: unknown): v is Voice {
+  return typeof v === "string" && (VOICES as readonly string[]).includes(v);
+}
+const VOICE: Voice = isVoice(process.env.LAB_VOICE) ? process.env.LAB_VOICE : "slt";
 
 /**
  * Turn the browser video and captions into a narrated MP4. Each caption is spoken with ffmpeg's
@@ -30,7 +38,7 @@ const VOICE = process.env.LAB_VOICE ?? "slt";
  * speech), mixed into one track, and muxed with the video plus a caption track. Without ffmpeg
  * (or flite) the recording still has the WebM video and WebVTT captions for the dashboard player.
  */
-export async function buildMedia(dir: string, captions: Caption[]): Promise<MediaResult> {
+export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine = chooseVoiceEngine()): Promise<MediaResult> {
   const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
   const result: MediaResult = { video, mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
   const finish = (note: string) => {
@@ -42,7 +50,7 @@ export async function buildMedia(dir: string, captions: Caption[]): Promise<Medi
   if (!hasFlite()) return finish("ffmpeg with the flite voice is not installed; the recording has video and captions only.");
 
   try {
-    return await narrate(dir, video, captions, result);
+    return await narrate(dir, video, captions, result, engine);
   } catch (e) {
     // Keep what we have (video + captions) and say what went wrong.
     return finish(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the recording has video and captions only.`);
@@ -54,14 +62,12 @@ export async function buildMedia(dir: string, captions: Caption[]): Promise<Medi
   }
 }
 
-async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult): Promise<MediaResult> {
+async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult, engine: VoiceEngine): Promise<MediaResult> {
   // 1. Speak each caption to its own clip.
   const clips: { file: string; seconds: number }[] = [];
   for (const [i, caption] of captions.entries()) {
-    const text = join(dir, `.tts-${i}.txt`);
     const file = join(dir, `.tts-${i}.wav`);
-    writeFileSync(text, caption.text.replace(/[{}]/g, ""));
-    await run(["-f", "lavfi", "-i", `flite=textfile=.tts-${i}.txt:voice=${VOICE}`, "-ar", "22050", "-ac", "1", file], { cwd: dir });
+    await engine.speak(caption.text.replace(/[{}]/g, ""), file, dir);
     clips.push({ file, seconds: wavSeconds(file) });
   }
 
@@ -83,8 +89,16 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
 
   // 4. Mux: hold the last frame if the narration runs past the end of the video.
+  Object.assign(result, await mux(dir, video, audio, cursor));
+  result.voice = "flite";
+  result.note = `Narrated with the "${engine.id}" voice (${captions.length} lines).`;
+  return result;
+}
+
+/** Video + narration track (+ captions) into the MP4 and the narrated WebM. */
+async function mux(dir: string, video: string, audio: string, audioSeconds: number): Promise<Pick<MediaResult, "mp4" | "webm" | "audio">> {
   const videoSeconds = await probeSeconds(join(dir, video));
-  const extra = Math.max(0, cursor - videoSeconds + 0.5);
+  const extra = Math.max(0, audioSeconds - videoSeconds + 0.5);
   const mp4 = join(dir, "recording.mp4");
   await run([
     "-i", join(dir, video),
@@ -100,12 +114,59 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   ]);
   const webm = join(dir, "narrated.webm");
   await run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
-  result.webm = existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null;
-  result.audio = "narration.wav";
-  result.mp4 = existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null;
-  result.voice = "flite";
-  result.note = `Narrated with the flite "${VOICE}" voice (${captions.length} lines).`;
-  return result;
+  return {
+    webm: existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null,
+    audio: "narration.wav",
+    mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null,
+  };
+}
+
+/**
+ * Re-speak an edited script over an existing recording. Needs the raw browser video, which only
+ * a recording kept on local disk still has.
+ */
+export async function renarrate(dir: string, captions: Caption[], voice: Voice): Promise<MediaResult> {
+  if (!existsSync(join(dir, "video.webm"))) throw new Error("The original browser video isn't kept for this recording, so it can't be re-narrated.");
+  if (!hasFlite()) throw new Error("ffmpeg with the flite voice isn't installed on this server.");
+  const result: MediaResult = { video: "video.webm", mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
+  try {
+    return await narrate(dir, "video.webm", captions, result, fliteEngine(voice));
+  } finally {
+    for (const [i] of captions.entries()) {
+      rmSync(join(dir, `.tts-${i}.wav`), { force: true });
+      rmSync(join(dir, `.tts-${i}.txt`), { force: true });
+    }
+  }
+}
+
+/** Replace the narration with the user's own recorded voice (any audio ffmpeg reads). */
+export async function voiceover(dir: string, audioPath: string, captions: Caption[]): Promise<MediaResult> {
+  if (!existsSync(join(dir, "video.webm"))) throw new Error("The original browser video isn't kept for this recording, so the voice can't be replaced.");
+  const audio = join(dir, "narration.wav");
+  // The upload arrived as a temp file on disk so a 40MB voice doesn't take per-instance RAM
+  // before ffmpeg even sees it. `audioPath` is owned by the caller (it provides cleanup).
+  await run(["-i", audioPath, "-ar", "22050", "-ac", "1", audio]);
+  writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
+  const media = await mux(dir, "video.webm", audio, wavSeconds(audio));
+  return { video: "video.webm", ...media, captions: "captions.vtt", voice: "own", note: "Narrated in your own voice." };
+}
+
+const previews = new Map<Voice, Buffer>();
+/** A short sample of a voice, for choosing one before recording. */
+export async function voicePreview(voice: Voice): Promise<Buffer> {
+  const hit = previews.get(voice);
+  if (hit) return hit;
+  if (!hasFlite()) throw new Error("ffmpeg with the flite voice isn't installed on this server.");
+  const dir = mkdtempSync(join(tmpdir(), "lab-voice-"));
+  try {
+    writeFileSync(join(dir, "t.txt"), "Opening the dashboard. Scrolling through the pricing page, then signing in.");
+    await run(["-f", "lavfi", "-i", `flite=textfile=t.txt:voice=${voice}`, "-ar", "22050", "-ac", "1", "p.wav"], { cwd: dir });
+    const buf = readFileSync(join(dir, "p.wav"));
+    previews.set(voice, buf);
+    return buf;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 let cacheDir: string | undefined;

@@ -1,0 +1,545 @@
+- generic [active] [ref=f18e1]:
+  - link "Skip to content" [ref=f18e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f18e3]:
+    - generic [ref=f18e4]:
+      - link "Walkcast home" [ref=f18e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f18e10]: Walkcast
+      - link "Get started" [ref=f18e12] [cursor=pointer]:
+        - /url: /signup
+  - main [ref=f18e13]:
+    - generic [ref=f18e15]:
+      - heading [level=1] [ref=f18e16]:
+        - text: Paste a link.
+        - generic [ref=f18e21]: Get it narrated.
+      - paragraph [ref=f18e25]: A real browser signs in, walks your pages, and hands back an MP4 with a spoken voice-over, captions and a transcript. No script, no editor, no microphone.
+      - search "Start a walkthrough" [ref=f18e26]:
+        - generic [ref=f18e27]: Your website's link
+        - textbox "Your website's link" [ref=f18e28]:
+          - /placeholder: https://your-app.com/login
+        - button "Make my walkthrough" [ref=f18e29] [cursor=pointer]
+      - paragraph [ref=f18e30]: Free and MIT licensed · works behind a login · the password is never saved
+      - generic [ref=f18e32]:
+        - generic [ref=f18e38]:
+          - generic [ref=f18e39]: REC
+          - generic [ref=f18e40]: 5 pages · 0:58
+        - generic [ref=f18e41]:
+          - figure "recording.mp4 Voice-over, captions on 5 of 5 pages answered 200" [ref=f18e42]:
+            - generic "Narration lines" [ref=f18e44]:
+              - 'button "EX 1 at 0:00: Opening 127.0.0.1." [ref=f18e45] [cursor=pointer]'
+              - 'button "EX 2 at 0:03: Typing the username into \"Username\"." [ref=f18e46] [cursor=pointer]'
+              - 'button "EX 3 at 0:06: Entering the password. It is hidden on screen and never saved." [ref=f18e47] [cursor=pointer]'
+              - 'button "EX 4 at 0:10: Clicking \"Sign in\"." [ref=f18e48] [cursor=pointer]'
+              - 'button "EX 5 at 0:12: Sign-in succeeded." [ref=f18e49] [cursor=pointer]'
+              - 'button "EX 6 at 0:13: Scrolling through \"Leads · MiniCRM\"." [ref=f18e50] [cursor=pointer]'
+              - 'button "EX 7 at 0:17: Opening the leads, new page." [ref=f18e51] [cursor=pointer]'
+              - 'button "EX 8 at 0:21: Scrolling through \"New lead · MiniCRM\"." [ref=f18e52] [cursor=pointer]'
+              - 'button "EX 9 at 0:25: Opening the leads, 1001 page." [ref=f18e53] [cursor=pointer]'
+              - 'button "EX 10 at 0:30: Scrolling through \"Lead 1001 · MiniCRM\"." [ref=f18e54] [cursor=pointer]'
+              - 'button "EX 11 at 0:35: Opening the leads, 1002 page." [ref=f18e55] [cursor=pointer]'
+              - 'button "EX 12 at 0:40: Scrolling through \"Lead 1002 · MiniCRM\"." [ref=f18e56] [cursor=pointer]'
+              - 'button "EX 13 at 0:45: Opening the leads, 1003 page." [ref=f18e57] [cursor=pointer]'
+              - 'button "EX 14 at 0:51: Scrolling through \"Lead 1003 · MiniCRM\"." [ref=f18e58] [cursor=pointer]'
+              - 'button "EX 15 at 0:55: Recording finished. 5 pages visited." [ref=f18e59] [cursor=pointer]'
+            - generic [ref=f18e60]:
+              - generic [ref=f18e61]: recording.mp4
+              - generic [ref=f18e62]: Voice-over, captions on
+              - generic [ref=f18e63]: 5 of 5 pages answered 200
+          - complementary "Transcript" [ref=f18e64]:
+            - generic [ref=f18e65]:
+              - paragraph [ref=f18e66]: Signing in to a demo CRM
+              - generic [ref=f18e67]: 15 lines
+            - list [ref=f18e68]:
+              - listitem [ref=f18e69]:
+                - button "EX 1 Opening 127.0.0.1. 0:00" [ref=f18e70] [cursor=pointer]:
+                  - generic [ref=f18e71]: EX 1
+                  - generic [ref=f18e72]: Opening 127.0.0.1.
+                  - time [ref=f18e73]: 0:00
+              - listitem [ref=f18e74]:
+                - button "EX 2 Typing the username into \"Username\". 0:03" [ref=f18e75] [cursor=pointer]:
+                  - generic [ref=f18e76]: EX 2
+                  - generic [ref=f18e77]: Typing the username into "Username".
+                  - time [ref=f18e78]: 0:03
+              - listitem [ref=f18e79]:
+                - button "EX 3 Entering the password. It is hidden on screen and never saved. 0:06" [ref=f18e80] [cursor=pointer]:
+                  - generic [ref=f18e81]: EX 3
+                  - generic [ref=f18e82]: Entering the password. It is hidden on screen and never saved.
+                  - time [ref=f18e83]: 0:06
+              - listitem [ref=f18e84]:
+                - button "EX 4 Clicking \"Sign in\". 0:10" [ref=f18e85] [cursor=pointer]:
+                  - generic [ref=f18e86]: EX 4
+                  - generic [ref=f18e87]: Clicking "Sign in".
+                  - time [ref=f18e88]: 0:10
+              - listitem [ref=f18e89]:
+                - button "EX 5 Sign-in succeeded. 0:12" [ref=f18e90] [cursor=pointer]:
+                  - generic [ref=f18e91]: EX 5
+                  - generic [ref=f18e92]: Sign-in succeeded.
+                  - time [ref=f18e93]: 0:12
+              - listitem [ref=f18e94]:
+                - button "EX 6 Scrolling through \"Leads · MiniCRM\". 0:13" [ref=f18e95] [cursor=pointer]:
+                  - generic [ref=f18e96]: EX 6
+                  - generic [ref=f18e97]: Scrolling through "Leads · MiniCRM".
+                  - time [ref=f18e98]: 0:13
+              - listitem [ref=f18e99]:
+                - button "EX 7 Opening the leads, new page. 0:17" [ref=f18e100] [cursor=pointer]:
+                  - generic [ref=f18e101]: EX 7
+                  - generic [ref=f18e102]: Opening the leads, new page.
+                  - time [ref=f18e103]: 0:17
+              - listitem [ref=f18e104]:
+                - button "EX 8 Scrolling through \"New lead · MiniCRM\". 0:21" [ref=f18e105] [cursor=pointer]:
+                  - generic [ref=f18e106]: EX 8
+                  - generic [ref=f18e107]: Scrolling through "New lead · MiniCRM".
+                  - time [ref=f18e108]: 0:21
+              - listitem [ref=f18e109]:
+                - button "EX 9 Opening the leads, 1001 page. 0:25" [ref=f18e110] [cursor=pointer]:
+                  - generic [ref=f18e111]: EX 9
+                  - generic [ref=f18e112]: Opening the leads, 1001 page.
+                  - time [ref=f18e113]: 0:25
+              - listitem [ref=f18e114]:
+                - button "EX 10 Scrolling through \"Lead 1001 · MiniCRM\". 0:30" [ref=f18e115] [cursor=pointer]:
+                  - generic [ref=f18e116]: EX 10
+                  - generic [ref=f18e117]: Scrolling through "Lead 1001 · MiniCRM".
+                  - time [ref=f18e118]: 0:30
+              - listitem [ref=f18e119]:
+                - button "EX 11 Opening the leads, 1002 page. 0:35" [ref=f18e120] [cursor=pointer]:
+                  - generic [ref=f18e121]: EX 11
+                  - generic [ref=f18e122]: Opening the leads, 1002 page.
+                  - time [ref=f18e123]: 0:35
+              - listitem [ref=f18e124]:
+                - button "EX 12 Scrolling through \"Lead 1002 · MiniCRM\". 0:40" [ref=f18e125] [cursor=pointer]:
+                  - generic [ref=f18e126]: EX 12
+                  - generic [ref=f18e127]: Scrolling through "Lead 1002 · MiniCRM".
+                  - time [ref=f18e128]: 0:40
+              - listitem [ref=f18e129]:
+                - button "EX 13 Opening the leads, 1003 page. 0:45" [ref=f18e130] [cursor=pointer]:
+                  - generic [ref=f18e131]: EX 13
+                  - generic [ref=f18e132]: Opening the leads, 1003 page.
+                  - time [ref=f18e133]: 0:45
+              - listitem [ref=f18e134]:
+                - button "EX 14 Scrolling through \"Lead 1003 · MiniCRM\". 0:51" [ref=f18e135] [cursor=pointer]:
+                  - generic [ref=f18e136]: EX 14
+                  - generic [ref=f18e137]: Scrolling through "Lead 1003 · MiniCRM".
+                  - time [ref=f18e138]: 0:51
+              - listitem [ref=f18e139]:
+                - button "EX 15 Recording finished. 5 pages visited. 0:55" [ref=f18e140] [cursor=pointer]:
+                  - generic [ref=f18e141]: EX 15
+                  - generic [ref=f18e142]: Recording finished. 5 pages visited.
+                  - time [ref=f18e143]: 0:55
+        - generic [ref=f18e144]:
+          - generic [ref=f18e145]: Pages
+          - button "/leads 200" [ref=f18e146] [cursor=pointer]:
+            - text: /leads
+            - generic [ref=f18e147]: "200"
+          - button "/leads/new 200" [ref=f18e148] [cursor=pointer]:
+            - text: /leads/new
+            - generic [ref=f18e149]: "200"
+          - button "/leads/1001 200" [ref=f18e150] [cursor=pointer]:
+            - text: /leads/1001
+            - generic [ref=f18e151]: "200"
+          - button "/leads/1002 200" [ref=f18e152] [cursor=pointer]:
+            - text: /leads/1002
+            - generic [ref=f18e153]: "200"
+          - button "/leads/1003 200" [ref=f18e154] [cursor=pointer]:
+            - text: /leads/1003
+            - generic [ref=f18e155]: "200"
+      - list "Files you get back" [ref=f18e156]:
+        - listitem [ref=f18e157]: recording.mp4
+        - listitem [ref=f18e161]: recording.webm
+        - listitem [ref=f18e165]: captions.vtt
+        - listitem [ref=f18e169]: narration.wav
+        - listitem [ref=f18e172]: page list
+    - generic [ref=f18e179]:
+      - generic [ref=f18e180]:
+        - heading [level=2] [ref=f18e181]:
+          - text: What is Walkcast?
+          - generic [ref=f18e182]: A browser that tells you what it did.
+        - paragraph [ref=f18e187]: Walkcast is a free, open-source tool that makes a narrated video walkthrough from a website link. A browser signs in, visits up to 30 pages on that site, and returns an MP4 with a spoken voice-over, WebVTT captions and a transcript. Every line comes from what the browser actually did.
+        - paragraph [ref=f18e188]:
+          - text: "See it in the recording: typing the username"
+          - link "EX 2" [ref=f18e189] [cursor=pointer]:
+            - /url: "#demo"
+          - text: ", the password kept off screen"
+          - link "EX 3" [ref=f18e190] [cursor=pointer]:
+            - /url: "#demo"
+          - text: ", sign-in confirmed"
+          - link "EX 5" [ref=f18e191] [cursor=pointer]:
+            - /url: "#demo"
+          - text: . Updated
+          - time [ref=f18e192]: 2026-10-15
+          - text: .
+      - generic [ref=f18e193]:
+        - generic [ref=f18e194]: WEBVTT 00:00:00.020 --> 00:00:03.190 Opening 127.0.0.1. 00:00:03.450 --> 00:00:06.390 Typing the username into "Username". 00:00:06.490 --> 00:00:10.360 Entering the password. It is hidden on screen and never saved.
+        - paragraph [ref=f18e196]: captions.vtt, first three cues, exactly as written by the recorder.
+    - generic [ref=f18e198]:
+      - generic [ref=f18e199]:
+        - heading [level=2] [ref=f18e200]:
+          - text: Three steps.
+          - generic [ref=f18e201]: About two minutes.
+        - paragraph [ref=f18e206]: You don't write a script. A real browser does the walk, and every line comes from what it actually did.
+      - list [ref=f18e207]:
+        - listitem [ref=f18e208]: Free, MIT licensed
+        - listitem [ref=f18e211]: Works behind a login
+        - listitem [ref=f18e215]: Password held in memory
+        - listitem [ref=f18e219]: Stops at CAPTCHA and 2FA
+      - list [ref=f18e223]:
+        - listitem [ref=f18e224]:
+          - heading "Paste the link" [level=3] [ref=f18e228]
+          - paragraph [ref=f18e229]:
+            - text: The address of the page you sign in on, or any page of the site.
+            - link "EX 1" [ref=f18e230] [cursor=pointer]:
+              - /url: "#demo"
+        - listitem [ref=f18e231]:
+          - heading "Add your sign-in" [level=3] [ref=f18e235]
+          - paragraph [ref=f18e236]:
+            - text: Username and password, held in memory only. Confirm you may test the site.
+            - link "EX 3" [ref=f18e237] [cursor=pointer]:
+              - /url: "#demo"
+        - listitem [ref=f18e238]:
+          - heading "Get the video" [level=3] [ref=f18e242]
+          - paragraph [ref=f18e243]:
+            - text: A narrated MP4 with captions and a transcript, ready to share or embed.
+            - link "EX 15" [ref=f18e244] [cursor=pointer]:
+              - /url: "#demo"
+      - paragraph [ref=f18e245]:
+        - link "How a recording runs" [ref=f18e246] [cursor=pointer]:
+          - /url: /how
+    - generic [ref=f18e250]:
+      - generic [ref=f18e251]:
+        - heading [level=2] [ref=f18e252]:
+          - text: One video.
+          - generic [ref=f18e253]: And every file around it.
+        - paragraph [ref=f18e258]: Send the MP4. Keep the captions, the voice-over and the page list for the next cut.
+      - generic [ref=f18e259]:
+        - article [ref=f18e260]:
+          - generic [ref=f18e261]:
+            - 'img "First frame of the demo walkthrough: the MiniCRM sign-in page" [ref=f18e262]'
+            - generic [ref=f18e263]: 0:58 · unedited
+          - generic [ref=f18e264]:
+            - generic [ref=f18e265]: recording.mp4
+            - heading "Narrated video" [level=3] [ref=f18e269]
+            - paragraph [ref=f18e270]: H.264 with a spoken voice-over and an embedded caption track. It plays anywhere, and it is the same file the browser produced.
+        - generic [ref=f18e271]:
+          - article [ref=f18e272]:
+            - generic [ref=f18e273]: 00:00:03.450 --> 00:00:06.390 Typing the username into "Username".
+            - generic [ref=f18e275]:
+              - generic [ref=f18e276]: captions.vtt
+              - heading "Captions" [level=3] [ref=f18e280]
+              - paragraph [ref=f18e281]: WebVTT, timed to the speech, for accessible embeds and video hosts.
+          - article [ref=f18e282]:
+            - generic [ref=f18e283]:
+              - text: Recording finished. 5 pages visited.
+              - generic [ref=f18e284]:
+                - text: last line of the narration
+                - link "EX 15" [ref=f18e285] [cursor=pointer]:
+                  - /url: "#demo"
+            - generic [ref=f18e286]:
+              - generic [ref=f18e287]: narration.wav
+              - heading "Audio" [level=3] [ref=f18e290]
+              - paragraph [ref=f18e291]: The voice-over on its own, to re-cut or re-voice.
+        - article [ref=f18e292]:
+          - list [ref=f18e294]:
+            - listitem [ref=f18e295]:
+              - generic [ref=f18e296]: /leads
+              - generic [ref=f18e297]: "200"
+            - listitem [ref=f18e298]:
+              - generic [ref=f18e299]: /leads/new
+              - generic [ref=f18e300]: "200"
+            - listitem [ref=f18e301]:
+              - generic [ref=f18e302]: /leads/1001
+              - generic [ref=f18e303]: "200"
+            - listitem [ref=f18e304]:
+              - generic [ref=f18e305]: /leads/1002
+              - generic [ref=f18e306]: "200"
+            - listitem [ref=f18e307]:
+              - generic [ref=f18e308]: /leads/1003
+              - generic [ref=f18e309]: "200"
+          - generic [ref=f18e310]:
+            - generic [ref=f18e311]: pages · status
+            - heading "Page list" [level=3] [ref=f18e317]
+            - paragraph [ref=f18e318]: Every page visited, its title and HTTP status, and the links skipped on purpose.
+    - generic [ref=f18e320]:
+      - heading [level=2] [ref=f18e322]:
+        - text: A careful visitor,
+        - generic [ref=f18e323]: not a bot let loose.
+      - list [ref=f18e328]:
+        - listitem [ref=f18e329]:
+          - heading "Only sites you may test" [level=3] [ref=f18e333]
+          - paragraph [ref=f18e334]: Every recording needs your confirmation.
+        - listitem [ref=f18e335]:
+          - heading "Password stays in memory" [level=3] [ref=f18e339]
+          - paragraph [ref=f18e340]:
+            - text: Files on disk show a placeholder.
+            - link "EX 3" [ref=f18e341] [cursor=pointer]:
+              - /url: "#demo"
+        - listitem [ref=f18e342]:
+          - heading "Stops at CAPTCHA and 2FA" [level=3] [ref=f18e346]
+          - paragraph [ref=f18e347]: It never tries to get past them.
+        - listitem [ref=f18e348]:
+          - heading "Read-only after sign-in" [level=3] [ref=f18e352]
+          - paragraph [ref=f18e353]: No forms submitted; sign-out and delete links skipped.
+        - listitem [ref=f18e354]:
+          - heading "Same site only" [level=3] [ref=f18e358]
+          - paragraph [ref=f18e359]: Follows links on your domain, respects robots.txt, paces requests.
+        - listitem [ref=f18e360]:
+          - heading "Honest narration" [level=3] [ref=f18e363]
+          - paragraph [ref=f18e364]:
+            - text: Written from recorded events, never invented.
+            - link "EX 6" [ref=f18e365] [cursor=pointer]:
+              - /url: "#demo"
+      - paragraph [ref=f18e366]:
+        - link "The rules, in full" [ref=f18e367] [cursor=pointer]:
+          - /url: /safety
+    - generic [ref=f18e371]:
+      - generic [ref=f18e372]:
+        - heading [level=2] [ref=f18e373]:
+          - text: When an agent fails,
+          - generic [ref=f18e374]: keep the test.
+        - paragraph [ref=f18e379]: The same recorder powers Walkcast Lab. It captures a browser-agent run, names the cause from the app's real state, and saves a replayable regression. Intervals are 95% Wilson score intervals.
+        - paragraph [ref=f18e380]:
+          - link "The lab, in full" [ref=f18e381] [cursor=pointer]:
+            - /url: /lab
+      - generic [ref=f18e385]:
+        - generic [ref=f18e387]:
+          - text: "39"
+          - generic [ref=f18e388]: scenarios across three CRM tasks and composable faults
+        - generic [ref=f18e390]:
+          - text: 25/25
+          - generic [ref=f18e391]: injected faults diagnosed with the right cause (scripted agents; 95% CI 87%–100%)
+        - generic [ref=f18e419]:
+          - text: 0/15
+          - generic [ref=f18e420]: false alarms on runs with no fault injected; 95% CI 0%–20%
+        - generic [ref=f18e438]:
+          - text: "16"
+          - generic [ref=f18e439]: model providers through one gateway
+    - generic [ref=f18e441]:
+      - generic [ref=f18e442]:
+        - heading "Walkcast vs recording it yourself." [level=2] [ref=f18e443]
+        - paragraph [ref=f18e444]: A screen recorder captures your display while you talk. Walkcast drives a browser from a link and writes the narration from what that browser did. They are for different videos.
+      - table [ref=f18e446]:
+        - caption [ref=f18e447]: How the two ways of making a website walkthrough differ
+        - rowgroup [ref=f18e448]:
+          - row [ref=f18e449]:
+            - columnheader "Criterion" [ref=f18e450]
+            - columnheader "Walkcast" [ref=f18e451]
+            - columnheader "Screen recording" [ref=f18e452]
+        - rowgroup [ref=f18e453]:
+          - row [ref=f18e454]:
+            - rowheader "Starting point" [ref=f18e455]
+            - cell "A link to the site." [ref=f18e456]
+            - cell "You open the site and a screen recorder." [ref=f18e457]
+          - row [ref=f18e458]:
+            - rowheader "Who narrates" [ref=f18e459]
+            - cell "Lines written from recorded browser events." [ref=f18e460]
+            - cell "You talk, or you write a script and record it." [ref=f18e461]
+          - row [ref=f18e462]:
+            - rowheader "Pages behind a login" [ref=f18e463]
+            - cell "Signs in with a username and password held in memory. Stops at CAPTCHA and two-factor prompts." [ref=f18e464]
+            - cell "You sign in yourself, including those prompts." [ref=f18e465]
+          - row [ref=f18e466]:
+            - rowheader "What you get" [ref=f18e467]
+            - cell "MP4 with voice-over, WebVTT captions, a WAV of the narration, and a page list with HTTP status." [ref=f18e468]
+            - cell "A video file. Captions and a transcript are a separate job." [ref=f18e469]
+          - row [ref=f18e470]:
+            - rowheader "After the site changes" [ref=f18e471]
+            - cell "Run the same link again." [ref=f18e472]
+            - cell "Click through and talk again, or leave the old video up." [ref=f18e473]
+          - row [ref=f18e474]:
+            - rowheader "Price" [ref=f18e475]
+            - cell "Free. MIT license. You run it." [ref=f18e476]
+            - cell "Your time, plus whatever the recorder charges." [ref=f18e477]
+      - paragraph [ref=f18e478]:
+        - link "Full comparison, including when a screen recorder is the better tool" [ref=f18e479] [cursor=pointer]:
+          - /url: /guides/walkcast-vs-screen-recording
+    - generic [ref=f18e483]:
+      - generic [ref=f18e484]:
+        - heading "Walkthroughs, by the job." [level=2] [ref=f18e485]
+        - paragraph [ref=f18e486]: What to show, how many pages, which account to use, and where the video goes afterwards.
+      - navigation "Guides" [ref=f18e487]:
+        - link [ref=f18e488] [cursor=pointer]:
+          - /url: /guides/website-video-walkthrough
+          - heading "Website video walkthroughs" [level=3] [ref=f18e489]
+          - paragraph [ref=f18e490]: "A step-by-step guide to recording a website video walkthrough with a voice-over and captions: what to show, how long it should be, and how to do it from a link in about two minutes."
+          - generic [ref=f18e491]: Read the guide
+        - link [ref=f18e494] [cursor=pointer]:
+          - /url: /guides/walkcast-vs-screen-recording
+          - heading "Walkcast vs screen recording" [level=3] [ref=f18e495]
+          - paragraph [ref=f18e496]: "When to use Walkcast and when to record a website walkthrough yourself: login, captions, re-recording after a release, and what each method actually produces."
+          - generic [ref=f18e497]: Read the guide
+        - link [ref=f18e500] [cursor=pointer]:
+          - /url: /guides/product-demo-video
+          - heading "Product demo videos" [level=3] [ref=f18e501]
+          - paragraph [ref=f18e502]: "Record a narrated product demo of a SaaS or web app from its URL: which screens to show, how to keep the demo current after every release, and where to use it."
+          - generic [ref=f18e503]: Read the guide
+        - link [ref=f18e506] [cursor=pointer]:
+          - /url: /guides/customer-onboarding-video
+          - heading "Customer onboarding videos" [level=3] [ref=f18e507]
+          - paragraph [ref=f18e508]: Make narrated onboarding walkthroughs that show new users around your app, with captions and a transcript for your help center and welcome emails.
+          - generic [ref=f18e509]: Read the guide
+        - link [ref=f18e512] [cursor=pointer]:
+          - /url: /guides/client-website-handover-video
+          - heading "Client handover videos" [level=3] [ref=f18e513]
+          - paragraph [ref=f18e514]: "Agencies and freelancers: hand a finished site over with a narrated walkthrough of its pages and admin area, plus a page list with HTTP status codes as a delivery record."
+          - generic [ref=f18e515]: Read the guide
+        - link [ref=f18e518] [cursor=pointer]:
+          - /url: /guides/qa-release-walkthrough
+          - heading "QA and release checks" [level=3] [ref=f18e519]
+          - paragraph [ref=f18e520]: "Use narrated walkthrough recordings as release evidence for QA and UAT: a video of the signed-in app, the HTTP status of every page and a step trace, repeatable after each deploy."
+          - generic [ref=f18e521]: Read the guide
+        - link [ref=f18e524] [cursor=pointer]:
+          - /url: /guides/help-center-video-tutorials
+          - heading "Help center video tutorials" [level=3] [ref=f18e525]
+          - paragraph [ref=f18e526]: Turn help-center articles into narrated video tutorials with captions and a transcript, recorded from your app's URL and refreshed when the UI changes.
+          - generic [ref=f18e527]: Read the guide
+        - link [ref=f18e530] [cursor=pointer]:
+          - /url: /guides/internal-tool-training-video
+          - heading "Internal tool training" [level=3] [ref=f18e531]
+          - paragraph [ref=f18e532]: Record narrated training walkthroughs of internal tools and admin panels for new hires, with a transcript they can search, without booking screen-share sessions.
+          - generic [ref=f18e533]: Read the guide
+        - link [ref=f18e536] [cursor=pointer]:
+          - /url: /guides/video-walkthrough-behind-login
+          - heading "Recording behind a login" [level=3] [ref=f18e537]
+          - paragraph [ref=f18e538]: How Walkcast signs in, records the pages behind authentication, and how credentials are kept out of the artifacts.
+          - generic [ref=f18e539]: Read the guide
+    - generic [ref=f18e543]:
+      - generic [ref=f18e544]:
+        - generic [ref=f18e545]:
+          - heading "Questions." [level=2] [ref=f18e546]
+          - paragraph [ref=f18e547]: Answered here, in the page, so you don't have to ask.
+          - generic [ref=f18e548]:
+            - heading "Still have a question?" [level=3] [ref=f18e549]
+            - paragraph [ref=f18e550]: Write to us and we'll help you get the first recording made.
+            - link "Email us" [ref=f18e551] [cursor=pointer]:
+              - /url: mailto:hello@walkcast.dev
+        - generic [ref=f18e555]:
+          - group [ref=f18e556]:
+            - heading "What is Walkcast?" [level=3] [ref=f18e558] [cursor=pointer]
+            - paragraph [ref=f18e562]: Walkcast is a free, open-source tool that makes a narrated video walkthrough from a website link. A browser signs in, visits up to 30 pages on that site, and returns an MP4 with a spoken voice-over, WebVTT captions and a transcript. Every line comes from what the browser actually did.
+          - group [ref=f18e563]:
+            - heading "What is a website video walkthrough?" [level=3] [ref=f18e565] [cursor=pointer]
+          - group [ref=f18e569]:
+            - heading "How is Walkcast different from a screen recording?" [level=3] [ref=f18e571] [cursor=pointer]
+          - group [ref=f18e575]:
+            - heading "Is Walkcast free?" [level=3] [ref=f18e577] [cursor=pointer]
+          - group [ref=f18e581]:
+            - heading "How do I make a narrated video walkthrough of my website?" [level=3] [ref=f18e583] [cursor=pointer]
+          - group [ref=f18e587]:
+            - heading "Can it record pages behind a login?" [level=3] [ref=f18e589] [cursor=pointer]
+          - group [ref=f18e593]:
+            - heading "Is my password stored?" [level=3] [ref=f18e595] [cursor=pointer]
+          - group [ref=f18e599]:
+            - heading "What happens with CAPTCHAs or two-factor authentication?" [level=3] [ref=f18e601] [cursor=pointer]
+          - group [ref=f18e605]:
+            - heading "Will it change anything on my site?" [level=3] [ref=f18e607] [cursor=pointer]
+          - group [ref=f18e611]:
+            - heading "What do I get at the end?" [level=3] [ref=f18e613] [cursor=pointer]
+          - group [ref=f18e617]:
+            - heading "Does the narration make things up?" [level=3] [ref=f18e619] [cursor=pointer]
+          - group [ref=f18e623]:
+            - heading "What else does Walkcast do?" [level=3] [ref=f18e625] [cursor=pointer]
+      - generic [ref=f18e629]:
+        - heading "Sources" [level=2] [ref=f18e630]
+        - paragraph [ref=f18e631]: Claims on this page rest on these. The lab counts are from the published Walkcast experiment with scripted agents, not from a survey of other tools.
+        - list [ref=f18e632]:
+          - listitem [ref=f18e633]:
+            - 'link "WebVTT: The Web Video Text Tracks Format" [ref=f18e634] [cursor=pointer]':
+              - /url: https://www.w3.org/TR/webvtt1/
+            - text: W3C Recommendation. The caption file Walkcast writes is WebVTT.
+          - listitem [ref=f18e635]:
+            - link "Wilson, E. B. (1927). Probable inference, the law of succession, and statistical inference." [ref=f18e636] [cursor=pointer]:
+              - /url: https://doi.org/10.1080/01621459.1927.10502953
+            - text: Journal of the American Statistical Association, 22(158), 209–212. The 95% intervals on the lab numbers are Wilson score intervals.
+          - listitem [ref=f18e637]:
+            - link "The MIT License" [ref=f18e638] [cursor=pointer]:
+              - /url: https://opensource.org/licenses/MIT
+            - text: Walkcast is free software under the MIT license. There is no paid tier in the software.
+    - generic [ref=f18e640]:
+      - heading "Your site, walked. And narrated." [level=2] [ref=f18e641]
+      - paragraph [ref=f18e646]: Create a free account with Google or email and record the first one.
+      - search "Start a walkthrough" [ref=f18e647]:
+        - generic [ref=f18e648]: Your website's link
+        - textbox "Your website's link" [ref=f18e649]:
+          - /placeholder: https://your-app.com/login
+        - button "Make my walkthrough" [ref=f18e650] [cursor=pointer]
+  - contentinfo [ref=f18e651]:
+    - generic [ref=f18e652]:
+      - generic [ref=f18e653]:
+        - generic [ref=f18e654]:
+          - generic [ref=f18e655]:
+            - link "Walkcast home" [ref=f18e656] [cursor=pointer]:
+              - /url: /
+              - generic [ref=f18e661]: Walkcast
+            - paragraph [ref=f18e662]: Narrated walkthroughs of any website, and regression tests for the agents that browse them.
+            - link "Get started free" [ref=f18e663] [cursor=pointer]:
+              - /url: /signup
+            - generic [ref=f18e664]: MIT · Node.js 22 · Chromium · ffmpeg
+          - generic [ref=f18e665]:
+            - paragraph [ref=f18e666]: Product
+            - list [ref=f18e667]:
+              - listitem [ref=f18e668]:
+                - link "How it works" [ref=f18e669] [cursor=pointer]:
+                  - /url: /how
+              - listitem [ref=f18e670]:
+                - link "Walkcast Lab" [ref=f18e671] [cursor=pointer]:
+                  - /url: /lab
+              - listitem [ref=f18e672]:
+                - link "Safety" [ref=f18e673] [cursor=pointer]:
+                  - /url: /safety
+              - listitem [ref=f18e674]:
+                - link "Pricing" [ref=f18e675] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=f18e676]:
+                - link "FAQ" [ref=f18e677] [cursor=pointer]:
+                  - /url: /#faq
+          - generic [ref=f18e678]:
+            - paragraph [ref=f18e679]: Guides
+            - list [ref=f18e680]:
+              - listitem [ref=f18e681]:
+                - link "Website video walkthroughs" [ref=f18e682] [cursor=pointer]:
+                  - /url: /guides/website-video-walkthrough
+              - listitem [ref=f18e683]:
+                - link "Walkcast vs screen recording" [ref=f18e684] [cursor=pointer]:
+                  - /url: /guides/walkcast-vs-screen-recording
+              - listitem [ref=f18e685]:
+                - link "Product demo videos" [ref=f18e686] [cursor=pointer]:
+                  - /url: /guides/product-demo-video
+              - listitem [ref=f18e687]:
+                - link "Customer onboarding videos" [ref=f18e688] [cursor=pointer]:
+                  - /url: /guides/customer-onboarding-video
+              - listitem [ref=f18e689]:
+                - link "Client handover videos" [ref=f18e690] [cursor=pointer]:
+                  - /url: /guides/client-website-handover-video
+              - listitem [ref=f18e691]:
+                - link "QA and release checks" [ref=f18e692] [cursor=pointer]:
+                  - /url: /guides/qa-release-walkthrough
+          - generic [ref=f18e693]:
+            - paragraph [ref=f18e694]: Compare
+            - list [ref=f18e695]:
+              - listitem [ref=f18e696]:
+                - link "Walkcast vs Loom" [ref=f18e697] [cursor=pointer]:
+                  - /url: /compare/walkcast-vs-loom
+              - listitem [ref=f18e698]:
+                - link "Walkcast vs Screen Studio" [ref=f18e699] [cursor=pointer]:
+                  - /url: /compare/walkcast-vs-screen-studio
+              - listitem [ref=f18e700]:
+                - link "Walkcast vs Manual recording" [ref=f18e701] [cursor=pointer]:
+                  - /url: /compare/manual-recording
+          - generic [ref=f18e702]:
+            - paragraph [ref=f18e703]: Account
+            - list [ref=f18e704]:
+              - listitem [ref=f18e705]:
+                - link "Sign in" [ref=f18e706] [cursor=pointer]:
+                  - /url: /login
+              - listitem [ref=f18e707]:
+                - link "Create an account" [ref=f18e708] [cursor=pointer]:
+                  - /url: /signup
+              - listitem [ref=f18e709]:
+                - link "Open the app" [ref=f18e710] [cursor=pointer]:
+                  - /url: /app
+        - generic [ref=f18e711]:
+          - generic [ref=f18e712]:
+            - text: © 2026 Walkcast ·
+            - link "MIT licensed" [ref=f18e713] [cursor=pointer]:
+              - /url: https://opensource.org/licenses/MIT
+          - generic [ref=f18e714]: Every line narrated from what the browser did.
+      - generic [aria-hidden] [ref=f18e715]: walkcast
