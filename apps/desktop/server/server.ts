@@ -16,7 +16,8 @@ import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
 import { FAVICON, fontPath } from "../../../packages/brand/src/index.ts";
-import { authPage, notFoundPage } from "./pages.ts";
+import { openExternal } from "./open-external.ts";
+import { authPage, continueInBrowserPage, messagePage, notFoundPage } from "./pages.ts";
 import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
 
@@ -59,6 +60,13 @@ export interface ServeOptions {
   jobsUnavailable?: string;
   /** The built dashboard (default: apps/desktop/dashboard/dist/index.html). */
   dashboardHtml?: string;
+  /**
+   * Running inside the desktop app: Google sign-in goes through the system browser, and pages the
+   * system browser lands on (email links) explain themselves instead of starting a session there.
+   */
+  desktop?: boolean;
+  /** How the desktop server opens a URL in the system browser (tests pass a stub). */
+  openExternal?: (url: string) => void;
 }
 
 /** The request handler and what it owns, without a listening socket (a serverless function). */
@@ -141,7 +149,9 @@ export function createApp(o: ServeOptions = {}): App {
   const auth: Auth | SupabaseAuth = supabaseCfg ? new SupabaseAuth(store, siteUrl, supabaseCfg) : new Auth(store, siteUrl);
   const authOptions = async () =>
     auth.kind === "supabase"
-      ? { ...(await auth.options()), openrouter: true, chatgpt: false }
+      ? // Desktop: a reset link opens in the system browser, which can't hand the reset back to the app.
+        // OpenRouter and ChatGPT sign-in exist only in the local auth mode.
+        { ...(await auth.options()), openrouter: false, chatgpt: false, ...(o.desktop ? { forgot: false } : {}) }
       : { google: Boolean(auth.google), openrouter: true, chatgpt: true, forgot: false, confirmEmail: false, signupDisabled: false };
   const html = dashboardHtml(o.dashboardHtml);
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
@@ -250,7 +260,7 @@ export function createApp(o: ServeOptions = {}): App {
       return send(
         200,
         "text/html; charset=utf-8",
-        authPage(mode, { google: opts.google, openrouter: opts.openrouter, chatgpt: opts.chatgpt, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
+        authPage(mode, { skip: Boolean(o.desktop), google: opts.google, openrouter: opts.openrouter, chatgpt: opts.chatgpt, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
       );
     }
 
@@ -292,6 +302,11 @@ export function createApp(o: ServeOptions = {}): App {
     }
     if (url.pathname === "/auth/google") {
       if (auth.kind === "supabase" && !(await auth.options()).google) throw new AuthError(503, "Google sign-in isn't turned on in this Supabase project.");
+      if (o.desktop && auth.kind === "supabase") {
+        const flow = auth.desktopGoogleStart(url.searchParams.get("next") ?? "/app#record");
+        (o.openExternal ?? openExternal)(flow.url);
+        return send(200, "text/html; charset=utf-8", continueInBrowserPage(flow.state, flow.url));
+      }
       return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
     }
     if (url.pathname === "/auth/openrouter") {
@@ -303,6 +318,26 @@ export function createApp(o: ServeOptions = {}): App {
       return auth.chatgptRedirect(res, url.searchParams.get("next") ?? "/app#record");
     }
     // Supabase Auth sends the browser back here after Google, an email confirmation or a reset link.
+    // ---------------------------------------------------------------- desktop sign-in via the system browser
+    const desktopCallback = /^\/auth\/desktop\/callback\/([\w-]{20,64})$/.exec(url.pathname);
+    if (desktopCallback && o.desktop && auth.kind === "supabase") {
+      try {
+        await auth.desktopCallback(desktopCallback[1]!, url);
+        return send(200, "text/html; charset=utf-8", messagePage("You're signed in", "Go back to Walkcast: it has carried on without you. You can close this tab.", { ok: true }));
+      } catch (e) {
+        if (!(e instanceof AuthError)) throw e;
+        return send(400, "text/html; charset=utf-8", messagePage("Sign-in didn't finish", `${e.message} Go back to Walkcast to try again.`, { ok: false }));
+      }
+    }
+    const desktopPoll = /^\/auth\/desktop\/poll\/([\w-]{20,64})$/.exec(url.pathname);
+    if (desktopPoll && req.method === "POST" && o.desktop && auth.kind === "supabase") {
+      const claim = auth.desktopClaim(desktopPoll[1]!);
+      if (!claim) return json(404, { error: "This sign-in has expired. Start again." });
+      if ("pending" in claim) return json(202, { pending: true });
+      if ("error" in claim) return json(400, { error: claim.error });
+      await auth.startSession(res, claim.user);
+      return json(200, { next: safeNext(claim.next) });
+    }
     if (url.pathname === "/auth/callback" && auth.kind === "supabase") {
       try {
         const r = await auth.callback(req, res, url);
@@ -311,6 +346,8 @@ export function createApp(o: ServeOptions = {}): App {
         return redirect(safeNext(r.next));
       } catch (e) {
         if (!(e instanceof AuthError)) throw e;
+        // Desktop: email links open in the system browser, not the app; say what to do next there.
+        if (o.desktop) return send(400, "text/html; charset=utf-8", messagePage("Back to Walkcast", `${e.message} Do that in the Walkcast app.`, { ok: true }));
         return redirect(`/login?notice=${encodeURIComponent(e.message)}`);
       }
     }

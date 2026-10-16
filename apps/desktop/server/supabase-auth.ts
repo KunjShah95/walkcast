@@ -169,6 +169,65 @@ export class SupabaseAuth extends Sessions {
     return { user: await this.adopt(session), next: flow.next };
   }
 
+  // ---------------------------------------------------------------- desktop: Google in the system browser
+
+  /**
+   * Google refuses to sign in inside embedded app windows, so the desktop app sends it to the
+   * system browser instead. That browser never shares cookies with the app window, so the flow is
+   * held here, keyed by a random `state`: the app window starts it and polls with the state; the
+   * browser comes back to /auth/desktop/callback/<state>; the next poll gets the session cookie.
+   * The state is the only handle, it is single-use, and it expires after 15 minutes.
+   */
+  private desktopFlows = new Map<string, { verifier: string; next: string; at: number; user?: User; error?: string }>();
+
+  desktopGoogleStart(next: string): { state: string; url: string } {
+    for (const [k, v] of this.desktopFlows) if (Date.now() - v.at > 15 * 60_000) this.desktopFlows.delete(k);
+    const { verifier, challenge } = pkce();
+    const state = randomBytes(24).toString("base64url");
+    this.desktopFlows.set(state, { verifier, next: safeNext(next), at: Date.now() });
+    const params = new URLSearchParams({
+      provider: "google",
+      redirect_to: `${this.siteUrl}/auth/desktop/callback/${state}`,
+      code_challenge: challenge,
+      code_challenge_method: "s256",
+    });
+    return { state, url: `${this.cfg.url}/auth/v1/authorize?${params}` };
+  }
+
+  /** The system browser's return from Google. Completes the flow for the app window to claim. */
+  async desktopCallback(state: string, url: URL): Promise<void> {
+    const flow = this.desktopFlows.get(state);
+    if (!flow || Date.now() - flow.at > 15 * 60_000) throw new AuthError(400, "This sign-in has expired. Start again from Walkcast.");
+    try {
+      const error = url.searchParams.get("error_description") ?? url.searchParams.get("error");
+      if (error) throw new AuthError(400, `Sign-in didn't complete: ${error}`);
+      const code = url.searchParams.get("code");
+      if (!code) throw new AuthError(400, "The sign-in link is missing its code. Please try again.");
+      const session = await this.call<SupabaseSession>("POST", "/token?grant_type=pkce", { auth_code: code, code_verifier: flow.verifier }).catch((e: unknown) => {
+        throw e instanceof SupabaseError && e.status < 500 ? new AuthError(400, "This sign-in link has expired or was already used. Please try again.") : e;
+      });
+      flow.user = await this.adopt(session);
+    } catch (e) {
+      flow.error = e instanceof AuthError ? e.message : "Sign-in failed. Please try again.";
+      throw e;
+    }
+  }
+
+  /** The app window's poll. Returns the user exactly once; null for an unknown or expired state. */
+  desktopClaim(state: string): { user: User; next: string } | { error: string } | { pending: true } | null {
+    const flow = this.desktopFlows.get(state);
+    if (!flow || Date.now() - flow.at > 15 * 60_000) return null;
+    if (flow.user) {
+      this.desktopFlows.delete(state);
+      return { user: flow.user, next: flow.next };
+    }
+    if (flow.error) {
+      this.desktopFlows.delete(state);
+      return { error: flow.error };
+    }
+    return { pending: true };
+  }
+
   // ---------------------------------------------------------------- password reset
 
   /** Sends Supabase's reset email. Always succeeds from the caller's view (no account enumeration). */

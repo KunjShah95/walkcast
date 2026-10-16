@@ -38,6 +38,23 @@ for (const rel of [...SOURCES, DASHBOARD]) {
   else copyFileSync(from, to);
 }
 
+// Accounts: the Supabase project URL and its public anon (publishable) key, from the environment or
+// the repo's .env. Both are meant to be public; nothing else from .env ships (no database URL, no
+// service keys).
+const PUBLIC_KEYS = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"];
+const dotenv: Record<string, string> = {};
+try {
+  for (const line of readFileSync(join(REPO, ".env"), "utf8").split(/\r?\n/)) {
+    const m = /^(?:export\s+)?([A-Z_]+)=(.*)$/.exec(line.trim());
+    if (m) dotenv[m[1]!] = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
+  }
+} catch {
+  /* no .env */
+}
+const shipped = PUBLIC_KEYS.map((k) => [k, process.env[k] ?? dotenv[k]] as const).filter(([, v]) => v);
+writeFileSync(join(OUT, "desktop.env"), shipped.map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
+console.log(shipped.length ? `Accounts: Supabase (${shipped.map(([k]) => k).join(", ")})` : "Accounts: none configured (local only)");
+
 // Runtime packages: every bare import in the staged sources, mapped to its package name.
 const builtins = new Set(builtinModules);
 const used = new Set<string>(ALWAYS);

@@ -39,7 +39,7 @@ const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden
  */
 export function authPage(
   mode: AuthMode,
-  opts: { google: boolean; next: string; openrouter?: boolean; chatgpt?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string },
+  opts: { google: boolean; next: string; openrouter?: boolean; chatgpt?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string; skip?: boolean },
 ): string {
   const copy = {
     signup: { h1: "Start recording", lede: "Free. Record narrated walkthroughs of sites you own or may test.", button: "Create account", title: "Create an account" },
@@ -88,6 +88,7 @@ export function authPage(
           ? `New here? <a href="/signup?next=${encodeURIComponent(opts.next)}">Create an account</a>${opts.forgot ? ` · <a href="/forgot">Forgot your password?</a>` : ""}`
           : `<a href="/login">Back to sign in</a>`
     }</p>
+    ${opts.skip && (mode === "signup" || mode === "login") ? `<p class="note"><a href="/app">Use Walkcast without an account</a></p>` : ""}
   </div>
   </div>
 </div></section>
@@ -108,4 +109,40 @@ export function notFoundPage(): string {
   <div class="actions"><a class="pill solid big" href="/app">Open the app</a></div>
 </div></section>`;
   return shell({ title: `Page not found · ${NAME}`, body });
+}
+
+/** A short message in the brand shell: what the system-browser tab shows after a desktop sign-in. */
+export function messagePage(title: string, text: string, opts: { ok: boolean }): string {
+  const body = `
+<section class="page-head"><div class="wrap">
+  <h1>${esc(title)}</h1>
+  <p class="lede">${esc(text)}</p>
+  ${opts.ok ? "" : `<div class="actions"><a class="pill ghost big" href="/login">Back to sign in</a></div>`}
+</div></section>`;
+  return shell({ title: `${title} · ${NAME}`, body });
+}
+
+/**
+ * Shown in the app window while Google sign-in happens in the system browser. It polls the
+ * desktop flow by its state and, once the browser has come back, takes the session and moves on.
+ */
+export function continueInBrowserPage(state: string, authorizeUrl: string): string {
+  const body = `
+<section class="auth"><div class="wrap">
+  <div class="auth-card" style="max-width:440px;margin:0 auto">
+    <h1>Continue in your browser</h1>
+    <p class="sub">We opened Google sign-in in your web browser. Finish there and this window carries on by itself.</p>
+    <p class="note" id="status" role="status">Waiting for the browser…</p>
+    <p class="note">Didn't open? <a href="${esc(authorizeUrl)}" target="_blank" rel="noopener">Open the sign-in page</a> · <a href="/login">Cancel</a></p>
+  </div>
+</div></section>
+<script>
+(function(){var s=document.getElementById("status"),state=${JSON.stringify(state).replace(/</g, "\u003c")};
+function poll(){fetch("/auth/desktop/poll/"+encodeURIComponent(state),{method:"POST"}).then(function(r){return r.json().then(function(j){
+if(r.status===202){setTimeout(poll,1000);return}
+if(r.ok&&j.next){s.textContent="Signed in.";location.href=j.next;return}
+s.textContent=j.error||"Sign-in didn't complete. Go back and try again.";})}).catch(function(){setTimeout(poll,2000)})}
+poll();})();
+</script>`;
+  return shell({ title: `Signing in · ${NAME}`, body });
 }

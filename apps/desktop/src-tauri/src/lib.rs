@@ -16,7 +16,16 @@ struct Sidecar(Mutex<Option<CommandChild>>);
 const DEV_URL: &str = "http://127.0.0.1:4320/app";
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Sign-in redirects come back to http://127.0.0.1:<port>/auth/..., and Supabase only redirects to
+/// allow-listed URLs, so the app keeps one well-known port. Another one is used only if it is taken
+/// (the app still works; Google sign-in and email links then can't come back).
+const PREFERRED_PORT: u16 = 4317;
+
 fn free_port() -> std::io::Result<u16> {
+  if TcpListener::bind(("127.0.0.1", PREFERRED_PORT)).is_ok() {
+    return Ok(PREFERRED_PORT);
+  }
+  log::warn!("port {PREFERRED_PORT} is in use; sign-in redirects will not reach this run");
   Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
 

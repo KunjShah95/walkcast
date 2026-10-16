@@ -359,12 +359,22 @@ Rust shell starts that Node on a free `127.0.0.1` port with the app's data direc
 directory (`apps/desktop/sidecar.ts`), waits for `/healthz`, opens the window on `/app`, and stops
 the server when the app quits.
 
-Inside the app everything is local: a file store under the data directory, no sign-in (the server
-only listens on loopback), and hosted-database settings in the environment are ignored. Chromium
-(about 150 MB) downloads once on first launch into `<data>/browsers`; a recording started before it
-finishes fails with Playwright's "executable doesn't exist" error. ffmpeg is not bundled: without
-it on `PATH`, recordings have no narration audio. Logs go to the app's log directory
+Inside the app data is local: a file store under the data directory, and hosted-database settings
+in the environment are ignored. Chromium (about 250 MB across a few files) downloads once on first
+launch into `<data>/browsers`, with progress in a corner of the dashboard; a recording asked for
+before it finishes is refused with a message saying so. ffmpeg is not bundled: without it on
+`PATH`, recordings have no narration audio. Logs go to the app's log directory
 (`%LOCALAPPDATA%\com.walkcast.desktop\logs` on Windows).
+
+**Accounts are optional.** Everything works signed out. With Supabase configured, Sign in / Create
+account use it: `desktop:stage` copies `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or
+`SUPABASE_PUBLISHABLE_KEY`) — both public by design, nothing else from `.env` — into the app.
+Google sign-in runs in the system browser, because Google refuses embedded app windows, and the
+app window picks the session up by polling. For that, and for email-confirmation links, the app
+listens on `127.0.0.1:4317` (another port only if that one is taken); add
+`http://127.0.0.1:4317/**` to the Supabase project's Authentication → URL Configuration → Redirect
+URLs. Password reset is not offered in the app yet: its link opens in the system browser, which
+cannot hand the reset back.
 
 The server (`apps/desktop/server/`) answers:
 

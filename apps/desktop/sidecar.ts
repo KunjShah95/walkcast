@@ -1,5 +1,6 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 /**
@@ -10,7 +11,9 @@ import { parseArgs } from "node:util";
  *
  *   - Everything is local. Recordings, runs and the queue live under the data directory; any
  *     hosted-database settings in the environment are ignored.
- *   - No sign-in. The server only listens on 127.0.0.1 and the person at the keyboard owns it.
+ *   - Signing in is optional. With Supabase configured (desktop.env, written by the staging
+ *     script: the project URL and its public anon key, nothing secret) people can create an account
+ *     or sign in, Google included via the system browser; without one, nothing is gated.
  *   - Chromium is downloaded once, on first run, into the data directory (it is too large to ship
  *     in the installer). The dashboard shows the progress (/api/browser), and a recording asked for
  *     before it finishes is refused with a message saying so.
@@ -25,18 +28,27 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const root = process.cwd();
 
-// Local only: these must be set before the store and auth modules read them.
-for (const key of ["SUPABASE_DB_URL", "DATABASE_URL", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "LAB_SITE_URL", "LAB_HOST"]) {
+// The app's public Supabase settings, shipped next to the sources. The environment wins.
+try {
+  const file = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "desktop.env");
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = /^(SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_PUBLISHABLE_KEY)=(.+)$/.exec(line.trim());
+    if (m) process.env[m[1]!] ??= m[2]!;
+  }
+} catch {
+  /* no desktop.env: accounts are local to this machine */
+}
+// Local data: these must be unset before the store and auth modules read them.
+for (const key of ["SUPABASE_DB_URL", "DATABASE_URL", "LAB_SITE_URL", "LAB_HOST"]) {
   delete process.env[key];
 }
-process.env.LAB_AUTH = "off";
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(root, "browsers");
 mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true });
 
 const { installChromium } = await import("../../packages/core/src/record/browser-install.ts");
 const { serveDashboard } = await import("./server/server.ts");
 
-const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: false });
+const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: false, desktop: true });
 installChromium();
 
 let stopping = false;
