@@ -10,6 +10,7 @@ import { seal, sharedKeyConfigured } from "../jobs/secret-box.ts";
 import { Worker } from "../jobs/worker.ts";
 import { configuredProviders } from "../llm/providers.ts";
 import { createMedia, type MediaStore } from "../media/store.ts";
+import { VOICES, hasFlite, isVoice, renarrate, voiceover, voicePreview } from "../record/media.ts";
 import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
@@ -29,9 +30,9 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
 };
 
-function dashboardHtml(): string {
-  if (!existsSync(DIST)) throw new Error("Dashboard not built. Run: npm run ui:build");
-  return readFileSync(DIST, "utf8");
+function dashboardHtml(path = DIST): string {
+  if (!existsSync(path)) throw new Error("Dashboard not built. Run: npm run ui:build");
+  return readFileSync(path, "utf8");
 }
 
 export interface ServeOptions {
@@ -52,6 +53,22 @@ export interface ServeOptions {
    * when separate `lab worker` processes do the work).
    */
   worker?: boolean;
+  /** Set when nothing will ever take jobs off the queue: recordings and runs are refused with this. */
+  jobsUnavailable?: string;
+  /** The built dashboard (default: dashboard/dist/index.html next to the source). */
+  dashboardHtml?: string;
+}
+
+/** The request handler and what it owns, without a listening socket (a serverless function). */
+export interface App {
+  handler: (req: IncomingMessage, res: ServerResponse) => void;
+  store: Store;
+  media: MediaStore;
+  worker: Worker | null;
+  auth: string;
+  requireAuth: boolean;
+  /** Refuse new jobs and fail readiness: the process is shutting down. */
+  drain(): void;
 }
 
 export interface Running {
@@ -76,9 +93,43 @@ const LIMITS = {
  */
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
   const o = typeof options === "string" ? { root: options } : options;
+  const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
+  const app = createApp({ ...o, host, siteUrl: o.siteUrl ?? process.env.LAB_SITE_URL ?? `http://127.0.0.1:${port}` });
+  const { store, media, worker } = app;
+  const server = createServer(app.handler);
+  // Keep-alive longer than the ALB's idle timeout (60 s) so the balancer never reuses a closed socket.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  server.requestTimeout = 30_000;
+
+  await new Promise<void>((r) => server.listen(port, host, r));
+  if (o.unref) server.unref();
+  const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
+  log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: app.requireAuth ? app.auth : "off" });
+  return {
+    url: address,
+    store,
+    async close(graceMs = 30_000) {
+      app.drain();
+      // Stop accepting; idle keep-alive sockets close now, active requests finish.
+      const closed = new Promise<void>((r) => server.close(() => r()));
+      server.closeIdleConnections();
+      await worker?.stop(graceMs);
+      await withTimeout(closed, 10_000).catch(() => server.closeAllConnections());
+      if (!o.store) await store.close();
+      log.info("server.stopped", {});
+    },
+  };
+}
+
+/**
+ * Everything `serveDashboard` serves, as a plain `(req, res)` handler: the local server listens
+ * with it, and the Vercel function (src/deploy/vercel-function.ts) exports it.
+ */
+export function createApp(o: ServeOptions = {}): App {
   const root = o.root ?? process.cwd();
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
-  const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
+  const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
   const requireAuth = o.requireAuth ?? process.env.LAB_AUTH !== "off";
   const store = o.store ?? createStore(root);
   const media = o.media ?? createMedia(root);
@@ -90,13 +141,13 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     auth.kind === "supabase"
       ? { ...(await auth.options()), openrouter: true, chatgpt: false }
       : { google: Boolean(auth.google), openrouter: true, chatgpt: true, forgot: false, confirmEmail: false, signupDisabled: false };
-  const html = dashboardHtml();
+  const html = dashboardHtml(o.dashboardHtml);
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
   const worker = (o.worker ?? process.env.LAB_WORKER !== "off") ? new Worker({ store, media, root }).start() : null;
   let draining = false;
 
-  const server = createServer((req, res) => {
+  const handler = (req: IncomingMessage, res: ServerResponse) => {
     const started = Date.now();
     // Behind an ALB the trace id ties our log line to the load balancer's.
     const requestId = String(req.headers["x-amzn-trace-id"] ?? req.headers["x-request-id"] ?? randomUUID());
@@ -115,11 +166,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       res.end(JSON.stringify({ error: message }));
     });
-  });
-  // Keep-alive longer than the ALB's idle timeout (60 s) so the balancer never reuses a closed socket.
-  server.keepAliveTimeout = 65_000;
-  server.headersTimeout = 66_000;
-  server.requestTimeout = 30_000;
+  };
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -346,10 +393,52 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
         providers: configuredProviders().map((p) => p.id),
         agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description })),
         scenarios: allScenarios("pairs"),
+        limits: LIMITS,
+        usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
+        voices: { available: hasFlite(), list: VOICES, editable: media.kind === "local" },
+        jobsUnavailable: o.jobsUnavailable ?? null,
       });
+    }
+    // ---------------------------------------------------------------- narration
+    const voiceMatch = /^\/api\/voices\/(\w+)\.wav$/.exec(url.pathname);
+    if (voiceMatch) {
+      if (!isVoice(voiceMatch[1])) return json(404, { error: "Unknown voice." });
+      if (!hasFlite()) return json(503, { error: "Voice previews need ffmpeg with the flite voice on this server." });
+      const wav = await voicePreview(voiceMatch[1]);
+      res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length, "Cache-Control": "private, max-age=86400" });
+      return void res.end(wav);
+    }
+    const narrationMatch = /^\/api\/recordings\/([\w.-]+)\/(narration|voiceover)$/.exec(url.pathname);
+    if (narrationMatch && req.method === "POST") {
+      const [, id, what] = narrationMatch as unknown as [string, string, "narration" | "voiceover"];
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "Editing narration needs recordings kept on this server's disk." });
+      const dir = join(root, "recordings", id);
+      const file = join(dir, "recording.json");
+      if (!existsSync(file)) return json(404, { error: "Recording not found." });
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
+      let result;
+      if (what === "narration") {
+        const b = await readJson(req, 500_000);
+        const captions = validateCaptions(b.captions);
+        const voice = isVoice(b.voice) ? b.voice : "slt";
+        result = await renarrate(dir, captions, voice);
+        summary.captions = captions;
+      } else {
+        result = await voiceover(dir, await readBody(req, 40_000_000), summary.captions);
+      }
+      summary.media = { ...summary.media, ...result, video: summary.media.video };
+      writeFileSync(file, JSON.stringify(summary, null, 2));
+      if (store.kind !== "file") {
+        const { dir: _dir, ...rest } = summary;
+        await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
+      }
+      return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
     }
     if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
       if (draining) return json(503, { error: "The server is restarting. Try again in a moment." });
+      if (o.jobsUnavailable) return json(503, { error: o.jobsUnavailable });
       const kind = url.pathname === "/api/run" ? "run" : "record";
       const b = await readJson(req);
       const input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
@@ -394,7 +483,9 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       } catch {
         return json(400, { error: "bad path" });
       }
-      const rec = /^recordings\/([^/]+)\/([^/]+)$/.exec(rel);
+      // Accept a backslash as a separator too: recordings indexed before this was normalised on
+      // Windows carry "recordings\<id>" in their `dir`, and those are already on disk.
+      const rec = /^recordings[\\/]([^\\/]+)[\\/]([^\\/]+)$/.exec(rel);
       if (rec) {
         const [, id, file] = rec as unknown as [string, string, string];
         const row = await findRecording(id);
@@ -440,22 +531,15 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     return store.recording(id);
   }
 
-  await new Promise<void>((r) => server.listen(port, host, r));
-  if (o.unref) server.unref();
-  const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
-  log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: requireAuth ? auth.kind : "off" });
   return {
-    url: address,
+    handler,
     store,
-    async close(graceMs = 30_000) {
+    media,
+    worker,
+    auth: auth.kind,
+    requireAuth,
+    drain() {
       draining = true;
-      // Stop accepting; idle keep-alive sockets close now, active requests finish.
-      const closed = new Promise<void>((r) => server.close(() => r()));
-      server.closeIdleConnections();
-      await worker?.stop(graceMs);
-      await withTimeout(closed, 10_000).catch(() => server.closeAllConnections());
-      if (!o.store) await store.close();
-      log.info("server.stopped", {});
     },
   };
 }
@@ -498,8 +582,33 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
     url: url.toString(),
     ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
     maxPages: Number.isFinite(pages) ? Math.max(1, Math.min(30, Math.trunc(pages))) : 8,
+    ...(isVoice(b.voice) ? { voice: b.voice } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
+}
+
+async function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > limit) throw new AuthError(413, "That recording is too large.");
+    chunks.push(chunk);
+  }
+  if (!size) throw new AuthError(400, "No audio received.");
+  return Buffer.concat(chunks);
+}
+
+function validateCaptions(raw: unknown): { start: number; end: number; text: string }[] {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) throw new AuthError(400, "The script needs between 1 and 500 lines.");
+  return raw.map((c, i) => {
+    const x = c as { start?: unknown; end?: unknown; text?: unknown };
+    const start = Number(x.start);
+    const end = Number(x.end);
+    const text = typeof x.text === "string" ? x.text.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    if (!Number.isFinite(start) || start < 0 || !Number.isFinite(end) || !text) throw new AuthError(400, `Line ${i + 1} of the script is empty or has no time.`);
+    return { start, end: Math.max(end, start), text };
+  });
 }
 
 async function readJson(req: IncomingMessage, limit = 100_000): Promise<Record<string, unknown>> {

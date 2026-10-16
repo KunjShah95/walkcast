@@ -150,7 +150,7 @@ export class LabData {
       runRoots.push([join(expDir, "runs"), `experiment:${exp}`]);
       fixtureRoots.push([join(expDir, "fixtures"), `experiment:${exp}`]);
       const summaryPath = join(this.root, expDir, "summary.json");
-      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: expDir, summary: withRates(readJson<StoredExperimentSummary>(summaryPath)) });
+      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: `results/${exp}`, summary: withRates(readJson<StoredExperimentSummary>(summaryPath)) });
     }
 
     for (const [base, source] of runRoots) {
@@ -163,7 +163,7 @@ export class LabData {
     for (const [base, source] of fixtureRoots) {
       for (const name of this.dirs(base)) {
         const manifestPath = join(this.root, base, name, "manifest.json");
-        if (existsSync(manifestPath)) fixtures.push({ id: name, dir: join(base, name), source, manifest: readJson(manifestPath) });
+        if (existsSync(manifestPath)) fixtures.push({ id: name, dir: `${base}/${name}`, source, manifest: readJson(manifestPath) });
       }
     }
     runs.sort((a, b) => b.createdAt - a.createdAt);
@@ -187,7 +187,10 @@ export class LabData {
       if (!existsSync(path)) continue;
       try {
         const r = readJson(path) as RecordingSummary;
-        out.push({ ...r, dir: join("recordings", name) });
+        // `join` would give "recordings\<name>" on Windows. `dir` becomes part of a URL
+        // (`/files/<dir>/<file>`), so it must use forward slashes on every platform or the
+        // client's per-segment encoding turns the separator into %5C and the server 404s.
+        out.push({ ...r, dir: `recordings/${name}` });
       } catch {
         // half-written recording
       }
@@ -247,7 +250,10 @@ export class LabData {
     const files = readdirSync(join(this.root, dir));
     return {
       id: r.runId,
-      dir,
+      // A URL path in the dashboard (`/files/<dir>/<name>`), so forward slashes on every platform.
+      // `join` builds these with the OS separator, which the client's per-segment encoding turns
+      // into %5C and the server then 404s. Filesystem reads below still use the native form.
+      dir: dir.split(sep).join("/"),
       source,
       agent: r.agent,
       agentKind: (r.agentSpec?.kind as RunSummary["agentKind"]) ?? "scripted",

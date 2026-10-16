@@ -68,11 +68,13 @@ test("every dashboard view renders without page errors", { timeout: 120_000 }, a
  * Sign-in and registration must be reachable from the dashboard itself, even on a self-hosted
  * server where accounts are optional (the default). Otherwise there is no way in at all.
  */
-test("the dashboard header offers sign in and create account", { timeout: 60_000 }, async () => {
+test("the dashboard chrome offers sign in and create account", { timeout: 60_000 }, async () => {
   const page = await browser.newPage();
   await page.goto(srv.url + "/app#runs");
-  const signIn = page.locator("header a:has-text('Sign in')").first();
-  const register = page.locator("header a:has-text('Create account')").first();
+  // Not scoped to <header>: the account links moved into the sidebar when the nav was refactored,
+  // and the point of this test is that the links exist and work, not which landmark holds them.
+  const signIn = page.locator("a:has-text('Sign in')").first();
+  const register = page.locator("a:has-text('Create account')").first();
   await signIn.waitFor({ timeout: 15_000 });
   await register.waitFor({ timeout: 15_000 });
   const signInHref = (await signIn.getAttribute("href")) ?? "";
