@@ -58,7 +58,8 @@ Commands:
   ui [--port 4320]                      The app server the desktop shell opens: accounts (email or Google)
                                         and the dashboard at /app over runs/, fixtures/, results/, recordings/.
                                         Env: LAB_SITE_URL (public origin), LAB_HOST, GOOGLE_CLIENT_ID,
-                                        GOOGLE_CLIENT_SECRET, LAB_AUTH=off (no sign-in needed to record)
+                                        GOOGLE_CLIENT_SECRET, LAB_AUTH=on|off (default: sign-in only when
+                                        LAB_HOST is not loopback)
                                         (build first: npm run ui:build, or just npm run ui)
   worker                                Run queued recordings and runs (scale these separately from the web
                                         service; needs SUPABASE_DB_URL so they share the queue)
@@ -256,7 +257,13 @@ async function main(): Promise<number> {
       return checkModel(target);
     }
     case "ui": {
-      const server = await serveDashboard(Number(values.port ?? process.env.PORT ?? 4320));
+      // Sign-in guards a server other machines can reach. Bound to loopback (the default, and how
+      // the desktop app runs) nobody else can, so it opens straight to the dashboard.
+      // LAB_AUTH=on or LAB_AUTH=off overrides either way.
+      const host = process.env.LAB_HOST ?? "127.0.0.1";
+      const local = ["127.0.0.1", "localhost", "::1"].includes(host);
+      const requireAuth = process.env.LAB_AUTH ? process.env.LAB_AUTH !== "off" : !local;
+      const server = await serveDashboard(Number(values.port ?? process.env.PORT ?? 4320), { requireAuth });
       console.error(`Walkcast: dashboard at ${server.url}/app`);
       // ECS sends SIGTERM on deploy/scale-in and waits stopTimeout before SIGKILL.
       await untilSignal();
