@@ -23,16 +23,16 @@ ffmpeg -hide_banner -filters | grep flite  # optional: narration audio needs thi
 # Walkthrough of a site you may test (the password comes from an env var, never a flag):
 LAB_SITE_PASSWORD=... npm run lab -- record --url https://app.example.com/login --username you@example.com --i-am-authorized
 
-# Or the web app: landing page, Record page and the Lab dashboard at http://127.0.0.1:4320/app.
-# Locally, LAB_AUTH=off skips sign-up; on a shared server leave accounts on.
-LAB_AUTH=off npm run ui
+# Or the dashboard (Record page and the Lab) at http://127.0.0.1:4320/app. On 127.0.0.1 there is
+# no sign-in; a server bound to another address (LAB_HOST) requires accounts.
+npm run ui
 ```
 
 Environment variables you may want (none are required to start):
 
 | Variable | For |
 | --- | --- |
-| `LAB_AUTH=off` | Use the web app locally without creating an account |
+| `LAB_AUTH=on` / `off` | Force sign-in on or off (default: on only when `LAB_HOST` is not loopback) |
 | `SUPABASE_DB_URL` (or `DATABASE_URL`) | Supabase Postgres for accounts, sessions, the job queue and the recordings index (default: `.lab/store.json`) |
 | `SUPABASE_URL`, `SUPABASE_S3_*` or `MEDIA_S3_*` | Recording media in Supabase Storage or S3 (default: `recordings/` on disk) |
 | `LAB_SECRET_KEY`, `LAB_WORKER=off` | Separate queue workers (see [Production](#production-supabase--aws)) |
@@ -338,18 +338,18 @@ The repo ships two separate things that share one engine:
 
 | | What it is | Where | Runs on |
 | --- | --- | --- | --- |
-| **Website** | Static marketing pages: landing, how it works, lab, safety, pricing, guides, comparisons, `/download` and the crawler files. No accounts, no API, no server. | `apps/web/` | Any static host (Vercel) |
+| **Website** | The landing page: a React app (Vite), prerendered at build time. No accounts, no API, no server: sign-in lives only in the desktop app. | `apps/web/` | Any static host (Vercel) |
 | **Desktop app** | The product: recorder, dashboard, lab runs, sign-in, the API. A Tauri shell around the local Node server. | `apps/desktop/` | Windows, macOS, Linux |
 
-Every call to action on the website leads to `/download`, which links the installers on the GitHub
-release page.
+Every download button on the website links the Windows installers on the latest GitHub release
+(`releases/latest/download/walkcast_<version>_x64-setup.exe` and the `.msi`).
 
 ### Desktop app
 
 ```sh
 npm run desktop:dev      # Tauri window over the local server (needs Rust)
 npm run desktop:build    # installers for this OS (target/release/bundle/)
-npm run dev              # the same server in a browser tab, no Tauri
+npm run ui               # the same server in a browser tab, no Tauri
 ```
 
 The installed app runs its own server. `npm run desktop:stage` (run by `desktop:build`) copies the
@@ -385,33 +385,34 @@ The server (`apps/desktop/server/`) answers:
 | `/signup`, `/login`, `/forgot`, `/reset` | Accounts: **Continue with Google** or email + password (Supabase Auth) |
 | `/auth/*`, `/api/*`, `/files/*` | Sign-in flows, the dashboard's API, recordings on disk |
 
-### Website (static, Vercel)
-
-Every page in `apps/web/src/pages.ts` is a pure `string` function of the site URL, so the site is a
-set of documents and a static host serves them as files:
+### Website (React, Vercel)
 
 ```sh
-LAB_SITE_URL=https://your-domain npm run web:build   # writes ./dist/web
-npm run vercel:build                                 # writes .vercel/output (Build Output API)
+npm run dev           # the landing page with hot reload, opens http://localhost:4330
+npm run web:build     # dist/web: the client bundle plus index.html with the page prerendered
+npm run web:preview   # serve dist/web locally
 ```
 
-That emits one `<route>/index.html` per page (so clean URLs need no rewrite rules), the crawler files,
-the 404, the fonts and the demo media. The Vercel output is static files and routes only — no
-function; unknown paths get the 404 page.
+`apps/web/build.ts` runs the Vite build, renders `<App />` to HTML on the server and writes it into
+`dist/web/index.html`; the browser bundle then hydrates it. So the full page is in the HTML for
+search engines and AI crawlers, and the interactive parts (the narrated demo, the recorder mock,
+the FAQ) still work. `vercel.ts` runs `npm run web:build` and serves `dist/web`.
 
-`LAB_SITE_URL` is stamped into every canonical tag, the sitemap, `robots.txt` and the JSON-LD, so it
-**must** be the deployed origin on any build that gets published. The build fails without it:
+The installer links come from `apps/web/src/site.ts`, which reads the version from
+`apps/desktop/src-tauri/tauri.conf.json`: bump it there and the site follows.
+
+### Releasing the desktop app
+
+Push a tag that matches the version in `tauri.conf.json`:
 
 ```sh
-npm run web:build                                   # fails: LAB_SITE_URL unset or localhost
-npm run web:build -- --site-url https://yoursite    # one-off, no env var needed
-npm run web:build -- --allow-localhost               # export for local preview only; warns
+git tag v0.1.0 && git push origin v0.1.0
 ```
 
-On Vercel, `--vercel` falls back to the project's production domain when `LAB_SITE_URL` is unset.
-`test/vercel-config.test.ts` checks the output has no function, and `test/prerender.test.ts` guards
-the export: every route exists, nothing leaks a `localhost` origin, no sitemap entry points at a page
-that was not written, and a re-run does not leave stale pages behind.
+`.github/workflows/release.yml` checks the tag against the version, builds the Windows `.exe` and
+`.msi` on `windows-latest` and attaches them to a **draft** release. Publishing the draft is what
+makes the website's download buttons work. The installers are not code-signed yet, so Windows
+SmartScreen warns on first install.
 
 **Sign-in with Supabase Auth** (`apps/desktop/server/supabase-auth.ts`), used whenever `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`) are set:
@@ -443,30 +444,17 @@ for local or private setups.
 
 Either way: sign-in errors don't reveal whether an email exists, attempts are throttled per
 address and account (shared across instances through the store), cross-site POSTs are refused,
-and the dashboard's data and actions need a signed-in account (`LAB_AUTH=off` turns that off for
-local use).
+and the dashboard's data and actions need a signed-in account when the server is reachable from
+other machines. `npm run ui` on `127.0.0.1` (the default) opens straight to the dashboard;
+`LAB_AUTH=on` or `LAB_AUTH=off` overrides either way.
 
 **Hosting it**: set `LAB_SITE_URL=https://your-domain` (canonical URLs, sitemap, OAuth redirect)
 and `LAB_HOST=0.0.0.0`, and put it behind TLS. When the server is reachable from other machines,
 the recorder refuses targets that resolve to private, loopback or link-local addresses (an SSRF
 guard; `LAB_ALLOW_PRIVATE=1` lifts it).
 
-**Search and AI discoverability (SEO / AEO / GEO)**, all in `apps/web/src/pages.ts`:
-
-- The full content is in the HTML (no client rendering), with one `h1`, a canonical URL, Open
-  Graph/Twitter cards with a 1200×630 image, and `max-snippet`/`max-video-preview` robots meta.
-- JSON-LD `@graph`: `WebSite`, `SoftwareApplication`, `VideoObject` (with the transcript),
-  `HowTo` and `FAQPage`. Every FAQ answer is also visible on the page.
-- `robots.txt` explicitly allows search and AI crawlers (Googlebot, Bingbot, GPTBot,
-  OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot and others)
-  on public pages and keeps them out of `/app`, `/api`, `/auth`.
-- `sitemap.xml` includes a video sitemap entry; `/llms.txt` is a plain summary assistants can
-  quote accurately.
-- The lab numbers on `/` and `/llms.txt` come from the newest experiment under `results/` — the same
-  summaries the dashboard's Experiments view reads — quoted with 95% Wilson intervals. A checkout
-  without `results/` (a trimmed image) falls back to the committed figures instead of inventing
-  them.
-- Self-hosted fonts (preloaded) and a ~28 KB page with ~1 KB of script.
+**Search and AI discoverability**: the landing page is prerendered (see Website above), with one
+`h1`, Open Graph and Twitter cards with a 1200×630 image, and every FAQ answer visible in the HTML.
 
 None of this can guarantee a ranking. What decides it after launch is a real domain, links from
 other sites, more pages answering specific questions (e.g. a guide per use case) and Search
@@ -571,7 +559,7 @@ form.
 ## Layout
 
 ```
-apps/web/              The website: static marketing pages, prerender, Vercel build
+apps/web/              The website: React landing page (Vite), prerendered for Vercel
   src/                 pages, guides, lab facts, prerender
   static/              Demo walkthrough (MP4/WebM/VTT), poster and social image
 apps/desktop/          The desktop app
