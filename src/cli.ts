@@ -25,6 +25,7 @@ import { Worker } from "./jobs/worker.ts";
 import { createMedia } from "./media/store.ts";
 import { log } from "./ops/log.ts";
 import { PgStore, createStore, databaseUrl, migrate } from "./store/index.ts";
+import { prerender } from "./site/prerender.ts";
 
 function untilSignal(): Promise<NodeJS.Signals> {
   return new Promise((resolve) => {
@@ -125,6 +126,8 @@ const { positionals, values } = parseArgs({
     // New failures go to runs/_fixtures; pass --fixtures fixtures to add one to the committed CI gate.
     fixtures: { type: "string", default: join("runs", "_fixtures") },
     out: { type: "string" },
+    // `site:build` only: the canonical origin the prerendered pages are stamped with.
+    "site-url": { type: "string" },
     screenshots: { type: "boolean", default: false },
     video: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -261,6 +264,15 @@ async function main(): Promise<number> {
       // ECS sends SIGTERM on deploy/scale-in and waits stopTimeout before SIGKILL.
       await untilSignal();
       await server.close(Number(process.env.LAB_SHUTDOWN_GRACE_MS ?? 25_000));
+      return 0;
+    }
+    case "site:build": {
+      // Static export of the public site. `LAB_SITE_URL` sets the canonical origin; without it
+      // the build is still valid but every canonical/sitemap URL points at localhost.
+      const siteUrl = (values["site-url"] ?? process.env.LAB_SITE_URL ?? "http://localhost:4320").replace(/\/+$/, "");
+      const outDir = resolve(values.out ?? "dist");
+      const written = prerender({ siteUrl, outDir });
+      console.log(`Prerendered ${written.length} files to ${outDir} for ${siteUrl}`);
       return 0;
     }
     case "worker": {

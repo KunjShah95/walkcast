@@ -341,9 +341,37 @@ credentials are registered as secrets, so nothing on disk contains them.
 | `/signup`, `/login`, `/forgot`, `/reset` | Accounts: **Continue with Google** or email + password (Supabase Auth) |
 | `/app` | The dashboard (Overview, Fault replay, Record, Runs, Fixtures, Experiments, Compare) |
 | `/robots.txt`, `/sitemap.xml`, `/llms.txt` | Crawler files |
+| `/compare/<slug>`, `/guides/<slug>` | Comparison and use-case guide pages |
+
+The public half of this is also available as a static export — see [Static export](#static-export-vercel) below.
 
 Pasting a link on the landing page goes to `/start?url=…`: signed-in users land on the Record page
 with the link filled in; everyone else signs up first and is brought back to it.
+
+### Static export (Vercel)
+
+Every public page is a pure `string` function over `(siteUrl, user)`, and the whole marketing surface
+renders with `user = null`. So the public site is not a server that happens to emit HTML — it is a set
+of documents, and a static host can serve them as files:
+
+```sh
+LAB_SITE_URL=https://your-domain npm run site:build   # writes ./dist
+```
+
+That emits one `<route>/index.html` per page (so clean URLs need no rewrite rules), the crawler files,
+the 404, the fonts and the demo media — 33 files. `LAB_SITE_URL` is stamped into every canonical tag,
+the sitemap and the JSON-LD; without it the build succeeds but advertises `localhost`.
+
+**What a static host cannot serve**, because it needs a live process: `/app` (the dashboard is a SPA
+that talks to `/api`), the auth pages (POST targets with per-session state), and `/api/*`. `vercel.json`
+therefore rewrites those paths to `$APP_ORIGIN` — the Node server (the Docker image, on ECS or
+Supabase). Set `APP_ORIGIN` to that origin in the Vercel project. Proxying rather than linking to a
+second hostname keeps it same-origin, so the session cookie still applies and the signup form posts
+to a real handler.
+
+`test/prerender.test.ts` guards the export: every route exists, nothing leaks a `localhost` origin,
+no sitemap entry points at a page that was not written, and a re-run does not leave stale pages
+behind.
 
 **Sign-in with Supabase Auth** (`src/site/supabase-auth.ts`), used whenever `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`) are set:
@@ -403,6 +431,26 @@ guard; `LAB_ALLOW_PRIVATE=1` lifts it).
 None of this can guarantee a ranking. What decides it after launch is a real domain, links from
 other sites, more pages answering specific questions (e.g. a guide per use case) and Search
 Console / Bing Webmaster submission of the sitemap.
+
+## Web analytics (optional, off by default)
+
+The dashboard can report visitors and page views with Vercel Web Analytics
+(`@vercel/analytics`). It is **opt-in**: without a DSN nothing is loaded and no event leaves the
+browser, which is the right default for a self-hostable, MIT-licensed tool.
+
+```sh
+VITE_VERCEL_ANALYTICS_DSN=<your dsn> npm run ui:build   # baked into dashboard/dist at build time
+npm run lab -- ui
+```
+
+- `VITE_VERCEL_ANALYTICS_DSN` — the project DSN from Vercel Analytics (or your own proxy).
+- `VITE_VERCEL_ANALYTICS_SCRIPT_SRC` — self-hosters: serve the script from your own domain
+  instead of the default `/_vercel/insights/script.js`, which only exists on Vercel's edge.
+- `VITE_VERCEL_ANALYTICS_ENDPOINT` — self-hosters: where page-view events are POSTed.
+- Only the dashboard (`/app`) is instrumented; the public marketing pages are server-rendered and
+  have no analytics.
+- `route` is passed explicitly (`dashboard/src/lib/analytics.tsx`), so each dashboard view counts
+  as its own page view — including the hash routes, which automatic tracking lumps together.
 
 ## Production: Supabase + AWS
 

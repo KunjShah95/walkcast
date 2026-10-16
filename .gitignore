@@ -3,6 +3,7 @@ chrome/
 runs/
 results/*/runs/
 dashboard/dist/
+dist/
 failure-lab.html
 walkcast.html
 recordings/
