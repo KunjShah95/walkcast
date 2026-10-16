@@ -377,8 +377,12 @@ to a real handler.
 This is `vercel.ts`, not `vercel.json`, for a reason: a rewrite `destination` must be an absolute
 pathname or an external URL, so a static config file cannot interpolate `$APP_ORIGIN`. The rewrite
 simply never matched and every proxied path — including `/login` and `/signup` — fell through to the
-static 404. `vercel.ts` runs during the build, where `process.env` is available, and it fails the
-build loudly if `APP_ORIGIN` is unset rather than shipping a site whose sign-in buttons 404.
+static 404. `vercel.ts` runs during the build, where `process.env` is available.
+
+`APP_ORIGIN` unset is **not** fatal — the marketing site is a static export and deploys on its own,
+so a docs-only deployment still works. The build prints a warning instead: without an origin there
+is nothing behind `/login`, `/signup`, `/forgot`, `/reset`, `/app` or `/api/*`, and those paths 404.
+A value that is set but malformed (not `https://…`) *is* fatal, because that is a typo.
 `test/vercel-config.test.ts` locks all of that down.
 
 `test/prerender.test.ts` guards the export: every route exists, nothing leaks a `localhost` origin,

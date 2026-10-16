@@ -9,42 +9,54 @@
  * Vercel only allows one configuration file, hence this replaces the JSON one outright.
  *
  * Set `APP_ORIGIN` in the Vercel project to the origin of the Node server (the Docker image on
- * ECS, Fly, or wherever `npm run lab -- ui` runs). The build fails loudly without it rather than
- * shipping a site whose "Sign in" and "Get started" buttons 404.
+ * ECS, Fly, or wherever `npm run lab -- ui` runs).
+ *
+ * Unset is not fatal: the marketing site is a static export and deploys fine on its own, so a
+ * docs-only deployment must not be blocked. But then `/login`, `/signup`, `/forgot`, `/reset`,
+ * `/app` and `/api/*` have nothing behind them and will 404, so the build says so loudly rather
+ * than shipping quietly. A value that is set but malformed *is* fatal - that is a typo, not a
+ * deliberate choice.
  */
 const origin = (process.env.APP_ORIGIN ?? "").trim().replace(/\/+$/, "");
-if (!origin) {
+if (origin && !/^https?:\/\//.test(origin)) {
   throw new Error(
-    "APP_ORIGIN is not set. Point it at the Walkcast Node server (the host serving /app, /api and /auth/*) " +
-      "so /login, /signup, /forgot, /reset, /app and /api/* can be proxied. Without it every one of those is a 404.",
+    `APP_ORIGIN must be an absolute http(s) origin (e.g. https://app.example.com), got "${origin}". ` +
+      "Unset it entirely for a static, marketing-only deployment.",
   );
 }
-if (!/^https?:\/\//.test(origin)) {
-  throw new Error(`APP_ORIGIN must be an absolute http(s) origin, got "${origin}".`);
+if (!origin) {
+  console.warn(
+    "\n  [walkcast] APP_ORIGIN is not set: deploying the static marketing site only.\n" +
+      "  /login, /signup, /forgot, /reset, /app and /api/* will 404 until you set APP_ORIGIN\n" +
+      "  in the Vercel project to the origin of the Node server (`npm run lab -- ui`).\n",
+  );
 }
 
 /** Proxy a path (and, with `:path*`, its sub-paths) to the Node server. */
-const proxy = (source: string) => ({ source, destination: `${origin}${source.replace(/\/:path\*$/, "/:path*")}` });
+const proxy = (source: string) => ({ source, destination: `${origin}${source}` });
+
+const PROXIED = [
+  // The dashboard and everything it talks to.
+  "/app",
+  "/app/:path*",
+  "/api/:path*",
+  "/files/:path*",
+  // Auth: the pages, their POST targets, the OAuth callbacks and the health check.
+  "/auth/:path*",
+  "/login",
+  "/signup",
+  "/forgot",
+  "/reset",
+  "/start",
+  "/healthz",
+];
 
 export const config = {
   buildCommand: "npm run ui:build && npm run site:build",
   outputDirectory: "dist",
   framework: null,
-  rewrites: [
-    // The dashboard and everything it talks to.
-    proxy("/app"),
-    proxy("/app/:path*"),
-    proxy("/api/:path*"),
-    proxy("/files/:path*"),
-    // Auth: the pages, their POST targets, the OAuth callbacks and the health check.
-    proxy("/auth/:path*"),
-    proxy("/login"),
-    proxy("/signup"),
-    proxy("/forgot"),
-    proxy("/reset"),
-    proxy("/start"),
-    proxy("/healthz"),
-  ],
+  // No origin, no proxy: the static files are served as-is.
+  rewrites: origin ? PROXIED.map(proxy) : [],
   headers: [
     {
       source: "/404.html",
