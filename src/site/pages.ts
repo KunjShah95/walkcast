@@ -275,6 +275,10 @@ footer{padding:36px 0 48px;color:var(--ink-3);font-size:14px}footer .wrap{displa
 .auth-story .kicker{font:500 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--caption);margin:0}
   /* the story headline is display type, not a heading: the page's only h1 is the form's */
   .auth-story .dh{font-family:var(--display);font-weight:560;letter-spacing:-.022em;line-height:1.02;font-optical-sizing:auto;text-wrap:balance;margin:0;color:#f3efe8}
+  /* the auth header carries the brand and a way back, nothing else */
+  .auth-back{margin-left:auto;font:500 13px var(--body);color:var(--ink-2);text-decoration:none}
+  .auth-back:hover{color:var(--ink)}
+  @media (max-width:400px){.auth-back{font-size:12px}}
 .auth .card{box-shadow:none;border-radius:0;padding:34px 32px}.auth h1{font-size:40px;margin:10px 0 6px}
 .auth label{display:grid;gap:6px;margin-top:16px;font-size:14px;color:var(--ink-2)}
 .auth input{border:0;box-shadow:inset 0 0 0 1px var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:12px 14px;font:15px var(--body);outline:none}.auth input:focus{box-shadow:inset 0 0 0 2px var(--ember)}
@@ -308,11 +312,14 @@ a.card.tone-ember{background:color-mix(in srgb,var(--ember) 16%,var(--panel))}
 
 const MARK = `<svg width="30" height="30" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="7" fill="currentColor"/><path d="M10 8.2v9.6l7.6-4.8z" fill="var(--paper)"/><circle cx="20.2" cy="5.8" r="2.7" fill="var(--rec)" stroke="var(--paper)" stroke-width="1"/></svg>`;
 
-function layout(o: { siteUrl: string; path: string; title: string; description: string; body: string; head?: string; noindex?: boolean; user?: { email: string } | null }): string {
+function layout(o: { siteUrl: string; path: string; title: string; description: string; body: string; head?: string; noindex?: boolean; user?: { email: string } | null; chrome?: "full" | "minimal" }): string {
   const url = `${o.siteUrl}${o.path}`;
   const nav = o.user
     ? `<a href="/app#record" class="btn small">Open the app</a>`
     : `<a href="/how" class="hide-sm">How</a><a href="/lab" class="hide-sm">Lab</a><a href="/guides" class="hide-sm">Guides</a><a href="/pricing">Pricing</a><a href="/login">Sign in</a><a href="/signup" class="btn small">Get started</a>`;
+  // Auth screens get the brand and a way back, not the marketing nav and the footer sitemap. Same
+  // page furniture everywhere else.
+  const minimal = o.chrome === "minimal";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -351,9 +358,9 @@ ${o.head ?? ""}
 </head>
 <body>
 <a href="#main" class="eyebrow" style="position:absolute;left:-9999px">Skip to content</a>
-<header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${NAME} home">${MARK}<span>${NAME}</span></a><nav aria-label="Main">${nav}</nav></div></header>
+<header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${NAME} home">${MARK}<span>${NAME}</span></a>${minimal ? `<a href="/" class="auth-back">Back to the site</a>` : `<nav aria-label="Main">${nav}</nav>`}</div></header>
 <main id="main">${o.body}</main>
-<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · <a href="https://opensource.org/licenses/MIT">MIT licensed</a></span><span><a href="/how">How</a> · <a href="/lab">Lab</a> · <a href="/safety">Safety</a> · <a href="/guides">Guides</a> · <a href="/pricing">Pricing</a></span></div></footer>
+${minimal ? "" : `<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · <a href="https://opensource.org/licenses/MIT">MIT licensed</a></span><span><a href="/how">How</a> · <a href="/lab">Lab</a> · <a href="/safety">Safety</a> · <a href="/guides">Guides</a> · <a href="/pricing">Pricing</a></span></div></footer>`}
 </body>
 </html>`;
 }
@@ -827,6 +834,7 @@ if(j.message){f.hidden=true;document.querySelectorAll(".gbtn,.or,.gnote").forEac
     body,
     noindex: mode !== "signup",
     user: null,
+    chrome: "minimal",
   });
 }
 

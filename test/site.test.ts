@@ -147,6 +147,23 @@ test("technical SEO: one h1 per page, image alt text, a real 404 and canonical U
   }
 });
 
+test("auth screens drop the marketing chrome but keep the form and a way back", () => {
+  for (const mode of ["login", "signup", "forgot", "reset"] as const) {
+    const html = authPage("https://lab.example", mode, { google: false, next: "/app" });
+    const header = html.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
+    const footer = html.match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? "";
+    // Brand and a way back; no marketing nav, no footer sitemap.
+    assert.match(header, /Back to the site/, `${mode} keeps a way back to the site`);
+    for (const link of ["/how", "/lab", "/guides", "/pricing", "/login", "/signup"]) {
+      assert.ok(!header.includes(`href="${link}"`), `${mode} header is free of ${link}`);
+    }
+    assert.equal(footer, "", `${mode} has no footer`);
+    assert.match(html, /<form id="auth"/, `${mode} still serves the form`);
+  }
+  // Everything else keeps the full chrome.
+  assert.match(landingPage("https://lab.example", null), /<footer>[\s\S]*?\/pricing/);
+});
+
 test("server: public pages, protected actions, sign-up then record", async () => {
   const root = mkdtempSync(join(tmpdir(), "lab-srv-"));
   const port = 4600 + Math.floor(Math.random() * 300);
