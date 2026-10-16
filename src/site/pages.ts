@@ -1340,8 +1340,7 @@ export function robotsTxt(siteUrl: string): string {
     "ClaudeBot", "Claude-User", "Claude-SearchBot", "anthropic-ai", "PerplexityBot", "Perplexity-User", "Amazonbot", "meta-externalagent", "DuckAssistBot", "MistralAI-User", "YouBot",
   ];
   const rules = "Allow: /\nDisallow: /app\nDisallow: /api/\nDisallow: /auth/\nDisallow: /files/\nDisallow: /start\n";
-  const training = "User-agent: CCBot\nDisallow: /\n\n";
-  return `# ${NAME}: public pages are open to search engines and to AI assistants that cite sources.\n# CCBot (Common Crawl training) is blocked. Search and answer-engine crawlers are allowed.\n\n${bots.map((b) => `User-agent: ${b}\n${rules}`).join("\n")}\n${training}User-agent: *\n${rules}\nSitemap: ${siteUrl}/sitemap.xml\n`;
+  return `# ${NAME}: public pages are open to every crawler - search, answer engines and AI training bots.\n# Only private app pages (/app, /api, /auth, /files, /start) are off limits.\n\n${bots.map((b) => `User-agent: ${b}\n${rules}`).join("\n")}\nUser-agent: CCBot\n${rules}\nUser-agent: *\n${rules}\nSitemap: ${siteUrl}/sitemap.xml\n`;
 }
 
 export function sitemapXml(siteUrl: string): string {
