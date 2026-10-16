@@ -19,6 +19,27 @@ export function Settings({ me }: { me: Me | null }) {
       <Account me={me} />
 
       <Panel>
+        <PanelHeader eyebrow="Desktop app" title="Download Walkcast" aside={<span className="font-mono text-[11.5px] text-ink-3">lightweight Tauri build</span>} />
+        <div className="grid gap-4 px-4 py-4">
+          <p className="text-[13px] text-ink-2">
+            A small native window for the signed-in app only. It uses your system's built-in webview, so there is no bundled browser and the installer stays a couple of megabytes.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+              Windows (.exe / MSI)
+            </a>
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+              macOS (.dmg / app)
+            </a>
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+              Linux (.AppImage / .deb)
+            </a>
+          </div>
+          <p className="text-[12px] text-ink-3">Prebuilt installers are published as GitHub release assets. To build locally instead, run <code className="font-mono">npx tauri build</code> after <code className="font-mono">npm run ui:build</code>.</p>
+        </div>
+      </Panel>
+
+      <Panel>
         <PanelHeader eyebrow="New recordings" title="Recording defaults" />
         <div className="grid gap-4 px-4 py-4">
           <div className="grid gap-1.5">

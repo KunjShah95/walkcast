@@ -89,19 +89,30 @@ export class SupabaseAuth extends Sessions {
     if (password.length < 8) throw new AuthError(400, "Use a password of at least 8 characters.");
     if (password.length > 200) throw new AuthError(400, "That password is too long.");
     await this.throttle("signup", ip, email);
-    // PKCE for the confirmation link, so it can only complete in this browser.
-    const { verifier, challenge } = pkce();
-    const result = await this.call<Partial<SupabaseSession> & SupabaseUser>(
-      "POST",
-      `/signup?redirect_to=${encodeURIComponent(this.callbackUrl)}`,
-      { email, password, data: name?.trim() ? { full_name: name.trim().slice(0, 80) } : {}, code_challenge: challenge, code_challenge_method: "s256" },
-    );
-    if (result.access_token && result.user) return { user: await this.adopt(result as SupabaseSession) };
-    // Confirmation required (or, with Supabase's enumeration protection, the address already has an
-    // account). Either way the honest answer is the same: check your email.
-    // Confirmation emails may be opened hours later; keep this verifier for a day.
-    this.setFlow(res, { verifier, next: safeNext(next), purpose: "signin" }, 86_400);
-    return { confirmEmail: true };
+    try {
+      // PKCE for the confirmation link, so it can only complete in this browser.
+      const { verifier, challenge } = pkce();
+      const result = await this.call<Partial<SupabaseSession> & SupabaseUser>(
+        "POST",
+        `/signup?redirect_to=${encodeURIComponent(this.callbackUrl)}`,
+        { email, password, data: name?.trim() ? { full_name: name.trim().slice(0, 80) } : {}, code_challenge: challenge, code_challenge_method: "s256" },
+      );
+      if (result.access_token && result.user) return { user: await this.adopt(result as SupabaseSession) };
+      // Confirmation required (or, with Supabase's enumeration protection, the address already has an
+      // account). Either way the honest answer is the same: check your email.
+      // Confirmation emails may be opened hours later; keep this verifier for a day.
+      this.setFlow(res, { verifier, next: safeNext(next), purpose: "signin" }, 86_400);
+      return { confirmEmail: true };
+    } catch (e) {
+      if (e instanceof AuthError) throw e;
+      if (e instanceof SupabaseError) {
+        if (/rate limit/i.test(e.message) || e.status === 429) throw new AuthError(429, "Too many sign-up emails right now. Please wait a minute and try again.");
+        if (e.status === 409 || /already|registered|exists/i.test(e.message)) throw new AuthError(409, "An account with this email already exists. Sign in instead.");
+        if (e.status >= 500) throw new AuthError(503, "Sign-in service is temporarily unavailable. Please try again.");
+        if (e.status >= 400 && e.status < 500) throw new AuthError(400, e.message || "Sign-up failed. Please check your details and try again.");
+      }
+      throw e;
+    }
   }
 
   async signIn(emailRaw: string, password: string, ip: string): Promise<User> {
@@ -111,8 +122,13 @@ export class SupabaseAuth extends Sessions {
       const session = await this.call<SupabaseSession>("POST", "/token?grant_type=password", { email, password });
       return await this.adopt(session);
     } catch (e) {
-      if (e instanceof SupabaseError && e.code === "email_not_confirmed") throw new AuthError(403, "Confirm your email address first: open the link we sent you, then sign in.");
-      if (e instanceof SupabaseError && e.status < 500) throw new AuthError(401, "Email or password is incorrect.");
+      if (e instanceof AuthError) throw e;
+      if (e instanceof SupabaseError) {
+        if (/rate limit/i.test(e.message) || e.status === 429) throw new AuthError(429, "Too many sign-in attempts right now. Please wait a minute and try again.");
+        if (e.code === "email_not_confirmed") throw new AuthError(403, "Confirm your email address first: open the link we sent you, then sign in.");
+        if (e.status >= 500) throw new AuthError(503, "Sign-in service is temporarily unavailable. Please try again.");
+        if (e.status < 500) throw new AuthError(401, "Email or password is incorrect.");
+      }
       throw e;
     }
   }
@@ -163,7 +179,13 @@ export class SupabaseAuth extends Sessions {
     const { verifier, challenge } = pkce();
     this.setFlow(res, { verifier, next: "/app#record", purpose: "recovery" });
     await this.call("POST", `/recover?redirect_to=${encodeURIComponent(this.callbackUrl)}`, { email, code_challenge: challenge, code_challenge_method: "s256" }).catch((e: unknown) => {
-      if (!(e instanceof SupabaseError) || e.status >= 500) throw e;
+      if (e instanceof AuthError) throw e;
+      if (e instanceof SupabaseError) {
+        if (/rate limit/i.test(e.message) || e.status === 429) throw new AuthError(429, "Too many password-reset emails right now. Please wait a minute and try again.");
+        if (e.status >= 500) throw new AuthError(503, "Sign-in service is temporarily unavailable. Please try again.");
+        return;
+      }
+      throw e;
     });
   }
 
@@ -173,7 +195,13 @@ export class SupabaseAuth extends Sessions {
     if (!token) throw new AuthError(400, "This reset link has expired. Ask for a new one.");
     appendCookie(res, cookie(RECOVERY_COOKIE, "", 0, this.secure));
     const user = await this.call<SupabaseUser>("PUT", "/user", { password }, token).catch((e: unknown) => {
-      throw e instanceof SupabaseError && e.status < 500 ? new AuthError(400, e.message) : e;
+      if (e instanceof AuthError) throw e;
+      if (e instanceof SupabaseError) {
+        if (/rate limit/i.test(e.message) || e.status === 429) throw new AuthError(429, "Too many attempts right now. Please wait a minute and try again.");
+        if (e.status >= 500) throw new AuthError(503, "Sign-in service is temporarily unavailable. Please try again.");
+        if (e.status < 500) throw new AuthError(400, e.message);
+      }
+      throw e;
     });
     const linked = await this.link(user);
     await this.call("POST", "/logout?scope=local", undefined, token).catch(() => undefined);

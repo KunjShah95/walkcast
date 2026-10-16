@@ -12,3 +12,4 @@ recordings/
 
 .vercel
 .env*
+app/target

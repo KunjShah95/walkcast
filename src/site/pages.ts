@@ -534,6 +534,7 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
 <meta name="robots" content="${o.noindex ? "noindex, follow" : "index, follow, max-image-preview:large, max-video-preview:-1, max-snippet:-1"}">
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
+<link rel="manifest" href="/manifest.webmanifest">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${NAME}">
 <meta property="og:title" content="${esc(o.title)}">
@@ -558,6 +559,7 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
 <link rel="preload" href="/assets/fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
 <style>${CSS}</style>
 ${o.head ?? ""}
+<script>if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(function(){});</script>
 </head>
 <body>
 <a href="#main" class="skip">Skip to content</a>

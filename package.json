@@ -23,7 +23,8 @@
     "ui:dev": "vite --config dashboard/vite.config.ts",
     "ui": "npm run ui:build && tsx src/cli.ts ui",
     "dev": "npm run ui",
-    "cli": "node --import tsx src/cli.ts",
+    "app:dev": "npx tauri dev",
+    "app:build": "npx tauri build",    "cli": "node --import tsx src/cli.ts",
     "doctor": "node --import tsx src/cli.ts doctor",
     "walkcast": "node bin/walkcast.mjs",
     "qa": "npm run typecheck && npm run ui:build"
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "^2.12.3",
     "@types/node": "22.18.12",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

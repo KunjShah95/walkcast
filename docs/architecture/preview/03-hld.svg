@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 2575.35 1680" width="2575.35" height="1680" font-family="Segoe Print, Comic Sans MS, sans-serif">
+<rect x="-20" y="-20" width="2575.35" height="1680" fill="#fff"/>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e1e1e"/></marker></defs>
+<rect x="20" y="120" width="2160" height="170" rx="10" fill="#f8f9fa" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="60" y="170" width="380" height="90" rx="10" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="480" y="170" width="380" height="90" rx="10" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="900" y="170" width="380" height="90" rx="10" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1320" y="170" width="380" height="90" rx="10" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1740" y="170" width="400" height="90" rx="10" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="20" y="330" width="2160" height="250" rx="10" fill="#ebfbee" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="60" y="380" width="300" height="170" rx="10" fill="#a5d8ff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="400" y="380" width="300" height="170" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="740" y="380" width="320" height="170" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1100" y="380" width="320" height="170" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1460" y="380" width="320" height="170" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1820" y="380" width="320" height="170" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="20" y="620" width="2160" height="510" rx="10" fill="#fff4e6" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="60" y="690" width="380" height="200" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="480" y="690" width="420" height="200" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="940" y="690" width="360" height="200" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1340" y="690" width="420" height="200" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1800" y="690" width="340" height="200" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="900" y="930" width="440" height="170" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1440" y="930" width="320" height="170" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="20" y="1170" width="2160" height="240" rx="10" fill="#f3f0ff" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="60" y="1220" width="520" height="160" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="620" y="1220" width="460" height="160" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1120" y="1220" width="460" height="160" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1620" y="1220" width="520" height="160" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="20" y="1450" width="2160" height="170" rx="10" fill="#fff5f5" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="60" y="1500" width="400" height="90" rx="10" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="500" y="1500" width="400" height="90" rx="10" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="940" y="1500" width="400" height="90" rx="10" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1380" y="1500" width="360" height="90" rx="10" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1780" y="1500" width="360" height="90" rx="10" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<polyline points="174.0,260 219.0,380" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="556.0,260 580.0,380" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1510.0,170 1510.0,106 2200.0,106 2200.0,600 1634.0,600 1634.0,690" fill="none" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+<polyline points="700,431.0 740,431.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1060,431.0 1100,431.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="2180,455.0 2300,455.0 2300,1266.0 2180,1266.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="440,750.0 480,750.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="383.0,690 383.0,668 1550.0,668 1550.0,690" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="900,790.0 940,790.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1340,840.0 1300,840.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1760,790.0 1800,790.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1592.0,890 1600.0,930" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1440,1015.0 1340,1015.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="250.0,890 252.4,1220" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="774.0,890 774.0,1220" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1382.0,890 1382.0,1140 1382.0,1220" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<text x="40" y="53.3" font-size="36" fill="#1e1e1e" text-anchor="start">Walkcast — High-level design (HLD)</text>
+<text x="40" y="86.8" font-size="16" fill="#495057" text-anchor="start">Layers and the components in each, by module. Arrows show the main dependencies; every box names the code that implements it.</text>
+<text x="36" y="150.5" font-size="20" fill="#1e1e1e" text-anchor="start">1 · Clients</text>
+<text x="250.0" y="210.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Visitor browser</text><text x="250.0" y="228.875" font-size="15" fill="#1e1e1e" text-anchor="middle">public pages, no JS needed</text>
+<text x="670.0" y="210.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Signed-in browser</text><text x="670.0" y="228.875" font-size="15" fill="#1e1e1e" text-anchor="middle">dashboard SPA (dashboard/src)</text>
+<text x="1090.0" y="210.125" font-size="15" fill="#1e1e1e" text-anchor="middle">CLI · src/cli.ts — record · run · check</text><text x="1090.0" y="228.875" font-size="15" fill="#1e1e1e" text-anchor="middle">runs layer 3 in-process, no web tier</text>
+<text x="1510.0" y="210.125" font-size="15" fill="#1e1e1e" text-anchor="middle">CI gate</text><text x="1510.0" y="228.875" font-size="15" fill="#1e1e1e" text-anchor="middle">npm run lab -- check (fixtures/)</text>
+<text x="1940.0" y="210.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Crawlers &amp; answer engines</text><text x="1940.0" y="228.875" font-size="15" fill="#1e1e1e" text-anchor="middle">robots.txt · sitemap · llms.txt</text>
+<text x="1823.0" y="360.5" font-size="20" fill="#1e1e1e" text-anchor="start">2 · Edge &amp; web tier (stateless)</text>
+<text x="210.0" y="441.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Static CDN</text><text x="210.0" y="460.125" font-size="15" fill="#1e1e1e" text-anchor="middle">site/prerender.ts</text><text x="210.0" y="478.875" font-size="15" fill="#1e1e1e" text-anchor="middle">deploy/vercel-build.ts</text><text x="210.0" y="497.625" font-size="15" fill="#1e1e1e" text-anchor="middle">19 HTML pages + assets</text>
+<text x="550.0" y="432.0" font-size="15" fill="#1e1e1e" text-anchor="middle">HTTP router</text><text x="550.0" y="450.75" font-size="15" fill="#1e1e1e" text-anchor="middle">ui/server.ts createApp()</text><text x="550.0" y="469.5" font-size="15" fill="#1e1e1e" text-anchor="middle">security headers</text><text x="550.0" y="488.25" font-size="15" fill="#1e1e1e" text-anchor="middle">origin check · /healthz</text><text x="550.0" y="507.0" font-size="15" fill="#1e1e1e" text-anchor="middle">/readyz (drain)</text>
+<text x="900.0" y="432.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Auth</text><text x="900.0" y="450.75" font-size="15" fill="#1e1e1e" text-anchor="middle">site/auth.ts (scrypt, Google)</text><text x="900.0" y="469.5" font-size="15" fill="#1e1e1e" text-anchor="middle">site/supabase-auth.ts</text><text x="900.0" y="488.25" font-size="15" fill="#1e1e1e" text-anchor="middle">session cookie → sha256</text><text x="900.0" y="507.0" font-size="15" fill="#1e1e1e" text-anchor="middle">sign-in throttling</text>
+<text x="1260.0" y="432.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Job API</text><text x="1260.0" y="450.75" font-size="15" fill="#1e1e1e" text-anchor="middle">/api/record · /api/run</text><text x="1260.0" y="469.5" font-size="15" fill="#1e1e1e" text-anchor="middle">validate · quota · seal</text><text x="1260.0" y="488.25" font-size="15" fill="#1e1e1e" text-anchor="middle">enqueueLimited → 202</text><text x="1260.0" y="507.0" font-size="15" fill="#1e1e1e" text-anchor="middle">/api/jobs/:id (ETag)</text>
+<text x="1620.0" y="441.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Read APIs</text><text x="1620.0" y="460.125" font-size="15" fill="#1e1e1e" text-anchor="middle">ui/data.ts: runs · fixtures</text><text x="1620.0" y="478.875" font-size="15" fill="#1e1e1e" text-anchor="middle">experiments · audit</text><text x="1620.0" y="497.625" font-size="15" fill="#1e1e1e" text-anchor="middle">/files/* (owner-scoped)</text>
+<text x="1980.0" y="441.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Public site</text><text x="1980.0" y="460.125" font-size="15" fill="#1e1e1e" text-anchor="middle">site/pages.ts · guides.ts</text><text x="1980.0" y="478.875" font-size="15" fill="#1e1e1e" text-anchor="middle">facts.ts (lab numbers</text><text x="1980.0" y="497.625" font-size="15" fill="#1e1e1e" text-anchor="middle">from results/)</text>
+<text x="36" y="650.5" font-size="20" fill="#1e1e1e" text-anchor="start">3 · Domain services (inside a worker process, or in-process locally)</text>
+<text x="250.0" y="757.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Job runtime</text><text x="250.0" y="775.75" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs/worker.ts — claim, lease,</text><text x="250.0" y="794.5" font-size="15" fill="#1e1e1e" text-anchor="middle">heartbeat, deadline, retry</text><text x="250.0" y="813.25" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs/progress.ts — 1/s throttle</text><text x="250.0" y="832.0" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs/secret-box.ts — AES-256-GCM</text>
+<text x="690.0" y="747.625" font-size="15" fill="#1e1e1e" text-anchor="middle">Recording</text><text x="690.0" y="766.375" font-size="15" fill="#1e1e1e" text-anchor="middle">record/site.ts — sign in, BFS walk</text><text x="690.0" y="785.125" font-size="15" fill="#1e1e1e" text-anchor="middle">record/ssrf.ts — private-IP guard</text><text x="690.0" y="803.875" font-size="15" fill="#1e1e1e" text-anchor="middle">record/narration.ts — captions</text><text x="690.0" y="822.625" font-size="15" fill="#1e1e1e" text-anchor="middle">record/media.ts · voice.ts — flite, mux</text><text x="690.0" y="841.375" font-size="15" fill="#1e1e1e" text-anchor="middle">record/browser.ts — warm Chromium</text>
+<text x="1120.0" y="757.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Capture</text><text x="1120.0" y="775.75" font-size="15" fill="#1e1e1e" text-anchor="middle">capture/recorder.ts — one clock,</text><text x="1120.0" y="794.5" font-size="15" fill="#1e1e1e" text-anchor="middle">before/after state, network</text><text x="1120.0" y="813.25" font-size="15" fill="#1e1e1e" text-anchor="middle">capture/tools.ts — BrowserTools</text><text x="1120.0" y="832.0" font-size="15" fill="#1e1e1e" text-anchor="middle">capture/secrets.ts — scrubber</text>
+<text x="1550.0" y="747.625" font-size="15" fill="#1e1e1e" text-anchor="middle">Lab</text><text x="1550.0" y="766.375" font-size="15" fill="#1e1e1e" text-anchor="middle">lab/runner.ts — runOnce()</text><text x="1550.0" y="785.125" font-size="15" fill="#1e1e1e" text-anchor="middle">lab/classifier.ts — causes</text><text x="1550.0" y="803.875" font-size="15" fill="#1e1e1e" text-anchor="middle">lab/diff.ts · fixture.ts — replay</text><text x="1550.0" y="822.625" font-size="15" fill="#1e1e1e" text-anchor="middle">lab/experiment.ts · stats.ts (Wilson)</text><text x="1550.0" y="841.375" font-size="15" fill="#1e1e1e" text-anchor="middle">lab/report.ts</text>
+<text x="1970.0" y="757.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Application under test</text><text x="1970.0" y="775.75" font-size="15" fill="#1e1e1e" text-anchor="middle">startApp(fault, seed)</text><text x="1970.0" y="794.5" font-size="15" fill="#1e1e1e" text-anchor="middle">app/server.ts — MiniCRM</text><text x="1970.0" y="813.25" font-size="15" fill="#1e1e1e" text-anchor="middle">app/faults.ts — injected</text><text x="1970.0" y="832.0" font-size="15" fill="#1e1e1e" text-anchor="middle">faults, seeds, ledger</text>
+<text x="1120.0" y="984.2" font-size="14" fill="#1e1e1e" text-anchor="middle">LLM gateway  llm/</text><text x="1120.0" y="1001.7" font-size="14" fill="#1e1e1e" text-anchor="middle">gateway.ts — live · replay · scripted</text><text x="1120.0" y="1019.2" font-size="14" fill="#1e1e1e" text-anchor="middle">model-spec.ts — fallback chains</text><text x="1120.0" y="1036.7" font-size="14" fill="#1e1e1e" text-anchor="middle">providers.ts — 15+ routes · claude.ts</text><text x="1120.0" y="1054.2" font-size="14" fill="#1e1e1e" text-anchor="middle">credentials.ts — per-job keys (ALS)</text>
+<text x="1600.0" y="984.2" font-size="14" fill="#1e1e1e" text-anchor="middle">Agents  agents/ → generate()</text><text x="1600.0" y="1001.7" font-size="14" fill="#1e1e1e" text-anchor="middle">registry.ts</text><text x="1600.0" y="1019.2" font-size="14" fill="#1e1e1e" text-anchor="middle">scripted.ts — v0 / v1 / v2</text><text x="1600.0" y="1036.7" font-size="14" fill="#1e1e1e" text-anchor="middle">stagehand-agent.ts</text><text x="1600.0" y="1054.2" font-size="14" fill="#1e1e1e" text-anchor="middle">(Stagehand v4, tool calling)</text>
+<text x="1779.0" y="1200.5" font-size="20" fill="#1e1e1e" text-anchor="start">4 · State &amp; infrastructure adapters</text>
+<text x="320.0" y="1276.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Store interface (store/types.ts)</text><text x="320.0" y="1295.125" font-size="15" fill="#1e1e1e" text-anchor="middle">FileStore — .lab/store.json, one process</text><text x="320.0" y="1313.875" font-size="15" fill="#1e1e1e" text-anchor="middle">PgStore — Supabase Postgres, shared</text><text x="320.0" y="1332.625" font-size="15" fill="#1e1e1e" text-anchor="middle">users · sessions · rate_limits · jobs · recordings</text>
+<text x="850.0" y="1276.375" font-size="15" fill="#1e1e1e" text-anchor="middle">MediaStore (media/store.ts)</text><text x="850.0" y="1295.125" font-size="15" fill="#1e1e1e" text-anchor="middle">LocalMedia — recordings/&lt;id&gt;/</text><text x="850.0" y="1313.875" font-size="15" fill="#1e1e1e" text-anchor="middle">S3Media — SigV4 PUT + presigned GET</text><text x="850.0" y="1332.625" font-size="15" fill="#1e1e1e" text-anchor="middle">(media/s3.ts)</text>
+<text x="1350.0" y="1276.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Workspace files</text><text x="1350.0" y="1295.125" font-size="15" fill="#1e1e1e" text-anchor="middle">runs/ · fixtures/ · results/</text><text x="1350.0" y="1313.875" font-size="15" fill="#1e1e1e" text-anchor="middle">recordings/ (local)</text><text x="1350.0" y="1332.625" font-size="15" fill="#1e1e1e" text-anchor="middle">model-calls.jsonl cassettes</text>
+<text x="1880.0" y="1267.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Ops</text><text x="1880.0" y="1285.75" font-size="15" fill="#1e1e1e" text-anchor="middle">ops/log.ts — JSON lines</text><text x="1880.0" y="1304.5" font-size="15" fill="#1e1e1e" text-anchor="middle">/api/metrics — queue depth, oldest</text><text x="1880.0" y="1323.25" font-size="15" fill="#1e1e1e" text-anchor="middle">wait, p50 / p95 per job kind</text><text x="1880.0" y="1342.0" font-size="15" fill="#1e1e1e" text-anchor="middle">env.ts — .env loader</text>
+<text x="36" y="1480.5" font-size="20" fill="#1e1e1e" text-anchor="start">5 · External</text>
+<text x="260.0" y="1549.8" font-size="16" fill="#1e1e1e" text-anchor="middle">Target websites (authorized)</text>
+<text x="700.0" y="1549.8" font-size="16" fill="#1e1e1e" text-anchor="middle">Chromium · Chrome for Testing</text>
+<text x="1140.0" y="1549.8" font-size="16" fill="#1e1e1e" text-anchor="middle">ffmpeg + flite</text>
+<text x="1560.0" y="1549.8" font-size="16" fill="#1e1e1e" text-anchor="middle">LLM providers</text>
+<text x="1960.0" y="1549.8" font-size="16" fill="#1e1e1e" text-anchor="middle">Google · Supabase · OAuth</text>
+<rect x="158.85" y="310.25" width="75.30000000000001" height="19.5" fill="#fff"/><text x="196.5" y="324.2" font-size="14" fill="#495057" text-anchor="middle">GET pages</text>
+<rect x="522.65" y="310.25" width="90.7" height="19.5" fill="#fff"/><text x="568.0" y="324.2" font-size="14" fill="#495057" text-anchor="middle">/app · /api</text>
+<text x="2062.55" y="591.45" font-size="14" fill="#495057" text-anchor="start">replay fixtures in CI</text>
+<text x="2308.0" y="848.15" font-size="13" fill="#495057" text-anchor="start">web tier → state directly:</text><text x="2308.0" y="864.4" font-size="13" fill="#495057" text-anchor="start">sessions · quotas · enqueue ·</text><text x="2308.0" y="880.65" font-size="13" fill="#495057" text-anchor="start">job status · locate media</text>
+<text x="1305.05" y="659.45" font-size="14" fill="#495057" text-anchor="start">run</text>
+<rect x="1566.05" y="900.25" width="59.900000000000006" height="19.5" fill="#fff"/><text x="1596.0" y="914.2" font-size="14" fill="#495057" text-anchor="middle">session</text>
+<rect x="194.29999999999998" y="1045.25" width="113.80000000000001" height="19.5" fill="#fff"/><text x="251.2" y="1059.2" font-size="14" fill="#495057" text-anchor="middle">claim · finish</text>
+<rect x="744.05" y="1045.25" width="59.900000000000006" height="19.5" fill="#fff"/><text x="774.0" y="1059.2" font-size="14" fill="#495057" text-anchor="middle">publish</text>
+<text x="1390.0" y="1183.9" font-size="13" fill="#495057" text-anchor="start">result.json · cassette</text>
+</svg>

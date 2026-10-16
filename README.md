@@ -499,9 +499,8 @@ How the pieces fit (full guide: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md); `doc
 capacity math, worker-fleet scaling and what to build next as job volume grows;
 `docs/SYSTEM-DESIGN.md` states the correctness guarantees — fenced finalization, atomic tenant
 limits, at-least-once execution with idempotent effects — and the failure-domain table;
-`docs/architecture-hld.excalidraw`, `docs/architecture-system.excalidraw`,
-`docs/architecture-lld.excalidraw` are the editable Excalidraw diagrams (HLD, system design,
-and low-level module layout) — open any of them at excalidraw.com;
+[`docs/architecture/`](docs/architecture/) holds the editable Excalidraw diagrams (architecture
+overview, system design, HLD and LLD) — open any of them at excalidraw.com;
 `docker compose up` runs the same shape locally):
 
 - **Store** (`src/store/`): one interface, two implementations. `PgStore` (Supabase) keeps users,

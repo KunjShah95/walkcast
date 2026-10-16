@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -20 2430 1940" width="2430" height="1940" font-family="Segoe Print, Comic Sans MS, sans-serif">
+<rect x="0" y="-20" width="2430" height="1940" fill="#fff"/>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e1e1e"/></marker></defs>
+<rect x="60" y="130" width="200" height="90" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="310" y="130" width="200" height="90" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="560" y="130" width="200" height="90" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="810" y="130" width="200" height="90" rx="10" fill="#ffd8a8" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1060" y="130" width="200" height="90" rx="10" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1310" y="130" width="200" height="90" rx="10" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1560" y="130" width="200" height="90" rx="10" fill="#d0bfff" stroke="#1e1e1e" stroke-width="2"/>
+<polyline points="160,220 160,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="410,220 410,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="660,220 660,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="910,220 910,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="1160,220 1160,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="1410,220 1410,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="1660,220 1660,1310" fill="none" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<polyline points="160,310 410,310" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="410,384 660,384" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="410,474 660,474" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="410,548 160,548" fill="none" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+<polyline points="160,622 410,622" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,696 660,696" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,770 660,770" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,860 1160,860" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,934 1410,934" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,1008 1660,1008" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,1082 660,1082" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="910,1156 660,1156" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="160,1230 410,1230" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="410,1304 160,1304" fill="none" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#ah)"/>
+<rect x="1830" y="130" width="560" height="1180" rx="10" fill="#f8f9fa" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="1860" y="200" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1860" y="380" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1860" y="560" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1860" y="740" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1860" y="920" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1860" y="1100" width="500" height="160" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="40" y="1360" width="1150" height="520" rx="10" fill="#fff4e6" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="90" y="1500" width="200" height="90" rx="10" fill="#ffec99" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="480" y="1500" width="200" height="90" rx="10" fill="#a5d8ff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="900" y="1420" width="220" height="90" rx="10" fill="#b2f2bb" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="900" y="1620" width="220" height="90" rx="10" fill="#ffc9c9" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="90" y="1720" width="200" height="80" rx="10" fill="#e9ecef" stroke="#1e1e1e" stroke-width="2"/>
+<polyline points="290,1531.5 480,1531.5" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="680,1522.5 900,1465.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="680,1572.0 900,1665.0" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="580.0,1590 580.0,1660 190.0,1660 190.0,1590" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<rect x="1230" y="1360" width="1160" height="520" rx="10" fill="#fff5f5" stroke="#495057" stroke-width="1" stroke-dasharray="8 6"/>
+<rect x="1260" y="1430" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1820" y="1430" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1260" y="1535" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1820" y="1535" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1260" y="1640" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1820" y="1640" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1260" y="1745" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<rect x="1820" y="1745" width="540" height="90" rx="10" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="40" y="53.3" font-size="36" fill="#1e1e1e" text-anchor="start">Walkcast — System design: one recording, end to end</text>
+<text x="40" y="86.8" font-size="16" fill="#495057" text-anchor="start">A record job from submit to playback, then the job state machine and failure handling. Lab runs (/api/run) take the same queue path; only execute() differs.</text>
+<text x="160.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Dashboard SPA</text><text x="160.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">(browser)</text>
+<text x="410.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Web server</text><text x="410.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">ui/server.ts</text>
+<text x="660.0" y="160.75" font-size="15" fill="#1e1e1e" text-anchor="middle">Postgres</text><text x="660.0" y="179.5" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs · rate_limits</text><text x="660.0" y="198.25" font-size="15" fill="#1e1e1e" text-anchor="middle">recordings</text>
+<text x="910.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Worker</text><text x="910.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs/worker.ts</text>
+<text x="1160.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Chromium →</text><text x="1160.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">target site</text>
+<text x="1410.0" y="179.5" font-size="15" fill="#1e1e1e" text-anchor="middle">ffmpeg + flite</text>
+<text x="1660.0" y="179.5" font-size="15" fill="#1e1e1e" text-anchor="middle">Object storage</text>
+<text x="170" y="272.95" font-size="14" fill="#1e1e1e" text-anchor="start">1  POST /api/record {url, username, password, authorized}</text><text x="170" y="290.45" font-size="14" fill="#1e1e1e" text-anchor="start">Idempotency-Key header · validateRecord (SSRF on exposed host)</text>
+<text x="420" y="362.95" font-size="14" fill="#1e1e1e" text-anchor="start">2  hit('quota:record:&lt;user&gt;', 24 h) → ≤ 20 per day</text>
+<text x="420" y="436.95" font-size="14" fill="#1e1e1e" text-anchor="start">3  enqueueLimited(job, maxActive = 1) — check + insert in ONE statement</text><text x="420" y="454.45" font-size="14" fill="#1e1e1e" text-anchor="start">job.secret = seal(password) · AES-256-GCM</text>
+<text x="170" y="526.95" font-size="14" fill="#1e1e1e" text-anchor="start">4  202 {job, queue: {ahead, oldestQueuedMs}} · worker.poke() if in-process</text>
+<text x="170" y="600.95" font-size="14" fill="#1e1e1e" text-anchor="start">5  GET /api/jobs/:id every 1–4 s · ETag → 304 · 1.5 s status cache</text>
+<text x="670" y="674.95" font-size="14" fill="#1e1e1e" text-anchor="start">6  claim(workerId, lease 60 s) · FOR UPDATE SKIP LOCKED · attempts++</text>
+<text x="670" y="748.95" font-size="14" fill="#1e1e1e" text-anchor="start">7  heartbeat every lease/3 · setProgress (throttled 1 s) · abort if unconfirmed &gt; 80% lease</text>
+<text x="920" y="822.95" font-size="14" fill="#1e1e1e" text-anchor="start">8  recordSite: robots.txt · sign in · BFS same-origin links · scroll each page</text><text x="920" y="840.45" font-size="14" fill="#1e1e1e" text-anchor="start">NarratedTools holds each step as long as its line takes to speak</text>
+<text x="920" y="912.95" font-size="14" fill="#1e1e1e" text-anchor="start">9  captionsFor(trace) → flite per line → mux MP4 (H.264 + AAC + captions) + WebM</text>
+<text x="920" y="986.95" font-size="14" fill="#1e1e1e" text-anchor="start">10  media.publish(id, files) — PUT, idempotent</text>
+<text x="670" y="1060.95" font-size="14" fill="#1e1e1e" text-anchor="start">11  saveRecording(row) — upsert by id = the commit point users see</text>
+<text x="670" y="1134.95" font-size="14" fill="#1e1e1e" text-anchor="start">12  finish(succeeded) WHERE locked_by = workerId (fence) · secret := null</text>
+<text x="170" y="1208.95" font-size="14" fill="#1e1e1e" text-anchor="start">13  GET /files/recordings/:id/recording.mp4 (owner check)</text>
+<text x="170" y="1282.95" font-size="14" fill="#1e1e1e" text-anchor="start">14  302 → presigned S3 URL (15 min)  ·  LocalMedia: stream with Range</text>
+<text x="1846" y="160.5" font-size="20" fill="#1e1e1e" text-anchor="start">Why it is shaped like this</text>
+<text x="2110.0" y="256.375" font-size="15" fill="#1e1e1e" text-anchor="middle">No request outlives the load balancer</text><text x="2110.0" y="275.125" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="293.875" font-size="15" fill="#1e1e1e" text-anchor="middle">Submit returns 202 at once; the browser polls.</text><text x="2110.0" y="312.625" font-size="15" fill="#1e1e1e" text-anchor="middle">Nothing depends on a 60 s ALB idle timeout.</text>
+<text x="2110.0" y="436.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Limits hold across instances</text><text x="2110.0" y="455.125" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="473.875" font-size="15" fill="#1e1e1e" text-anchor="middle">Daily quota is an upsert counter; the active-job</text><text x="2110.0" y="492.625" font-size="15" fill="#1e1e1e" text-anchor="middle">ceiling and the insert are one SQL statement.</text>
+<text x="2110.0" y="607.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Passwords never sit in the queue in clear</text><text x="2110.0" y="625.75" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="644.5" font-size="15" fill="#1e1e1e" text-anchor="middle">Sealed with LAB_SECRET_KEY (AES-256-GCM); only</text><text x="2110.0" y="663.25" font-size="15" fill="#1e1e1e" text-anchor="middle">workers open it; cleared when the job ends. Traces</text><text x="2110.0" y="682.0" font-size="15" fill="#1e1e1e" text-anchor="middle">and captions show {{secret:site_password}}.</text>
+<text x="2110.0" y="787.0" font-size="15" fill="#1e1e1e" text-anchor="middle">Exactly one owner writes a result</text><text x="2110.0" y="805.75" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="824.5" font-size="15" fill="#1e1e1e" text-anchor="middle">Every terminal write is fenced by locked_by =</text><text x="2110.0" y="843.25" font-size="15" fill="#1e1e1e" text-anchor="middle">workerId, so a worker whose lease lapsed (zombie)</text><text x="2110.0" y="862.0" font-size="15" fill="#1e1e1e" text-anchor="middle">writes nothing.</text>
+<text x="2110.0" y="976.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Storage before index</text><text x="2110.0" y="995.125" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="1013.875" font-size="15" fill="#1e1e1e" text-anchor="middle">Publish media, then index. A crash in between leaves</text><text x="2110.0" y="1032.625" font-size="15" fill="#1e1e1e" text-anchor="middle">an orphan blob, never a row pointing at nothing.</text>
+<text x="2110.0" y="1156.375" font-size="15" fill="#1e1e1e" text-anchor="middle">Users see movement</text><text x="2110.0" y="1175.125" font-size="15" fill="#1e1e1e" text-anchor="middle"></text><text x="2110.0" y="1193.875" font-size="15" fill="#1e1e1e" text-anchor="middle">Progress is written at stage cadence, throttled to</text><text x="2110.0" y="1212.625" font-size="15" fill="#1e1e1e" text-anchor="middle">1/s, separate from the 20 s ownership heartbeat.</text>
+<text x="56" y="1390.5" font-size="20" fill="#1e1e1e" text-anchor="start">Job state machine (jobs.status)</text>
+<text x="190.0" y="1551.0" font-size="20" fill="#1e1e1e" text-anchor="middle">queued</text>
+<text x="580.0" y="1539.8" font-size="16" fill="#1e1e1e" text-anchor="middle">running</text><text x="580.0" y="1559.8" font-size="16" fill="#1e1e1e" text-anchor="middle">attempts++ · lease</text>
+<text x="1010.0" y="1460.125" font-size="15" fill="#1e1e1e" text-anchor="middle">succeeded</text><text x="1010.0" y="1478.875" font-size="15" fill="#1e1e1e" text-anchor="middle">result · secret = null</text>
+<text x="1010.0" y="1660.125" font-size="15" fill="#1e1e1e" text-anchor="middle">failed</text><text x="1010.0" y="1678.875" font-size="15" fill="#1e1e1e" text-anchor="middle">error · secret = null</text>
+<text x="190.0" y="1765.4" font-size="18" fill="#1e1e1e" text-anchor="middle">cancelled</text>
+<rect x="335.8" y="1513.0" width="98.4" height="37.0" fill="#fff"/><text x="385.0" y="1526.95" font-size="14" fill="#495057" text-anchor="middle">claim (FIFO,</text><text x="385.0" y="1544.45" font-size="14" fill="#495057" text-anchor="middle">SKIP LOCKED)</text>
+<rect x="721.55" y="1475.25" width="136.9" height="37.0" fill="#fff"/><text x="790.0" y="1489.2" font-size="14" fill="#495057" text-anchor="middle">finish(succeeded)</text><text x="790.0" y="1506.7" font-size="14" fill="#495057" text-anchor="middle">fenced</text>
+<rect x="686.9" y="1600.0" width="206.20000000000002" height="37.0" fill="#fff"/><text x="790.0" y="1613.95" font-size="14" fill="#495057" text-anchor="middle">RecordError · aborted ·</text><text x="790.0" y="1631.45" font-size="14" fill="#495057" text-anchor="middle">attempts ≥ maxAttempts (2)</text>
+<text x="234.85" y="1633.95" font-size="14" fill="#495057" text-anchor="start">retry (crash / timeout) · lease expired</text><text x="234.85" y="1651.45" font-size="14" fill="#495057" text-anchor="start">· release() on graceful shutdown</text>
+<text x="1246" y="1390.5" font-size="20" fill="#1e1e1e" text-anchor="start">Failure handling</text>
+<text x="1530.0" y="1470.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Web instance dies</text><text x="1530.0" y="1488.875" font-size="15" fill="#1e1e1e" text-anchor="middle">stateless: LB reroutes; submit is idempotent</text>
+<text x="2090.0" y="1470.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Worker killed (kill -9, OOM)</text><text x="2090.0" y="1488.875" font-size="15" fill="#1e1e1e" text-anchor="middle">lease expires → another worker reclaims</text>
+<text x="1530.0" y="1575.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Postgres stalls ~30 s</text><text x="1530.0" y="1593.875" font-size="15" fill="#1e1e1e" text-anchor="middle">worker aborts at 80% of lease; job re-runs</text>
+<text x="2090.0" y="1575.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Postgres down for an hour</text><text x="2090.0" y="1593.875" font-size="15" fill="#1e1e1e" text-anchor="middle">queue holds every job; delayed, not lost</text>
+<text x="1530.0" y="1680.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Object storage outage</text><text x="1530.0" y="1698.875" font-size="15" fill="#1e1e1e" text-anchor="middle">publish fails → retry republishes; index untouched</text>
+<text x="2090.0" y="1680.125" font-size="15" fill="#1e1e1e" text-anchor="middle">LLM provider down</text><text x="2090.0" y="1698.875" font-size="15" fill="#1e1e1e" text-anchor="middle">gateway fallback chain to the next provider</text>
+<text x="1530.0" y="1785.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Bad input (RecordError)</text><text x="1530.0" y="1803.875" font-size="15" fill="#1e1e1e" text-anchor="middle">failed at once; not retried, no retry storm</text>
+<text x="2090.0" y="1785.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Job over 6 min</text><text x="2090.0" y="1803.875" font-size="15" fill="#1e1e1e" text-anchor="middle">deadline aborts the browser; one retry</text>
+</svg>

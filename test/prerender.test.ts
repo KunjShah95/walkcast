@@ -23,7 +23,7 @@ const routes = [
 const routeFile = (route: string) => (route === "/" ? "index.html" : `${route.replace(/^\//, "")}/index.html`);
 
 test("prerender writes every public page, the crawler files and the assets", () => {
-  const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg"];
+  const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg", "manifest.webmanifest", "sw.js"];
   for (const route of routes) assert.ok(existsSync(join(out, routeFile(route))), `missing ${route}`);
   for (const f of files) assert.ok(existsSync(join(out, f)), `missing ${f}`);
   assert.equal(written.length, routes.length + files.length + 7, "every page, plus 5 demo/social assets and 2 fonts");

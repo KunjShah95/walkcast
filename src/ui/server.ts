@@ -15,6 +15,7 @@ import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
 import { FAVICON, assetPath, authPage, comparePage, compareSlugs, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, notFoundPage, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
+import { webManifest, SERVICE_WORKER } from "../site/pwa.ts";
 import { guideBySlug } from "../site/guides.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../store/index.ts";
 
@@ -249,6 +250,8 @@ export function createApp(o: ServeOptions = {}): App {
     if (url.pathname === "/llms.txt") return send(200, "text/plain; charset=utf-8", llmsTxt(siteUrl), "max-age=3600");
     if (url.pathname === "/pricing.md") return send(200, "text/markdown; charset=utf-8", pricingMd(siteUrl), "max-age=3600");
     if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") return send(200, "image/svg+xml", FAVICON, "max-age=86400");
+    if (url.pathname === "/manifest.webmanifest" || url.pathname === "/manifest.json") return send(200, "application/manifest+json; charset=utf-8", webManifest({ siteUrl }), "max-age=3600");
+    if (url.pathname === "/sw.js") return send(200, "application/javascript; charset=utf-8", SERVICE_WORKER, "no-cache");
     if (url.pathname.startsWith("/assets/")) {
       const asset = assetPath(url.pathname.slice("/assets/".length));
       if (!asset) return json(404, { error: "not found" });

@@ -17,6 +17,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "no
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { siteFacts } from "./facts.ts";
+import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { guideBySlug, GUIDES } from "./guides.ts";
 import {
   assetPath,
@@ -87,6 +88,10 @@ export function prerender({ siteUrl, outDir }: PrerenderOptions): string[] {
   }
 
   for (const [route, fn] of RAW) file(route, fn(siteUrl));
+
+  // PWA assets.
+  file("manifest.webmanifest", webManifest({ siteUrl }));
+  file("sw.js", SERVICE_WORKER);
 
   // 404 for static hosts. `noindex` is in the markup; on Vercel unknown paths reach the server
   // function instead, which sends its own 404 with an X-Robots-Tag header.
