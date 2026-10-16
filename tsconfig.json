@@ -11,5 +11,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["packages", "apps/web", "apps/desktop/server", "apps/desktop/cli.ts", "test", "vercel.ts"]
+  "include": ["packages", "apps/web", "apps/desktop/server", "apps/desktop/cli.ts", "apps/desktop/sidecar.ts", "apps/desktop/scripts", "test", "vercel.ts"]
 }

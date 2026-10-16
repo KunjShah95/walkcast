@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "walkcast",
   "version": "0.1.0",
   "identifier": "com.walkcast.desktop",
@@ -7,19 +7,10 @@
     "frontendDist": "../dashboard/dist",
     "devUrl": "http://127.0.0.1:4320",
     "beforeDevCommand": "npm run ui",
-    "beforeBuildCommand": "npm run ui:build"
+    "beforeBuildCommand": "npm run ui:build && npm run desktop:stage"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Walkcast",
-        "url": "http://127.0.0.1:4320/app",
-        "width": 1280,
-        "height": 820,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
@@ -36,6 +27,12 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "externalBin": [
+      "binaries/walkcast-node"
+    ],
+    "resources": {
+      "sidecar/": "sidecar/"
     }
   }
 }

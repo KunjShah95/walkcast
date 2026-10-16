@@ -348,9 +348,23 @@ release page.
 
 ```sh
 npm run desktop:dev      # Tauri window over the local server (needs Rust)
-npm run desktop:build    # installers for this OS
+npm run desktop:build    # installers for this OS (target/release/bundle/)
 npm run dev              # the same server in a browser tab, no Tauri
 ```
+
+The installed app runs its own server. `npm run desktop:stage` (run by `desktop:build`) copies the
+server's TypeScript sources in their repo layout, the built dashboard and production `node_modules`
+into `src-tauri/sidecar/`, and this machine's Node binary into `src-tauri/binaries/`. At launch the
+Rust shell starts that Node on a free `127.0.0.1` port with the app's data directory as the working
+directory (`apps/desktop/sidecar.ts`), waits for `/healthz`, opens the window on `/app`, and stops
+the server when the app quits.
+
+Inside the app everything is local: a file store under the data directory, no sign-in (the server
+only listens on loopback), and hosted-database settings in the environment are ignored. Chromium
+(about 150 MB) downloads once on first launch into `<data>/browsers`; a recording started before it
+finishes fails with Playwright's "executable doesn't exist" error. ffmpeg is not bundled: without
+it on `PATH`, recordings have no narration audio. Logs go to the app's log directory
+(`%LOCALAPPDATA%\com.walkcast.desktop\logs` on Windows).
 
 The server (`apps/desktop/server/`) answers:
 

@@ -23,6 +23,7 @@
     "dev": "npm run ui",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
+    "desktop:stage": "node --import tsx apps/desktop/scripts/stage-sidecar.ts",
     "web:build": "node --import tsx apps/web/build.ts",
     "vercel:build": "node --import tsx apps/web/build.ts --vercel",
     "cli": "node --import tsx apps/desktop/cli.ts",
