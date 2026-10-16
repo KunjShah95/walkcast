@@ -2,7 +2,7 @@ import type { LedgerEntry, Lead } from "../app/server.ts";
 import type { ClaimEvent, NetworkEvent, StepEvent, TraceEvent } from "../capture/recorder.ts";
 import type { OracleResult } from "./task.ts";
 
-export type FindingKind = "symptom" | "cause" | "incident";
+type FindingKind = "symptom" | "cause" | "incident";
 
 export type FindingLabel =
   | "false-success"

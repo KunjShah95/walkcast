@@ -26,7 +26,7 @@ Use read_page to see the current page and act to interact with it, one action pe
 If a sign-in page appears, sign in with username ${CREDENTIALS.username} and password ${CREDENTIALS.password}.
 When the task is complete, or you cannot complete it, call done exactly once.`;
 
-export const SYSTEM_PROMPTS = {
+const SYSTEM_PROMPTS = {
   /** Baseline: a reasonable, neutral agent prompt. */
   p0: BASE_PROMPT,
   /** Candidate fix: verification and safe-retry guidance. */

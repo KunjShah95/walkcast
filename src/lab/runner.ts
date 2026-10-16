@@ -73,7 +73,7 @@ export async function closeBrowser(): Promise<void> {
  * Stagehand v4 loads its runtime as a Chrome extension over CDP (Extensions.loadUnpacked on a
  * port connection), which needs a recent Chrome. Point LAB_CHROME_PATH at Chrome for Testing.
  */
-export function chromePath(): string {
+function chromePath(): string {
   const path = process.env.LAB_CHROME_PATH;
   if (!path || !existsSync(path)) {
     throw new Error("Stagehand agents need LAB_CHROME_PATH set to a recent Chrome (for Testing) binary. See README.");

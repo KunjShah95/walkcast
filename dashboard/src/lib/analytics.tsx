@@ -12,7 +12,7 @@ import { Analytics } from "@vercel/analytics/react";
  */
 const env = import.meta.env ?? {};
 
-export const analyticsConfig = {
+const analyticsConfig = {
   enabled: Boolean(env.VITE_VERCEL_ANALYTICS_DSN),
   dsn: env.VITE_VERCEL_ANALYTICS_DSN ?? "",
   scriptSrc: env.VITE_VERCEL_ANALYTICS_SCRIPT_SRC ?? undefined,
@@ -36,5 +36,3 @@ export function AnalyticsTracker({ route, path }: { route: string; path: string 
     />
   );
 }
-
-export { track } from "@vercel/analytics/react";

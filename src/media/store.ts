@@ -22,7 +22,7 @@ export interface MediaStore {
   locate(id: string, file: string): Promise<{ path: string } | { redirect: string } | null>;
 }
 
-export const MEDIA_TYPES: Record<string, string> = {
+const MEDIA_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".wav": "audio/wav",
@@ -83,7 +83,7 @@ export class S3Media implements MediaStore {
 }
 
 /** Static keys from the environment, or the ECS task role via the container credentials endpoint. */
-export async function awsCredentials(): Promise<Credentials & { expiresAt?: number }> {
+async function awsCredentials(): Promise<Credentials & { expiresAt?: number }> {
   if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
     return { accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}) };
   }

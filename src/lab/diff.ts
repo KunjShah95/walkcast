@@ -62,14 +62,14 @@ export type AlignmentRow =
   | { op: "removed"; baseline: Action }
   | { op: "added"; candidate: Action };
 
-export interface PageChange {
+interface PageChange {
   path: string;
   removed: Control[];
   added: Control[];
   renamed: { from: Control; to: Control; by: "selector" | "position" }[];
 }
 
-export interface BrokenTarget {
+interface BrokenTarget {
   stepId: number;
   target: string;
   error?: string;
@@ -102,7 +102,7 @@ export interface DiffReport {
 
 const ACTION_TOOLS = /^(act|click|clickSelector|fill|selectOptionAt|selectByLabel|navigate|goto)$/;
 
-export function actionsOf(events: { type: string }[]): Action[] {
+function actionsOf(events: { type: string }[]): Action[] {
   return (events as StepLike[])
     .filter((e) => e.type === "step" && ACTION_TOOLS.test(e.tool))
     .map((s) => {
@@ -122,7 +122,7 @@ export function actionsOf(events: { type: string }[]): Action[] {
 }
 
 /** Last observed control set per page path. */
-export function controlsByPage(events: { type: string }[], which: "first" | "last"): Map<string, Control[]> {
+function controlsByPage(events: { type: string }[], which: "first" | "last"): Map<string, Control[]> {
   const out = new Map<string, Control[]>();
   for (const e of events as StepLike[]) {
     if (e.type !== "step" || e.tool !== "observe") continue;

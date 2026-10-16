@@ -65,8 +65,6 @@ export const GROUPS: Group[] = [
 
 export const ALL_TELLS: Tell[] = GROUPS.flatMap((g) => g.tells).sort((a, b) => a.n - b.n);
 
-export const TITLES = new Set(ALL_TELLS.map((t) => t.title));
-
 /** The shareable artifact: hand the model the list plus which ones are biting. */
 export function auditPrompt(found: number[]): string {
   const hit = ALL_TELLS.filter((t) => found.includes(t.n));

@@ -47,7 +47,7 @@ function edgePath(from: string, to: string): string | null {
   return `M ${sx} ${sy} L ${ex} ${ey}`;
 }
 
-export function pathFor(edge: string): string | null {
+function pathFor(edge: string): string | null {
   const [from, to] = edge.split(">");
   return edgePath(from!, to!) ?? (edgePath(to!, from!) ? reversePath(to!, from!) : null);
 }

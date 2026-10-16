@@ -270,7 +270,7 @@ export class SupabaseAuth extends Sessions {
   }
 }
 
-export class SupabaseError extends Error {
+class SupabaseError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,

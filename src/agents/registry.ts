@@ -1,7 +1,7 @@
 import { AGENTS, type AgentConfig } from "./scripted.ts";
 import { STAGEHAND_AGENTS, type StagehandAgentSpec } from "./stagehand-agent.ts";
 
-export type ScriptedAgentSpec = AgentConfig & { kind: "scripted" };
+type ScriptedAgentSpec = AgentConfig & { kind: "scripted" };
 export type AgentSpec = ScriptedAgentSpec | StagehandAgentSpec;
 
 /** Every runnable agent version, by id. */

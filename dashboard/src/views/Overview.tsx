@@ -251,7 +251,7 @@ function CauseBars({ runs }: { runs: RunSummary[] }) {
   );
 }
 
-export function RunCard({ run, onOpen }: { run: RunSummary; onOpen: () => void }) {
+function RunCard({ run, onOpen }: { run: RunSummary; onOpen: () => void }) {
   return (
     <SpotlightCard onClick={onOpen} className="p-3">
       <div className="flex items-center justify-between gap-2">

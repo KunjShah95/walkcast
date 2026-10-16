@@ -4,10 +4,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { seal, open } from "../jobs/secret-box.ts";
 
-export const CHATGPT_ISSUER = "https://auth.openai.com";
 export const CHATGPT_AUTH_ENDPOINT = "https://auth.openai.com/api/accounts/authorize";
 export const CHATGPT_TOKEN_ENDPOINT = "https://auth.openai.com/api/accounts/oauth/token";
-export const CHATGPT_JWKS_URI = "https://auth.openai.com/.well-known/jwks.json";
 export const CHATGPT_CLIENT_ID = "dynamic_agent_client";
 export const CHATGPT_RESOURCE = "https://api.openai.com/v1";
 
@@ -64,4 +62,3 @@ export async function ensureChatGPTAccessToken(user: User, store: Store): Promis
   return j.access_token;
 }
 export { seal, open };
-export { seal as sealSecret, open as openSecret };

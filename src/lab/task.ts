@@ -46,11 +46,11 @@ export function createLeadTask(params: CreateLeadTask["params"] = { contact: "Ja
   };
 }
 
-export function reassignLeadTask(params: ReassignLeadTask["params"] = { company: "Globex", owner: "Priya Shah" }): ReassignLeadTask {
+function reassignLeadTask(params: ReassignLeadTask["params"] = { company: "Globex", owner: "Priya Shah" }): ReassignLeadTask {
   return { id: "reassign-lead", goal: `Reassign the ${params.company} lead to ${params.owner}.`, startPath: "/leads", params };
 }
 
-export function lookupOwnerTask(params: LookupOwnerTask["params"] = { company: "Initech", owner: "Sam Carter" }): LookupOwnerTask {
+function lookupOwnerTask(params: LookupOwnerTask["params"] = { company: "Initech", owner: "Sam Carter" }): LookupOwnerTask {
   return { id: "lookup-owner", goal: `Find out who owns the ${params.company} lead and report the owner's name.`, startPath: "/leads", params };
 }
 
@@ -69,7 +69,7 @@ export function seedFor(task: Task): Omit<Lead, "createdAt">[] {
   return task.id === "create-lead" ? [] : SEED_LEADS;
 }
 
-export interface OracleCheck {
+interface OracleCheck {
   name: string;
   passed: boolean;
   expected: unknown;

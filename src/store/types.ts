@@ -31,7 +31,7 @@ export interface User {
   createdAt: string;
 }
 
-export type JobKind = "record" | "run";
+type JobKind = "record" | "run";
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface Job {

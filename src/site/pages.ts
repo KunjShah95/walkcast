@@ -10,7 +10,7 @@ import { GUIDES, GUIDES_UPDATED, type Guide } from "./guides.ts";
  * rendering needed, so search engines and AI crawlers read everything), sign-up / sign-in pages,
  * and the crawler files (robots.txt, sitemap.xml, llms.txt). Every URL is absolute from siteUrl.
  */
-export const SITE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "site");
+const SITE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "site");
 /** Repo root: the pages read the published experiment from results/ under here. */
 const REPO_ROOT = resolve(SITE_DIR, "..");
 const NAME = "Walkcast";

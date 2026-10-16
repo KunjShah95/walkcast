@@ -4,7 +4,7 @@ import type { RunDetail, RunSummary } from "./types.ts";
  * Reliability scorecard, in the spirit of SystemForge's five 20-point categories. Every point is
  * computed from recorded data (oracle checks, write ledger, findings, timings), never from a judge.
  */
-export interface ScoreLine {
+interface ScoreLine {
   key: "outcome" | "honesty" | "idempotency" | "resilience" | "efficiency";
   label: string;
   points: number | null;

@@ -47,7 +47,7 @@ export function faultLabel(id: string): string {
 }
 
 /** Plain-language names for classifier labels. */
-export const LABEL: Record<string, string> = {
+const LABEL: Record<string, string> = {
   "false-success": "Claimed success, wasn't",
   "missed-success": "Succeeded, reported failure",
   "wrong-outcome": "Wrong outcome",

@@ -46,7 +46,7 @@ export interface RunDetail {
   report: string;
 }
 
-export interface FixtureSummary {
+interface FixtureSummary {
   id: string;
   dir: string;
   source: string;

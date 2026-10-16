@@ -121,7 +121,7 @@ export class OpenAICompatibleBackend implements ModelBackend {
 
 type AnthropicMessage = AgentRequest["messages"][number];
 
-export function fromAnthropic(messages: AnthropicMessage[]): ChatCompletionMessageParam[] {
+function fromAnthropic(messages: AnthropicMessage[]): ChatCompletionMessageParam[] {
   const out: ChatCompletionMessageParam[] = [];
   for (const message of messages) {
     if (typeof message.content === "string") {

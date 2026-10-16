@@ -21,7 +21,7 @@ const sha256 = (data: string | Buffer) => createHash("sha256").update(data).dige
 const hmac = (k: Buffer | string, data: string) => createHmac("sha256", k).update(data).digest();
 
 /** Object URL: virtual-hosted on AWS, path-style on a custom endpoint. */
-export function objectUrl(cfg: S3Config, key: string): URL {
+function objectUrl(cfg: S3Config, key: string): URL {
   if (cfg.endpoint) return new URL(`${cfg.endpoint.replace(/\/$/, "")}/${enc(cfg.bucket)}/${encPath(key)}`);
   const host = cfg.region === "us-east-1" ? `${cfg.bucket}.s3.amazonaws.com` : `${cfg.bucket}.s3.${cfg.region}.amazonaws.com`;
   return new URL(`https://${host}/${encPath(key)}`);

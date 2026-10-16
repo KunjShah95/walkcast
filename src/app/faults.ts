@@ -36,12 +36,12 @@ export const FAULTS = {
 
 export type FaultId = keyof typeof FAULTS;
 
-export function isFaultId(value: string): value is FaultId {
+function isFaultId(value: string): value is FaultId {
   return Object.hasOwn(FAULTS, value);
 }
 
 /** Deterministic PRNG (mulberry32) so every fault timing is reproducible from its seed. */
-export function seededRandom(seed: number): () => number {
+function seededRandom(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -71,7 +71,7 @@ export function parseScenario(scenario: string): FaultId[] {
   return [...new Set(parts as FaultId[])].sort();
 }
 
-export function scenarioId(faults: FaultId[]): Scenario {
+function scenarioId(faults: FaultId[]): Scenario {
   const real = [...new Set(faults.filter((f) => f !== "none"))].sort();
   return real.length ? real.join("+") : "none";
 }

@@ -94,11 +94,6 @@ export async function blockedHost(hostname: string): Promise<string | null> {
   return blocked;
 }
 
-/** Clear the blocked-host cache. Intended for tests (and forced re-validation). */
-export function clearBlockedHostCache(): void {
-  cache.clear();
-}
-
 /** Abort every browser request to a private or local address. Returns the list of blocked URLs. */
 export async function guardContext(context: BrowserContext): Promise<string[]> {
   const blocked: string[] = [];

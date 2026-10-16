@@ -10,7 +10,7 @@ import { provider } from "./providers.ts";
  *   "groq:openai/gpt-oss-120b,openrouter:openai/gpt-oss-120b"   fallback chain, tried in order
  * A bare model id ("claude-opus-5-5") means the anthropic provider.
  */
-export const DEFAULT_MODEL_SPEC = `anthropic:${DEFAULT_CLAUDE_OPTIONS.model}`;
+const DEFAULT_MODEL_SPEC = `anthropic:${DEFAULT_CLAUDE_OPTIONS.model}`;
 
 export interface ModelSelection {
   /** The outer loop that decides each browser step. */
@@ -63,7 +63,7 @@ function single(spec: string): ModelBackend {
  * unsupported request). Which backend served each call is recorded by the gateway, so a run
  * that silently switched provider is visible in its trace.
  */
-export class FallbackBackend implements ModelBackend {
+class FallbackBackend implements ModelBackend {
   readonly name: string;
   lastServed: string | undefined;
 

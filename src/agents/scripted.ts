@@ -85,12 +85,6 @@ export const AGENTS: Record<string, AgentConfig> = {
   },
 };
 
-export function agentConfig(id: string): AgentConfig {
-  const config = AGENTS[id];
-  if (!config) throw new Error(`Unknown agent '${id}'. Known: ${Object.keys(AGENTS).join(", ")}`);
-  return config;
-}
-
 export async function runScriptedAgent(tools: BrowserTools, task: Task, config: AgentConfig): Promise<void> {
   if (task.id === "reassign-lead") return reassignLead(tools, task, config);
   if (task.id === "lookup-owner") return lookupOwner(tools, task, config);

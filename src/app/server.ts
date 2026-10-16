@@ -10,9 +10,9 @@ import { type FaultId, type Scenario, type TaskId, normalizeScenario, parseScena
  * agent can reach over HTTP exposes the oracle.
  */
 
-export const OWNERS_ALPHABETICAL = ["Alex Kim", "Maria Lopez", "Priya Shah", "Sam Carter"];
-export const OWNERS_BY_WORKLOAD = ["Sam Carter", "Priya Shah", "Alex Kim", "Maria Lopez"];
-export const DEFAULT_OWNER = "Unassigned";
+const OWNERS_ALPHABETICAL = ["Alex Kim", "Maria Lopez", "Priya Shah", "Sam Carter"];
+const OWNERS_BY_WORKLOAD = ["Sam Carter", "Priya Shah", "Alex Kim", "Maria Lopez"];
+const DEFAULT_OWNER = "Unassigned";
 export const CREDENTIALS = { username: "demo", password: "demo-pass" };
 
 export interface Lead {

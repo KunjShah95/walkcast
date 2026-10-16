@@ -63,7 +63,7 @@ export interface GatewayStatus {
   outputTokens: number;
 }
 
-export class ReplayExhaustedError extends Error {
+class ReplayExhaustedError extends Error {
   constructor(channel: Channel, seq: number) {
     super(`Replay cassette has no recorded ${channel} call #${seq}; the run diverged from the recording.`);
   }
