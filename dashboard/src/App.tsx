@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { ThemeToggle } from "./components/ui.tsx";
 import { isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { ago, cn } from "./lib/format.ts";
@@ -13,6 +15,7 @@ import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
 import { Simulator } from "./views/Simulator.tsx";
 import { Record } from "./views/Record.tsx";
+import { Audit } from "./views/Audit.tsx";
 
 export type Route =
   | { view: "overview" }
@@ -21,6 +24,7 @@ export type Route =
   | { view: "runs" }
   | { view: "fixtures" }
   | { view: "experiments" }
+  | { view: "audit" }
   | { view: "run"; dir: string }
   | { view: "compare"; base: string; cand: string };
 
@@ -32,7 +36,8 @@ function parse(hash: string): Route {
     return { view: "compare", base, cand };
   }
   if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record") return { view: h };
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "audit")
+    return { view: h };
   return { view: "overview" };
 }
 
@@ -49,6 +54,7 @@ const NAV: { view: Route["view"]; label: string }[] = [
   { view: "runs", label: "Runs" },
   { view: "fixtures", label: "Fixtures" },
   { view: "experiments", label: "Experiments" },
+  { view: "audit", label: "Vibecode audit" },
 ];
 
 export function App() {
@@ -63,20 +69,49 @@ export function App() {
 
   useEffect(() => {
     loadIndex().then(setIndex, (e: Error) => setError(e.message));
-    const onHash = () => setRoute(parse(location.hash));
+    const onHash = () => {
+      setRoute(parse(location.hash));
+      try {
+        const v = sessionStorage.getItem(`walkcast:scroll:${location.hash || "#overview"}`);
+        if (v) window.scrollTo({ top: Number(v), behavior: "auto" });
+      } catch { /* ignore */ }
+    };
+    const onPop = () => onHash();
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      window.removeEventListener("popstate", onPop);
+    };
   }, []);
 
   const go = (next: Route) => {
+    // Save current scroll position keyed by the current route so back/forward
+    // navigation restores context instead of resetting the user's place.
+    try { sessionStorage.setItem(`walkcast:scroll:${location.hash || "#overview"}`, String(window.scrollY)); } catch { /* ignore */ }
     const hash = toHash(next);
-    // location.hash is "" on the overview, so this doesn't stack duplicate entries.
     if (location.hash !== hash) history.pushState(null, "", hash || location.pathname + location.search);
     setRoute(next);
-    window.scrollTo({ top: 0 });
+    const saved = ((): number | null => {
+      try { const v = sessionStorage.getItem(`walkcast:scroll:${hash || "#overview"}`); return v ? Number(v) : null; } catch { return null; }
+    })();
+    window.scrollTo({ top: saved ?? 0, behavior: "auto" });
   };
 
+  const reduced = useReducedMotion();
+  const routeKey = `${route.view}:${"dir" in route ? route.dir : ""}:${"base" in route ? route.base : ""}:${"cand" in route ? route.cand : ""}`;
   const active = route.view === "run" || route.view === "compare" ? "runs" : route.view;
+  const routeTitle =
+    route.view === "overview" ? "Overview"
+    : route.view === "runs" ? "Runs"
+    : route.view === "run" ? `Run ${(route.dir.split("/").pop() ?? route.dir)}`
+    : route.view === "compare" ? "Compare"
+    : route.view === "record" ? "Record"
+    : route.view === "simulator" ? "Fault replay"
+    : route.view === "fixtures" ? "Fixtures"
+    : route.view === "experiments" ? "Experiments"
+    : route.view === "audit" ? "Vibecode audit"
+    : "Walkcast";
   const refresh = async () => {
     const next = await loadIndex();
     setIndex(next);
@@ -134,27 +169,40 @@ export function App() {
         className="mx-auto max-w-[1240px] pb-16 pt-6"
         style={{ paddingLeft: "max(16px, env(safe-area-inset-left, 0px))", paddingRight: "max(16px, env(safe-area-inset-right, 0px))" }}
       >
-        {error && (
-          <p className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">
-            {error}{" "}
-            {/401/.test(error) ? (
-              <a className="font-medium underline" href={`/login?next=${encodeURIComponent("/app" + location.hash)}`}>
-                Sign in to see the dashboard.
-              </a>
-            ) : (
-              <>Start it with npm run ui.</>
+        <span className="sr-only" aria-live="polite">{routeTitle}</span>
+        <Breadcrumbs route={route} go={go} />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={routeKey}
+            initial={reduced ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduced ? undefined : { opacity: 0, y: -4 }}
+            transition={{ duration: reduced ? 0 : 0.22, ease: [0.4, 0, 0.2, 1] }}
+          >
+            {error && (
+              <p className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">
+                {error}{" "}
+                {/401/.test(error) ? (
+                  <a className="font-medium underline" href={`/login?next=${encodeURIComponent("/app" + location.hash)}`}>
+                    Sign in to see the dashboard.
+                  </a>
+                ) : (
+                  <>Start it with npm run ui.</>
+                )}
+              </p>
             )}
-          </p>
-        )}
-        {!index && !error && <p className="font-mono text-ink-3">Reading runs…</p>}
-        {index && route.view === "overview" && <Overview index={index} go={go} />}
-        {index && route.view === "runs" && <Runs index={index} go={go} />}
-        {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
-        {index && route.view === "experiments" && <Experiments index={index} />}
-        {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
-        {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
-        {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} />}
-        {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
+            {!index && !error && <p className="font-mono text-ink-3">Reading runs…</p>}
+            {index && route.view === "overview" && <Overview index={index} go={go} />}
+            {index && route.view === "runs" && <Runs index={index} go={go} />}
+            {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
+            {index && route.view === "experiments" && <Experiments index={index} />}
+            {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
+            {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
+            {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} />}
+            {route.view === "audit" && <Audit />}
+            {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
 {animations && <FilmGrain />}
