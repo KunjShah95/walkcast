@@ -359,8 +359,35 @@ LAB_SITE_URL=https://your-domain npm run site:build   # writes ./dist
 ```
 
 That emits one `<route>/index.html` per page (so clean URLs need no rewrite rules), the crawler files,
-the 404, the fonts and the demo media — 33 files. `LAB_SITE_URL` is stamped into every canonical tag,
-the sitemap and the JSON-LD; without it the build succeeds but advertises `localhost`.
+the 404, the fonts and the demo media — 33 files.
+
+`LAB_SITE_URL` is stamped into every canonical tag, the sitemap, `robots.txt` and the JSON-LD, so it
+**must** be the deployed origin on any build that gets published. A build without it used to succeed
+quietly and ship a site whose every self-reference pointed at `localhost:4320` — which reads fine
+locally and is invisible to nobody in production. It is fatal now:
+
+```sh
+npm run site:build                                   # fails: LAB_SITE_URL unset or localhost
+npm run site:build -- --site-url https://yoursite    # one-off, no env var needed
+npm run site:build -- --allow-localhost               # export for local preview only; warns
+```
+
+### Environment variables on Vercel
+
+Three, all set per-environment in the Vercel project (Settings → Environment Variables):
+
+| Variable | Required | What it does |
+| --- | --- | --- |
+| `LAB_SITE_URL` | **yes** | The deployed origin, stamped into every canonical tag, the sitemap, `robots.txt` and the JSON-LD at build time. Missing or localhost fails the build. |
+| `APP_ORIGIN` | for the app | Origin of the Node server that serves `/app`, `/api/*` and the auth pages. Unset means a marketing-only deploy; those paths 404 and the build says so. |
+| `VITE_VERCEL_ANALYTICS_DSN` | optional | Dashboard page views. Unset means no analytics and no script loaded. |
+
+Set them on **Production**, **Preview** and **Development** as needed — a preview deploy is a real
+build and will fail without `LAB_SITE_URL` just like production does.
+
+`vercel env pull` writes them to `.env.local` (already gitignored via `.env*`) if you want the same
+values locally. Nothing from `.env` is uploaded: Vercel variables live in the project settings, so
+the repo never carries them.
 
 **What a static host cannot serve**, because it needs a live process: `/app` (the dashboard is a SPA
 that talks to `/api`), the auth pages (POST targets with per-session state), and `/api/*`. `vercel.ts`
@@ -370,9 +397,8 @@ therefore rewrites those paths to the Node server (the Docker image, on ECS or S
 APP_ORIGIN=https://your-node-server.example   # in the Vercel project
 ```
 
-Set `APP_ORIGIN` to that origin in the Vercel project. Proxying rather than linking to a
-second hostname keeps it same-origin, so the session cookie still applies and the signup form posts
-to a real handler.
+Proxying rather than linking to a second hostname keeps it same-origin, so the session cookie still
+applies and the signup form posts to a real handler.
 
 This is `vercel.ts`, not `vercel.json`, for a reason: a rewrite `destination` must be an absolute
 pathname or an external URL, so a static config file cannot interpolate `$APP_ORIGIN`. The rewrite

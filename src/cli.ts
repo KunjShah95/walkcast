@@ -128,6 +128,7 @@ const { positionals, values } = parseArgs({
     out: { type: "string" },
     // `site:build` only: the canonical origin the prerendered pages are stamped with.
     "site-url": { type: "string" },
+    "allow-localhost": { type: "boolean", default: false },
     screenshots: { type: "boolean", default: false },
     video: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -267,11 +268,24 @@ async function main(): Promise<number> {
       return 0;
     }
     case "site:build": {
-      // Static export of the public site. `LAB_SITE_URL` sets the canonical origin; without it
-      // the build is still valid but every canonical/sitemap URL points at localhost.
-      const siteUrl = (values["site-url"] ?? process.env.LAB_SITE_URL ?? "http://localhost:4320").replace(/\/+$/, "");
+      // Static export of the public site. `LAB_SITE_URL` sets the canonical origin, and it is
+      // baked into every canonical tag, the sitemap, robots.txt and the JSON-LD — so a build
+      // without it publishes a site whose every self-reference points at localhost. That is
+      // invisible locally and destroys the site's indexability in production, so unless
+      // --allow-localhost is passed it fails here instead of shipping.
+      const explicit = values["site-url"] ?? process.env.LAB_SITE_URL;
+      const siteUrl = (explicit ?? "http://localhost:4320").replace(/\/+$/, "");
+      const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(siteUrl);
+      if (isLocal && !values["allow-localhost"]) {
+        throw new Error(
+          `site:build needs a real origin: LAB_SITE_URL is ${explicit ? `"${siteUrl}"` : "unset"}, so every canonical tag, ` +
+            "the sitemap and robots.txt would point at localhost. Set LAB_SITE_URL to the deployed origin " +
+            "(https://...), pass --site-url for a one-off build, or --allow-localhost if you really want a local export.",
+        );
+      }
       const outDir = resolve(values.out ?? "dist");
       const written = prerender({ siteUrl, outDir });
+      if (isLocal) console.warn(`  [walkcast] exporting for ${siteUrl} — these URLs must not be deployed`);
       console.log(`Prerendered ${written.length} files to ${outDir} for ${siteUrl}`);
       return 0;
     }
