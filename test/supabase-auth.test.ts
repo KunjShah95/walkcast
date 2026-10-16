@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { FileStore } from "../src/store/index.ts";
-import { serveDashboard, type Running } from "../src/ui/server.ts";
+import { FileStore } from "../packages/core/src/store/index.ts";
+import { serveDashboard, type Running } from "../apps/desktop/server/server.ts";
 import { GoTrueMock } from "./gotrue-mock.ts";
 
 process.env.LAB_LOG = "off";

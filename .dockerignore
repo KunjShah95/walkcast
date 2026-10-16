@@ -1,6 +1,6 @@
 node_modules
 .env
-dashboard/dist
+apps/desktop/dashboard/dist
 runs
 recordings
 results/*/runs

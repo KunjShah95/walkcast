@@ -14,7 +14,7 @@ services:
       retries: 30
   migrate:
     build: .
-    command: ["node", "--import", "tsx", "src/cli.ts", "db", "migrate"]
+    command: ["node", "--import", "tsx", "apps/desktop/cli.ts", "db", "migrate"]
     environment: &env
       SUPABASE_DB_URL: postgres://walkcast:walkcast@db:5432/walkcast?sslmode=disable
       LAB_SECRET_KEY: ${LAB_SECRET_KEY:?set LAB_SECRET_KEY (openssl rand -base64 32)}
@@ -34,7 +34,7 @@ services:
   worker:
     build: .
     init: true
-    command: ["node", "--import", "tsx", "src/cli.ts", "worker"]
+    command: ["node", "--import", "tsx", "apps/desktop/cli.ts", "worker"]
     environment: *env
     # Recordings on local disk must be visible to the web container; with object storage
     # (SUPABASE_S3_* or MEDIA_S3_*) this shared volume isn't needed.

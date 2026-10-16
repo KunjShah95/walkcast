@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
-import { DuplicateError, FileStore, PgStore, migrate, type Store } from "../src/store/index.ts";
+import { DuplicateError, FileStore, PgStore, migrate, type Store } from "../packages/core/src/store/index.ts";
 import { freshSchema } from "./pg-helper.ts";
 
 /**

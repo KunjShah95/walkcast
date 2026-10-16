@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { allScenarios, normalizeScenario, parseScenario, scenarioTaskPossible } from "../src/app/faults.ts";
-import { compareRuns, type RecordedRun } from "../src/lab/diff.ts";
+import { allScenarios, normalizeScenario, parseScenario, scenarioTaskPossible } from "../packages/core/src/app/faults.ts";
+import { compareRuns, type RecordedRun } from "../packages/core/src/lab/diff.ts";
 
 test("scenarios are canonical, validated, and the grid has the control, singles and every pair", () => {
   assert.equal(normalizeScenario("ui-drift+stale-owners"), "stale-owners+ui-drift");

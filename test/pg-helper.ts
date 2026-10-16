@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { PgStore, migrate } from "../src/store/index.ts";
+import { PgStore, migrate } from "../packages/core/src/store/index.ts";
 
 /**
  * A migrated store in a schema of its own, so test files running in parallel against one

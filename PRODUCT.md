@@ -27,7 +27,7 @@ Every line of narration and every failure cause comes from what the browser actu
 
 - Signed-in web app at `/app` (Vite + React SPA, hash routes) served by the Node server; also deployed as one Vercel deployment (static marketing pages + server function).
 - Recording and lab runs execute on a job queue with a browser worker; the deployed function has no browser, so jobs there need a separate worker or `npm run dev`.
-- Lab concepts: runs, fixtures, experiments (with 95% Wilson score intervals), compare (base vs candidate), fault replay / simulator, vibecode audit.
+- Lab concepts: runs, fixtures, experiments (with 95% Wilson score intervals), compare (base vs candidate), fault replay / simulator.
 - Narration uses ffmpeg's flite voices: `slt` (default), `awb`, `kal`, `rms`.
 
 ## Capabilities and Constraints

@@ -1,8 +1,14 @@
 name: ci
 
+# PRs are tested once (pull_request); pushes only for main, so a PR branch does not run twice.
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -39,6 +45,7 @@ jobs:
           echo "LAB_CHROME_PATH=$(awk '{print $2}' cft.txt)" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm run ui:build
+      - run: npm run web:build
       - run: npm test
       - name: Migrations apply cleanly and are idempotent
         env:
@@ -57,7 +64,8 @@ jobs:
           docker run -d --init --name wc -p 4320:4320 -e LAB_AUTH=off walkcast:ci
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4320/healthz && break; sleep 2; done
           curl -fsS http://127.0.0.1:4320/readyz
-          curl -fsS http://127.0.0.1:4320/ | grep -q "narrated video walkthrough"
+          curl -fsS -o /dev/null -w "%{redirect_url}" http://127.0.0.1:4320/ | grep -q "/app$"
+          curl -fsS http://127.0.0.1:4320/app | grep -q "<title>Walkcast</title>"
           docker stop -t 30 wc && docker logs wc | tail -5
 
   # Release gate: every committed regression fixture must pass with the current agent.

@@ -4,14 +4,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { startApp } from "../src/app/server.ts";
-import { SEED_LEADS } from "../src/lab/task.ts";
-import { open, seal } from "../src/jobs/secret-box.ts";
-import { LocalMedia, S3Media } from "../src/media/store.ts";
-import { presignGet, signHeaders } from "../src/media/s3.ts";
-import { FileStore, PgStore, migrate, type Store } from "../src/store/index.ts";
+import { startApp } from "../packages/core/src/app/server.ts";
+import { SEED_LEADS } from "../packages/core/src/lab/task.ts";
+import { open, seal } from "../packages/core/src/jobs/secret-box.ts";
+import { LocalMedia, S3Media } from "../packages/core/src/media/store.ts";
+import { presignGet, signHeaders } from "../packages/core/src/media/s3.ts";
+import { FileStore, PgStore, migrate, type Store } from "../packages/core/src/store/index.ts";
 import { freshSchema } from "./pg-helper.ts";
-import { serveDashboard } from "../src/ui/server.ts";
+import { serveDashboard } from "../apps/desktop/server/server.ts";
 
 process.env.LAB_LOG = "off";
 
@@ -144,7 +144,7 @@ for (const [name, open] of stores) {
 
 if (process.env.TEST_DATABASE_URL) {
   test("production shape: web-only server + a separate worker process sharing Postgres", { timeout: 240_000 }, async () => {
-    const { Worker } = await import("../src/jobs/worker.ts");
+    const { Worker } = await import("../packages/core/src/jobs/worker.ts");
     const { randomBytes } = await import("node:crypto");
     const root = mkdtempSync(join(tmpdir(), "split-"));
     const web = await freshSchema(process.env.TEST_DATABASE_URL!);

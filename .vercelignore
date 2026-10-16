@@ -8,7 +8,7 @@ runs/
 recordings/
 .lab/
 dist/
-dashboard/dist/
+apps/desktop/dashboard/dist/
 failure-lab.html
 walkcast.html
 

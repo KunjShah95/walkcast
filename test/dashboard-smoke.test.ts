@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium, type Browser } from "playwright";
-import { closeBrowser, runOnce } from "../src/lab/runner.ts";
-import { createLeadTask } from "../src/lab/task.ts";
-import { serveDashboard, type Running } from "../src/ui/server.ts";
+import { closeBrowser, runOnce } from "../packages/core/src/lab/runner.ts";
+import { createLeadTask } from "../packages/core/src/lab/task.ts";
+import { serveDashboard, type Running } from "../apps/desktop/server/server.ts";
 
 /**
  * Opens every dashboard view on real run data in a real browser and fails on any uncaught page

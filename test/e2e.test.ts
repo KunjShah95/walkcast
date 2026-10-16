@@ -3,12 +3,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
-import { FAULTS, type FaultId } from "../src/app/faults.ts";
-import { causes } from "../src/lab/classifier.ts";
-import { EXPECTED_CAUSES } from "../src/lab/experiment.ts";
-import { loadFixture, replayFixture, writeFixture } from "../src/lab/fixture.ts";
-import { closeBrowser, runOnce } from "../src/lab/runner.ts";
-import { createLeadTask, taskById } from "../src/lab/task.ts";
+import { FAULTS, type FaultId } from "../packages/core/src/app/faults.ts";
+import { causes } from "../packages/core/src/lab/classifier.ts";
+import { EXPECTED_CAUSES } from "../packages/core/src/lab/experiment.ts";
+import { loadFixture, replayFixture, writeFixture } from "../packages/core/src/lab/fixture.ts";
+import { closeBrowser, runOnce } from "../packages/core/src/lab/runner.ts";
+import { createLeadTask, taskById } from "../packages/core/src/lab/task.ts";
 
 const out = mkdtempSync(join(tmpdir(), "failure-lab-"));
 const faults = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none");

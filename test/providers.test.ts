@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, test } from "node:test";
-import { backendFor, backendForSelection } from "../src/llm/model-spec.ts";
-import { PROVIDERS, provider } from "../src/llm/providers.ts";
+import { backendFor, backendForSelection } from "../packages/core/src/llm/model-spec.ts";
+import { PROVIDERS, provider } from "../packages/core/src/llm/providers.ts";
 
 /** A minimal OpenAI-compatible Chat Completions server, to test the adapter without network. */
 let server: Server;

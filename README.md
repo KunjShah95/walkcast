@@ -23,16 +23,16 @@ ffmpeg -hide_banner -filters | grep flite  # optional: narration audio needs thi
 # Walkthrough of a site you may test (the password comes from an env var, never a flag):
 LAB_SITE_PASSWORD=... npm run lab -- record --url https://app.example.com/login --username you@example.com --i-am-authorized
 
-# Or the web app: landing page, Record page and the Lab dashboard at http://127.0.0.1:4320/app.
-# Locally, LAB_AUTH=off skips sign-up; on a shared server leave accounts on.
-LAB_AUTH=off npm run ui
+# Or the dashboard (Record page and the Lab) at http://127.0.0.1:4320/app. On 127.0.0.1 there is
+# no sign-in; a server bound to another address (LAB_HOST) requires accounts.
+npm run ui
 ```
 
 Environment variables you may want (none are required to start):
 
 | Variable | For |
 | --- | --- |
-| `LAB_AUTH=off` | Use the web app locally without creating an account |
+| `LAB_AUTH=on` / `off` | Force sign-in on or off (default: on only when `LAB_HOST` is not loopback) |
 | `SUPABASE_DB_URL` (or `DATABASE_URL`) | Supabase Postgres for accounts, sessions, the job queue and the recordings index (default: `.lab/store.json`) |
 | `SUPABASE_URL`, `SUPABASE_S3_*` or `MEDIA_S3_*` | Recording media in Supabase Storage or S3 (default: `recordings/` on disk) |
 | `LAB_SECRET_KEY`, `LAB_WORKER=off` | Separate queue workers (see [Production](#production-supabase--aws)) |
@@ -71,31 +71,31 @@ This is not another browser agent, recorder or dashboard. The ecosystem already 
 ```sh
 npm ci
 npx playwright install chromium         # skip if Chromium is already available
-node --import tsx src/cli.ts list                     # faults and agent versions
-node --import tsx src/cli.ts run --fault stale-owners --agent v0 --screenshots
+node --import tsx apps/desktop/cli.ts list                     # faults and agent versions
+node --import tsx apps/desktop/cli.ts run --fault stale-owners --agent v0 --screenshots
 #   FAIL  symptoms=[false-success] causes=[stale-observation]
 #   report: runs/<id>/report.md      fixture: runs/_fixtures/stale-owners-s1-stale-observation
 # (A failing run exits with code 1 on purpose, so the command doubles as a CI check; npm prints
 #  an error line for that. Add --fixtures fixtures to put the new fixture in the committed CI gate.)
-node --import tsx src/cli.ts replay runs/_fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
-node --import tsx src/cli.ts compare fixtures --agents v0,v1,v2 --trials 3
-node --import tsx src/cli.ts experiment --seeds 5 --trials 3        # full validation experiment
+node --import tsx apps/desktop/cli.ts replay runs/_fixtures/stale-owners-s1-stale-observation --agent v1 --trials 3
+node --import tsx apps/desktop/cli.ts compare fixtures --agents v0,v1,v2 --trials 3
+node --import tsx apps/desktop/cli.ts experiment --seeds 5 --trials 3        # full validation experiment
 npm test                                               # unit + end-to-end tests
 ```
 
 ## How it works
 
 ```
- MiniCRM (src/app)           Agent under test (src/agents)
- seeded fault toggles  ◄──── acts only through BrowserTools (src/capture/tools.ts)
+ MiniCRM (packages/core/src/app)           Agent under test (packages/core/src/agents)
+ seeded fault toggles  ◄──── acts only through BrowserTools (packages/core/src/capture/tools.ts)
         │                             │  each call = one step: state before/after,
         │                             │  target identity check, network, console
         ▼                             ▼
- Oracle (src/lab/task.ts)     Trace (runs/<id>/trace.jsonl) + claim
+ Oracle (packages/core/src/lab/task.ts)     Trace (runs/<id>/trace.jsonl) + claim
  app state, never the agent   │
         └──────────┬──────────┘
                    ▼
-       Classifier (src/lab/classifier.ts): symptoms + causes, each citing steps
+       Classifier (packages/core/src/lab/classifier.ts): symptoms + causes, each citing steps
                    │ fail
                    ▼
        Fixture (fixtures/<id>/manifest.json): task, fault, seed, timings, versions,
@@ -157,7 +157,7 @@ element-resolution calls also go through the lab via Stagehand's `ClientLLM` hoo
 | `sh-p0` | Neutral baseline prompt |
 | `sh-p1` | Adds verification and safe-retry guidance (the "prompt fix" to regression-test) |
 
-**Every model call goes through one gateway** (`src/llm/gateway.ts`), in one of three modes:
+**Every model call goes through one gateway** (`packages/core/src/llm/gateway.ts`), in one of three modes:
 
 | Mode | What happens | Use |
 |---|---|---|
@@ -311,7 +311,7 @@ the authorization box. Each recording directory holds:
 | `narration.wav` | The voice-over on its own |
 | `recording.json`, `trace.jsonl` | Pages visited (status, title), links skipped and why, the step trace |
 
-How it works (`src/record/`):
+How it works (`packages/core/src/record/`):
 
 - **Sign-in** (`site.ts`) finds the login form, including two-step email-then-password and
   "Sign in" links, fills it, and reports `signed-in`, `rejected` (with the site's own message),
@@ -332,78 +332,89 @@ CAPTCHA or 2FA (it stops and says so); after sign-in it submits no forms, makes 
 only, skips sign-out/delete/cancel/unsubscribe links, honours `robots.txt` and paces requests;
 credentials are registered as secrets, so nothing on disk contains them.
 
-## Web app: landing page, accounts, SEO
+## Two apps: the website and the desktop app
 
-`npm run lab -- ui` serves:
+The repo ships two separate things that share one engine:
+
+| | What it is | Where | Runs on |
+| --- | --- | --- | --- |
+| **Website** | The landing page: a React app (Vite), prerendered at build time. No accounts, no API, no server: sign-in lives only in the desktop app. | `apps/web/` | Any static host (Vercel) |
+| **Desktop app** | The product: recorder, dashboard, lab runs, sign-in, the API. A Tauri shell around the local Node server. | `apps/desktop/` | Windows, macOS, Linux |
+
+Every download button on the website links the Windows installers on the latest GitHub release
+(`releases/latest/download/walkcast_<version>_x64-setup.exe` and the `.msi`).
+
+### Desktop app
+
+```sh
+npm run desktop:dev      # Tauri window over the local server (needs Rust)
+npm run desktop:build    # installers for this OS (target/release/bundle/)
+npm run ui               # the same server in a browser tab, no Tauri
+```
+
+The installed app runs its own server. `npm run desktop:stage` (run by `desktop:build`) copies the
+server's TypeScript sources in their repo layout, the built dashboard and production `node_modules`
+into `src-tauri/sidecar/`, and this machine's Node binary into `src-tauri/binaries/`. At launch the
+Rust shell starts that Node on a free `127.0.0.1` port with the app's data directory as the working
+directory (`apps/desktop/sidecar.ts`), waits for `/healthz`, opens the window on `/app`, and stops
+the server when the app quits.
+
+Inside the app data is local: a file store under the data directory, and hosted-database settings
+in the environment are ignored. Chromium (about 250 MB across a few files) downloads once on first
+launch into `<data>/browsers`, with progress in a corner of the dashboard; a recording asked for
+before it finishes is refused with a message saying so. ffmpeg is not bundled: without it on
+`PATH`, recordings have no narration audio. Logs go to the app's log directory
+(`%LOCALAPPDATA%\com.walkcast.desktop\logs` on Windows).
+
+**Accounts are optional.** Everything works signed out. With Supabase configured, Sign in / Create
+account use it: `desktop:stage` copies `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or
+`SUPABASE_PUBLISHABLE_KEY`) — both public by design, nothing else from `.env` — into the app.
+Google sign-in runs in the system browser, because Google refuses embedded app windows, and the
+app window picks the session up by polling. For that, and for email-confirmation links, the app
+listens on `127.0.0.1:4317` (another port only if that one is taken); add
+`http://127.0.0.1:4317/**` to the Supabase project's Authentication → URL Configuration → Redirect
+URLs. Password reset is not offered in the app yet: its link opens in the system browser, which
+cannot hand the reset back.
+
+The server (`apps/desktop/server/`) answers:
 
 | Path | What |
 | --- | --- |
-| `/` | Server-rendered landing page: hero with a URL box, the real demo walkthrough with a clickable transcript, how it works, outputs, guardrails, the agent lab, FAQ |
-| `/signup`, `/login`, `/forgot`, `/reset` | Accounts: **Continue with Google** or email + password (Supabase Auth) |
+| `/` | Redirects to `/app` |
 | `/app` | The dashboard (Overview, Fault replay, Record, Runs, Fixtures, Experiments, Compare) |
-| `/robots.txt`, `/sitemap.xml`, `/llms.txt` | Crawler files |
-| `/compare/<slug>`, `/guides/<slug>` | Comparison and use-case guide pages |
+| `/signup`, `/login`, `/forgot`, `/reset` | Accounts: **Continue with Google** or email + password (Supabase Auth) |
+| `/auth/*`, `/api/*`, `/files/*` | Sign-in flows, the dashboard's API, recordings on disk |
 
-The public half of this is also available as a static export — see [Static export](#static-export-vercel) below.
-
-Pasting a link on the landing page goes to `/start?url=…`: signed-in users land on the Record page
-with the link filled in; everyone else signs up first and is brought back to it.
-
-### Static export (Vercel)
-
-Every public page is a pure `string` function over `(siteUrl, user)`, and the whole marketing surface
-renders with `user = null`. So the public site is not a server that happens to emit HTML — it is a set
-of documents, and a static host can serve them as files:
+### Website (React, Vercel)
 
 ```sh
-LAB_SITE_URL=https://your-domain npm run site:build   # writes ./dist
+npm run dev           # the landing page with hot reload, opens http://localhost:4330
+npm run web:build     # dist/web: the client bundle plus index.html with the page prerendered
+npm run web:preview   # serve dist/web locally
 ```
 
-That emits one `<route>/index.html` per page (so clean URLs need no rewrite rules), the crawler files,
-the 404, the fonts and the demo media — 33 files.
+`apps/web/build.ts` runs the Vite build, renders `<App />` to HTML on the server and writes it into
+`dist/web/index.html`; the browser bundle then hydrates it. So the full page is in the HTML for
+search engines and AI crawlers, and the interactive parts (the narrated demo, the recorder mock,
+the FAQ) still work. `vercel.ts` runs `npm run web:build` and serves `dist/web`.
 
-`LAB_SITE_URL` is stamped into every canonical tag, the sitemap, `robots.txt` and the JSON-LD, so it
-**must** be the deployed origin on any build that gets published. A build without it used to succeed
-quietly and ship a site whose every self-reference pointed at `localhost:4320` — which reads fine
-locally and is invisible to nobody in production. It is fatal now:
+The installer links come from `apps/web/src/site.ts`, which reads the version from
+`apps/desktop/src-tauri/tauri.conf.json`: bump it there and the site follows.
+
+### Releasing the desktop app
+
+Push a tag that matches the version in `tauri.conf.json`:
 
 ```sh
-npm run site:build                                   # fails: LAB_SITE_URL unset or localhost
-npm run site:build -- --site-url https://yoursite    # one-off, no env var needed
-npm run site:build -- --allow-localhost               # export for local preview only; warns
+git tag v0.1.0 && git push origin v0.1.0
 ```
 
-### Environment variables on Vercel
+`.github/workflows/release.yml` checks the tag against the version, builds the Windows `.exe` and
+`.msi` on `windows-latest` and attaches them to a **draft** release. Publishing the draft is what
+makes the website's download buttons work. The installers are not code-signed yet, so Windows
+SmartScreen warns on first install.
 
-Set per-environment in the Vercel project (Settings → Environment Variables):
-
-| Variable | Required | What it does |
-| --- | --- | --- |
-| `SUPABASE_DB_URL` | **yes** | Accounts, sessions and the job queue. Without it they live in the function's `/tmp` and vanish between instances, so sign-in won't stick. |
-| `LAB_SITE_URL` | recommended | The public origin, stamped into canonical tags, the sitemap, `robots.txt`, the JSON-LD and OAuth redirects. Defaults to the project's production domain. |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, OAuth and model keys | as needed | Same as for `npm run dev` (see `.env.example`). |
-| `VITE_VERCEL_ANALYTICS_DSN` | optional | Dashboard page views. Unset means no analytics and no script loaded. |
-
-`vercel env pull` writes them to `.env.local` (already gitignored via `.env*`) if you want the same
-values locally. Nothing from `.env` is uploaded: Vercel variables live in the project settings, so
-the repo never carries them.
-
-**One deployment serves the whole site**, the same as `npm run dev` does locally. `npm run
-vercel:build` (the build command in `vercel.ts`) writes `.vercel/output` with the Build Output API:
-the marketing pages as static files, and the Node server (`src/deploy/vercel-function.ts`) bundled
-into one function that answers every path without a static file — `/login`, `/signup`, `/forgot`,
-`/reset`, `/app`, `/auth/*`, `/api/*`, `/files/*`. No second server, no proxy origin.
-
-A function has no Chromium, so **recordings and lab runs** are refused there with a message pointing
-at `npm run dev`. To run them from the deployed site, run `npm run lab -- worker` on any machine with
-the same `SUPABASE_DB_URL` and set `LAB_EXTERNAL_WORKER=1` in the Vercel project.
-`test/vercel-config.test.ts` locks all of that down.
-
-`test/prerender.test.ts` guards the export: every route exists, nothing leaks a `localhost` origin,
-no sitemap entry points at a page that was not written, and a re-run does not leave stale pages
-behind.
-
-**Sign-in with Supabase Auth** (`src/site/supabase-auth.ts`), used whenever `SUPABASE_URL` and
+**Sign-in with Supabase Auth** (`apps/desktop/server/supabase-auth.ts`), used whenever `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`) are set:
 
 - Supabase holds the passwords, confirms email addresses, sends password-reset mail and runs
@@ -425,7 +436,7 @@ behind.
   Providers → Google**: paste your Google OAuth client id/secret (Google's authorized redirect URI
   is the one Supabase shows there). Keep **Confirm email** on.
 
-**Built-in accounts** (`src/site/auth.ts`), used without Supabase (or with
+**Built-in accounts** (`apps/desktop/server/auth.ts`), used without Supabase (or with
 `LAB_AUTH_PROVIDER=local`): scrypt passwords in the store, and optional Google sign-in with your
 own OAuth client (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, redirect URI
 `<LAB_SITE_URL>/auth/google/callback`). No email confirmation or password reset, so use these
@@ -433,30 +444,17 @@ for local or private setups.
 
 Either way: sign-in errors don't reveal whether an email exists, attempts are throttled per
 address and account (shared across instances through the store), cross-site POSTs are refused,
-and the dashboard's data and actions need a signed-in account (`LAB_AUTH=off` turns that off for
-local use).
+and the dashboard's data and actions need a signed-in account when the server is reachable from
+other machines. `npm run ui` on `127.0.0.1` (the default) opens straight to the dashboard;
+`LAB_AUTH=on` or `LAB_AUTH=off` overrides either way.
 
 **Hosting it**: set `LAB_SITE_URL=https://your-domain` (canonical URLs, sitemap, OAuth redirect)
 and `LAB_HOST=0.0.0.0`, and put it behind TLS. When the server is reachable from other machines,
 the recorder refuses targets that resolve to private, loopback or link-local addresses (an SSRF
 guard; `LAB_ALLOW_PRIVATE=1` lifts it).
 
-**Search and AI discoverability (SEO / AEO / GEO)**, all in `src/site/pages.ts`:
-
-- The full content is in the HTML (no client rendering), with one `h1`, a canonical URL, Open
-  Graph/Twitter cards with a 1200×630 image, and `max-snippet`/`max-video-preview` robots meta.
-- JSON-LD `@graph`: `WebSite`, `SoftwareApplication`, `VideoObject` (with the transcript),
-  `HowTo` and `FAQPage`. Every FAQ answer is also visible on the page.
-- `robots.txt` explicitly allows search and AI crawlers (Googlebot, Bingbot, GPTBot,
-  OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot-Extended, CCBot and others)
-  on public pages and keeps them out of `/app`, `/api`, `/auth`.
-- `sitemap.xml` includes a video sitemap entry; `/llms.txt` is a plain summary assistants can
-  quote accurately.
-- The lab numbers on `/` and `/llms.txt` come from the newest experiment under `results/` — the same
-  summaries the dashboard's Experiments view reads — quoted with 95% Wilson intervals. A checkout
-  without `results/` (a trimmed image) falls back to the committed figures instead of inventing
-  them.
-- Self-hosted fonts (preloaded) and a ~28 KB page with ~1 KB of script.
+**Search and AI discoverability**: the landing page is prerendered (see Website above), with one
+`h1`, Open Graph and Twitter cards with a 1200×630 image, and every FAQ answer visible in the HTML.
 
 None of this can guarantee a ranking. What decides it after launch is a real domain, links from
 other sites, more pages answering specific questions (e.g. a guide per use case) and Search
@@ -469,7 +467,7 @@ The dashboard can report visitors and page views with Vercel Web Analytics
 browser, which is the right default for a self-hostable, MIT-licensed tool.
 
 ```sh
-VITE_VERCEL_ANALYTICS_DSN=<your dsn> npm run ui:build   # baked into dashboard/dist at build time
+VITE_VERCEL_ANALYTICS_DSN=<your dsn> npm run ui:build   # baked into apps/desktop/dashboard/dist at build time
 npm run lab -- ui
 ```
 
@@ -479,7 +477,7 @@ npm run lab -- ui
 - `VITE_VERCEL_ANALYTICS_ENDPOINT` — self-hosters: where page-view events are POSTed.
 - Only the dashboard (`/app`) is instrumented; the public marketing pages are server-rendered and
   have no analytics.
-- `route` is passed explicitly (`dashboard/src/lib/analytics.tsx`), so each dashboard view counts
+- `route` is passed explicitly (`apps/desktop/dashboard/src/lib/analytics.tsx`), so each dashboard view counts
   as its own page view — including the hash routes, which automatic tracking lumps together.
 
 ## Production: Supabase + AWS
@@ -499,22 +497,21 @@ How the pieces fit (full guide: [`docs/DEPLOY-AWS.md`](docs/DEPLOY-AWS.md); `doc
 capacity math, worker-fleet scaling and what to build next as job volume grows;
 `docs/SYSTEM-DESIGN.md` states the correctness guarantees — fenced finalization, atomic tenant
 limits, at-least-once execution with idempotent effects — and the failure-domain table;
-`docs/architecture-hld.excalidraw`, `docs/architecture-system.excalidraw`,
-`docs/architecture-lld.excalidraw` are the editable Excalidraw diagrams (HLD, system design,
-and low-level module layout) — open any of them at excalidraw.com;
+[`docs/architecture/`](docs/architecture/) holds the editable Excalidraw diagrams (architecture
+overview, system design, HLD and LLD) — open any of them at excalidraw.com;
 `docker compose up` runs the same shape locally):
 
-- **Store** (`src/store/`): one interface, two implementations. `PgStore` (Supabase) keeps users,
+- **Store** (`packages/core/src/store/`): one interface, two implementations. `PgStore` (Supabase) keeps users,
   sessions (token hashes only), sign-in throttling and quotas, the job queue and the recordings
   index in Postgres, so every web instance shares them. RLS is on with no policies, so the public
   Supabase APIs can't reach any of it. `FileStore` does the same in one JSON file for local use.
-- **Queue** (`src/jobs/`): `POST /api/record` and `/api/run` return `202` with a job id; the
+- **Queue** (`packages/core/src/jobs/`): `POST /api/record` and `/api/run` return `202` with a job id; the
   dashboard polls `/api/jobs/:id`. Workers claim with `FOR UPDATE SKIP LOCKED` under a renewed
   lease, get two attempts and a hard deadline, and hand the job back on SIGTERM. Submissions carry
   an `Idempotency-Key`, so a double-click is one job. Each account gets one active job and a
   daily quota. Site passwords travel sealed (AES-256-GCM, `LAB_SECRET_KEY`) and are erased when
   the job ends.
-- **Media** (`src/media/`): Supabase Storage (S3 protocol) or AWS S3 through a small SigV4
+- **Media** (`packages/core/src/media/`): Supabase Storage (S3 protocol) or AWS S3 through a small SigV4
   client checked against AWS's published test vectors; files are served through 15-minute
   presigned links after an ownership check. On ECS the task role supplies credentials.
 - **Operations**: `/healthz` (liveness) and `/readyz` (database reachable, not draining), one
@@ -562,22 +559,30 @@ form.
 ## Layout
 
 ```
-src/app/        MiniCRM test application and fault definitions
-src/capture/    Recorder (trace on one clock, redaction) and BrowserTools (the agent's only interface)
-src/agents/     Agents under test: scripted v0/v1/v2 and the Stagehand LLM agents sh-p0/sh-p1
-src/lab/        Task + oracle, classifier, runner, report, fixtures/replay, experiment
-fixtures/       Committed regression fixtures (CI release gate)
-results/        Experiment outputs (summary.md / summary.json; per-run traces are not committed)
-src/record/     Site recorder: sign-in, same-origin walk, narration, ffmpeg audio/video
-src/store/      Store interface: FileStore (local JSON) and PgStore (Supabase Postgres)
-src/jobs/       Job queue worker (leases, retries, deadlines) and sealed job secrets
-src/media/      Media storage: local disk, or Supabase Storage / S3 (SigV4, presigned links)
-src/ops/        Structured JSON logging
-supabase/       SQL migrations (supabase db push, or npm run lab -- db migrate)
-src/site/       Landing page, sign-up/sign-in (email + Google), robots/sitemap/llms.txt
-site/static/    Demo walkthrough (MP4/WebM/VTT), poster and social image
-dashboard/      Dashboard and timeline viewer (React); src/ui/ serves and exports it
-docs/           Research assessment
+apps/web/              The website: React landing page (Vite), prerendered for Vercel
+  src/                 pages, guides, lab facts, prerender
+  static/              Demo walkthrough (MP4/WebM/VTT), poster and social image
+apps/desktop/          The desktop app
+  server/              Local server: dashboard, API, sign-in (email + Google), PWA
+  dashboard/           Dashboard and timeline viewer (React)
+  src-tauri/           Tauri shell
+  cli.ts               Command line (lab runs, record, ui, worker, db migrate)
+packages/core/src/     The engine both apps build on
+  app/                 MiniCRM test application and fault definitions
+  capture/             Recorder (trace on one clock, redaction) and BrowserTools
+  agents/              Agents under test: scripted v0/v1/v2 and Stagehand sh-p0/sh-p1
+  lab/                 Task + oracle, classifier, runner, report, fixtures/replay, experiment
+  record/              Site recorder: sign-in, same-origin walk, narration, ffmpeg audio/video
+  store/               FileStore (local JSON) and PgStore (Supabase Postgres)
+  jobs/                Job queue worker (leases, retries, deadlines) and sealed job secrets
+  media/               Local disk, or Supabase Storage / S3 (SigV4, presigned links)
+  llm/                 Model gateway and providers
+  ops/                 Structured JSON logging
+packages/brand/        Shared look: name, mark, stylesheet, icons, fonts
+fixtures/              Committed regression fixtures (CI release gate)
+results/               Experiment outputs (summary.md / summary.json)
+supabase/              SQL migrations (supabase db push, or npm run lab -- db migrate)
+docs/                  Research assessment and architecture diagrams
 ```
 
 ## Limits

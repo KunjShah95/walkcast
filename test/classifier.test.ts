@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ClaimEvent, NetworkEvent, StepEvent, TraceEvent } from "../src/capture/recorder.ts";
-import { causes, diagnose, symptoms } from "../src/lab/classifier.ts";
-import { createLeadTask, evaluateOracle } from "../src/lab/task.ts";
-import type { AppState } from "../src/app/server.ts";
+import type { ClaimEvent, NetworkEvent, StepEvent, TraceEvent } from "../packages/core/src/capture/recorder.ts";
+import { causes, diagnose, symptoms } from "../packages/core/src/lab/classifier.ts";
+import { createLeadTask, evaluateOracle } from "../packages/core/src/lab/task.ts";
+import type { AppState } from "../packages/core/src/app/server.ts";
 
 const task = createLeadTask();
 const lead = (id: number, owner = "Priya Shah") => ({ id, contact: "Jane Roe", company: "Acme Corp", owner, createdAt: 0 });
