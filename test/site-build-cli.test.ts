@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 const REPO = resolve(import.meta.dirname, "..");
 const run = (args: string[], env: Record<string, string> = {}): string =>
-  execFileSync(process.execPath, ["--import", "tsx", "src/cli.ts", "site:build", ...args], {
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts", ...args], {
     cwd: REPO,
     encoding: "utf8",
     // A clean environment: the repo .env sets LAB_SITE_URL to 127.0.0.1, which must not mask a test.
@@ -24,7 +24,7 @@ function messageOf(e: unknown): string {
   return `${err.message ?? ""}\n${typeof err.stderr === "string" ? err.stderr : err.stderr?.toString() ?? ""}`;
 }
 
-test("site:build refuses to publish localhost URLs", () => {
+test("web:build refuses to publish localhost URLs", () => {
   // Regression: an early deployment shipped a canonical of http://localhost:4320/ on every page
   // and a sitemap full of localhost URLs, because an unset LAB_SITE_URL fell back silently.
   const noOrigin: Record<string, string>[] = [
@@ -35,13 +35,13 @@ test("site:build refuses to publish localhost URLs", () => {
 for (const env of noOrigin) {
     assert.throws(
       () => run([], env),
-      (e: unknown) => /site:build needs a real origin/.test(messageOf(e)),
+      (e: unknown) => /web:build needs a real origin/.test(messageOf(e)),
       `must refuse with LAB_SITE_URL=${env.LAB_SITE_URL ?? "<unset>"}`,
     );
   }
 });
 
-test("site:build exports for a real origin, via the env var or the flag", () => {
+test("web:build exports for a real origin, via the env var or the flag", () => {
   const origin = "https://walkcast.example";
   for (const args of [[], ["--site-url", origin]]) {
     const out = outDir();

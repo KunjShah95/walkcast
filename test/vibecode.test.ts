@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ALL_TELLS, auditPrompt, GROUPS, score, verdict } from "../dashboard/src/lib/vibecode.ts";
+import { ALL_TELLS, auditPrompt, GROUPS, score, verdict } from "../apps/desktop/dashboard/src/lib/vibecode.ts";
 
 test("the checklist holds all 30 tells, numbered once each", () => {
   assert.equal(ALL_TELLS.length, 30);

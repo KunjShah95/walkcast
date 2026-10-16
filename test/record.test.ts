@@ -5,11 +5,11 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { startApp } from "../src/app/server.ts";
-import { SEED_LEADS } from "../src/lab/task.ts";
-import { hasFlite } from "../src/record/media.ts";
-import { toWebVtt } from "../src/record/narration.ts";
-import { recordSite } from "../src/record/site.ts";
+import { startApp } from "../packages/core/src/app/server.ts";
+import { SEED_LEADS } from "../packages/core/src/lab/task.ts";
+import { hasFlite } from "../packages/core/src/record/media.ts";
+import { toWebVtt } from "../packages/core/src/record/narration.ts";
+import { recordSite } from "../packages/core/src/record/site.ts";
 
 let app: Awaited<ReturnType<typeof startApp>>;
 const out = mkdtempSync(join(tmpdir(), "lab-rec-"));

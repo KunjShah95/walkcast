@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { LabData } from "../src/ui/data.ts";
+import { LabData } from "../packages/core/src/data.ts";
 
 const roots: string[] = [];
 const mkroot = () => {

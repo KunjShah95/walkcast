@@ -1,30 +1,25 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { createApp } from "../src/ui/server.ts";
 
 /**
- * One Vercel deployment serves the whole site, the same as `npm run dev`: the build
- * (src/deploy/vercel-build.ts) writes the marketing pages as static files and bundles the Node
- * server into a function that answers everything else. There is no separate server and no
- * `APP_ORIGIN` to proxy to - a missing one is what used to 404 `/login` and `/signup`.
+ * Vercel serves the marketing site only: the build (apps/web/build.ts --vercel) writes the
+ * prerendered pages as static files and no function. Sign-in, the dashboard and the API are the
+ * desktop app's, so nothing from apps/desktop may end up in the deployment.
  */
-const REPO = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const REPO = resolve(import.meta.dirname, "..");
 
-test("vercel config builds the static pages and the server function together", async () => {
+test("vercel config builds the static site and nothing else", async () => {
   const { config } = (await import("../vercel.ts")) as { config: Record<string, unknown> };
   assert.equal(config.buildCommand, "npm run vercel:build");
   assert.equal(config.framework, null);
-  // Build Output API: routes come from the build, and nothing points at another origin.
   for (const key of ["rewrites", "outputDirectory"]) assert.ok(!(key in config), `${key} is not set`);
-  assert.doesNotMatch(readFileSync(join(REPO, "vercel.ts"), "utf8"), /APP_ORIGIN/);
 
   const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { scripts: Record<string, string> };
-  assert.match(pkg.scripts["vercel:build"]!, /ui:build/);
-  assert.match(pkg.scripts["vercel:build"]!, /src\/deploy\/vercel-build\.ts/);
+  assert.match(pkg.scripts["vercel:build"]!, /apps\/web\/build\.ts --vercel/);
+  assert.doesNotMatch(pkg.scripts["vercel:build"]!, /ui:build/, "the dashboard is not part of the website");
 });
 
 test("the retired vercel.json is gone, so there is only one config file", () => {
@@ -35,28 +30,18 @@ test("the retired vercel.json is gone, so there is only one config file", () => 
   assert.deepEqual(present, ["vercel.ts"], "exactly one Vercel config file, and it is the programmatic one");
 });
 
-test("the server as a plain handler serves the auth pages and refuses jobs it can't run", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "walkcast-fn-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const dashboard = join(root, "dashboard.html");
-  writeFileSync(dashboard, "<!doctype html><title>dashboard</title>");
-
-  const app = createApp({ root, host: "0.0.0.0", requireAuth: false, worker: false, jobsUnavailable: "No browser here.", dashboardHtml: dashboard });
-  const server = createServer(app.handler);
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  t.after(() => new Promise<void>((r) => server.close(() => r())));
-  const { port } = server.address() as { port: number };
-  const base = `http://127.0.0.1:${port}`;
-
-  for (const path of ["/login", "/signup", "/app", "/healthz"]) {
-    assert.equal((await fetch(`${base}${path}`, { redirect: "manual" })).status, 200, path);
-  }
-  const record = await fetch(`${base}/api/record`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ authorized: true, url: "https://example.com" }),
+test("the Vercel build output is static files and routes, with no function", () => {
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts", "--vercel"], {
+    cwd: REPO,
+    env: { PATH: process.env.PATH ?? "", LAB_SITE_URL: "https://walkcast.example" },
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  assert.equal(record.status, 503);
-  assert.deepEqual(await record.json(), { error: "No browser here." });
-  await app.store.close();
+  const out = join(REPO, ".vercel", "output");
+  assert.ok(existsSync(join(out, "static", "index.html")));
+  assert.ok(existsSync(join(out, "static", "download", "index.html")));
+  assert.equal(existsSync(join(out, "functions")), false, "no server function is deployed");
+  const config = JSON.parse(readFileSync(join(out, "config.json"), "utf8")) as { routes: { src?: string; dest?: string; status?: number }[] };
+  const fallback = config.routes.at(-1)!;
+  assert.equal(fallback.status, 404);
+  assert.equal(fallback.dest, "/404.html");
 });

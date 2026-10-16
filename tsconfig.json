@@ -11,5 +11,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "test"]
+  "include": ["packages", "apps/web", "apps/desktop/server", "apps/desktop/cli.ts", "test", "vercel.ts"]
 }

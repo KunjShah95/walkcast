@@ -2,7 +2,7 @@ node_modules/
 chrome/
 runs/
 results/*/runs/
-dashboard/dist/
+apps/desktop/dashboard/dist/
 dist/
 failure-lab.html
 walkcast.html
@@ -12,4 +12,5 @@ recordings/
 
 .vercel
 .env*
-app/target
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen

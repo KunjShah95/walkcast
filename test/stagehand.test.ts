@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { causes } from "../src/lab/classifier.ts";
-import { loadFixture, replayFixture, writeFixture } from "../src/lab/fixture.ts";
-import { runOnce } from "../src/lab/runner.ts";
-import { createLeadTask } from "../src/lab/task.ts";
+import { causes } from "../packages/core/src/lab/classifier.ts";
+import { loadFixture, replayFixture, writeFixture } from "../packages/core/src/lab/fixture.ts";
+import { runOnce } from "../packages/core/src/lab/runner.ts";
+import { createLeadTask } from "../packages/core/src/lab/task.ts";
 
 /**
  * Stagehand v4 integration, using the scripted stand-in model (no API key needed). Requires a

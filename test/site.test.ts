@@ -4,10 +4,11 @@ import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { Auth, AuthError, safeNext } from "../src/site/auth.ts";
-import { FileStore } from "../src/store/index.ts";
-import { authPage, landingPage, llmsTxt, pricingMd, robotsTxt, sitemapXml } from "../src/site/pages.ts";
-import { serveDashboard } from "../src/ui/server.ts";
+import { Auth, AuthError, safeNext } from "../apps/desktop/server/auth.ts";
+import { FileStore } from "../packages/core/src/store/index.ts";
+import { authPage } from "../apps/desktop/server/pages.ts";
+import { downloadPage, landingPage, llmsTxt, notFoundPage, pricingMd, robotsTxt, sitemapXml } from "../apps/web/src/pages.ts";
+import { serveDashboard } from "../apps/desktop/server/server.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "lab-site-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -83,7 +84,7 @@ test("post-sign-in redirects stay on this site", () => {
 });
 
 test("crawlers: the landing page carries full content and structured data", () => {
-  const html = landingPage("https://lab.example", null);
+  const html = landingPage("https://lab.example");
   assert.equal((html.match(/<h1/g) ?? []).length, 1);
   assert.match(html, /<link rel="canonical" href="https:\/\/lab.example\/">/);
   assert.match(html, /narrated video walkthrough/i);
@@ -103,7 +104,7 @@ test("crawlers: the landing page carries full content and structured data", () =
   const robots = robotsTxt("https://lab.example");
   for (const bot of ["GPTBot", "ClaudeBot", "anthropic-ai", "PerplexityBot", "Google-Extended", "Googlebot", "Bingbot"]) assert.match(robots, new RegExp(`User-agent: ${bot}\\nAllow: /`));
   assert.match(robots, /User-agent: CCBot\nAllow: \//);
-  assert.match(robots, /Disallow: \/api\//);
+  assert.doesNotMatch(robots, /Disallow/, "the site is public documents only; the app is a download");
   assert.match(robots, /Sitemap: https:\/\/lab.example\/sitemap.xml/);
   assert.match(sitemapXml("https://lab.example"), /<video:content_loc>https:\/\/lab.example\/assets\/demo.mp4<\/video:content_loc>/);
   assert.match(sitemapXml("https://lab.example"), /<loc>https:\/\/lab.example\/pricing.md<\/loc>/);
@@ -115,17 +116,22 @@ test("crawlers: the landing page carries full content and structured data", () =
 
 test("technical SEO: one h1 per page, image alt text, a real 404 and canonical URLs", async () => {
   // Heading hierarchy: the auth story headline is display type, not an h2 before the page's h1.
-  const login = authPage("https://lab.example", "login", { google: false, next: "/app" });
+  const login = authPage("login", { google: false, next: "/app" });
   assert.equal((login.match(/<h1/g) ?? []).length, 1);
   assert.doesNotMatch(login, /<h2[^>]*>\s*Your site, walked/);
   assert.match(login, /<p class="dh"[^>]*>Your site, walked and narrated\.<\/p>/);
 
   // Image alt text: the social card describes itself in both OG and Twitter variants.
-  const home = landingPage("https://lab.example", null);
+  const home = landingPage("https://lab.example");
   assert.match(home, /<meta property="og:image:alt" content="Walkcast — [^"]+">/);
   assert.match(home, /<meta name="twitter:image:alt" content="Walkcast — [^"]+">/);
 
-  // A missing page answers 404 (not a soft 404), is noindex in meta and header, and links onward.
+  // The site's 404 is noindex and links onward.
+  const notFound = notFoundPage("https://lab.example");
+  assert.match(notFound, /noindex, follow/);
+  assert.match(notFound, /href="\/guides"/);
+
+  // The desktop server's 404 is a real 404, noindex in the header, and leads back to the app.
   const root = mkdtempSync(join(tmpdir(), "lab-404-"));
   const srv = await serveDashboard(5850 + Math.floor(Math.random() * 100), { root, unref: true, requireAuth: false, worker: false });
   try {
@@ -133,51 +139,66 @@ test("technical SEO: one h1 per page, image alt text, a real 404 and canonical U
     assert.equal(missing.status, 404);
     assert.equal(missing.headers.get("x-robots-tag"), "noindex, follow");
     assert.equal(missing.headers.get("x-content-type-options"), "nosniff");
-    const html = await missing.text();
-    assert.match(html, /noindex, follow/);
-    assert.match(html, /href="\/guides"/);
+    assert.match(await missing.text(), /href="\/app"/);
 
     // One URL per page: a trailing slash redirects to the canonical form.
-    const slash = await fetch(`${srv.url}/guides/`, { redirect: "manual" });
+    const slash = await fetch(`${srv.url}/login/`, { redirect: "manual" });
     assert.equal(slash.status, 302);
-    assert.equal(slash.headers.get("location"), "/guides");
+    assert.equal(slash.headers.get("location"), "/login");
   } finally {
     await srv.close(100);
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("auth screens keep the navbar but drop the footer sitemap", () => {
+test("desktop auth screens stay inside the app: no marketing nav, no footer", () => {
   for (const mode of ["login", "signup", "forgot", "reset"] as const) {
-    const html = authPage("https://lab.example", mode, { google: false, next: "/app" });
+    const html = authPage(mode, { google: false, next: "/app" });
     const header = html.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
-    const footer = html.match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? "";
-    // The same navbar as every other page, so a visitor can leave the form for any section.
-    for (const link of ["/", "/how", "/lab", "/guides", "/pricing"]) {
-      assert.ok(header.includes(`href="${link}"`), `${mode} header links to ${link}`);
+    assert.ok(header.includes(`href="/app"`), `${mode} brand leads to the app`);
+    for (const link of ["/how", "/lab", "/guides", "/pricing"]) {
+      assert.ok(!html.includes(`href="${link}"`), `${mode} does not link to the marketing page ${link}`);
     }
-    assert.equal(footer, "", `${mode} has no footer`);
+    assert.doesNotMatch(html, /<footer/, `${mode} has no footer`);
+    assert.match(html, /noindex, nofollow/);
     assert.match(html, /<form id="auth"/, `${mode} still serves the form`);
   }
-  // Everything else keeps the full chrome.
-  assert.match(landingPage("https://lab.example", null), /<footer>[\s\S]*?\/pricing/);
 });
 
-test("server: public pages, protected actions, sign-up then record", async () => {
+test("the site has no accounts: every call to action leads to /download", () => {
+  const home = landingPage("https://lab.example");
+  assert.match(home, /<footer>[\s\S]*?\/pricing/);
+  for (const gone of ["/signup", "/login", "/app", "/start", "/manifest.webmanifest", "/sw.js"]) {
+    assert.ok(!home.includes(`"${gone}`), `the landing page does not reference ${gone}`);
+  }
+  assert.match(home, /href="\/download"/);
+  const download = downloadPage("https://lab.example");
+  assert.equal((download.match(/<h1/g) ?? []).length, 1);
+  assert.match(download, /href="https:\/\/github\.com\/KunjShah95\/browser-user\/releases\/latest"/);
+  assert.match(download, /"@type":"SoftwareApplication"/);
+  assert.match(sitemapXml("https://lab.example"), /<loc>https:\/\/lab\.example\/download<\/loc>/);
+});
+
+test("server: the app shell, protected actions, sign-up then record", async () => {
   const root = mkdtempSync(join(tmpdir(), "lab-srv-"));
   const port = 4600 + Math.floor(Math.random() * 300);
   const srv = await serveDashboard(port, { root, unref: true, worker: false });
   const base = srv.url;
   try {
-    for (const path of ["/", "/how", "/lab", "/safety", "/pricing", "/robots.txt", "/sitemap.xml", "/llms.txt", "/pricing.md", "/signup", "/app", "/assets/og.png"]) {
+    for (const path of ["/signup", "/login", "/app", "/favicon.svg", "/assets/fonts/schibsted-grotesk.woff2"]) {
       assert.equal((await fetch(base + path)).status, 200, path);
+    }
+    const home = await fetch(base + "/", { redirect: "manual" });
+    assert.equal(home.status, 302);
+    assert.equal(home.headers.get("location"), "/app");
+    // The marketing pages are the static site's job, not the app's.
+    for (const path of ["/how", "/pricing", "/guides", "/robots.txt", "/sitemap.xml", "/start"]) {
+      assert.equal((await fetch(base + path, { redirect: "manual" })).status, 404, path);
     }
     assert.equal((await fetch(base + "/app")).headers.get("x-robots-tag"), "noindex, nofollow");
     assert.equal((await fetch(`${base}/api/record`, { method: "POST", body: "{}" })).status, 401);
     const crossSite = await fetch(`${base}/auth/login`, { method: "POST", headers: { Origin: "https://evil.example" }, body: "{}" });
     assert.equal(crossSite.status, 403);
-    const start = await fetch(`${base}/start?url=https%3A%2F%2Fsite.example`, { redirect: "manual" });
-    assert.equal(start.headers.get("location"), "/signup?url=https%3A%2F%2Fsite.example");
 
     const signup = await fetch(`${base}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "kim@example.com", password: "a-good-password" }) });
     assert.equal(signup.status, 201);
@@ -195,7 +216,7 @@ test("server: public pages, protected actions, sign-up then record", async () =>
 });
 
 test("SSRF guard: private, loopback, link-local and IPv4-mapped addresses are blocked", async () => {
-  const { blockedHost, isPrivateAddress } = await import("../src/record/ssrf.ts");
+  const { blockedHost, isPrivateAddress } = await import("../packages/core/src/record/ssrf.ts");
   for (const a of ["127.0.0.1", "10.1.2.3", "192.168.0.5", "172.20.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::ffff:a9fe:a9fe", "[::ffff:169.254.169.254]"]) {
     assert.equal(isPrivateAddress(a), true, a);
   }
@@ -207,7 +228,7 @@ test("SSRF guard: private, loopback, link-local and IPv4-mapped addresses are bl
 
 test("review regressions: escaped redirect target, strict next, Google takeover, JSON bodies", async () => {
   // Script-context XSS through ?next=
-  const page = authPage("https://lab.example", "login", { google: false, next: safeNext("/</script><script>alert(1)</script>") });
+  const page = authPage("login", { google: false, next: safeNext("/</script><script>alert(1)</script>") });
   assert.ok(!page.includes("</script><script>alert(1)"));
   // Tabs/newlines/backslashes can't smuggle a second slash in.
   for (const bad of ["/\t/evil.example", "/\n", "/\r\n/evil.example", "/\\evil.example", "//evil.example"]) assert.equal(safeNext(bad), "/app#record", JSON.stringify(bad));
@@ -224,7 +245,7 @@ test("review regressions: escaped redirect target, strict next, Google takeover,
   assert.equal(await auth.user(req), null, "the squatter's session is gone");
   await assert.rejects(auth.signIn("victim@example.com", "attacker-password", "2.2.2.2"), /incorrect/);
 
-  const { parseBody } = await import("../src/capture/recorder.ts");
+  const { parseBody } = await import("../packages/core/src/capture/recorder.ts");
   assert.deepEqual(parseBody('{"email":"a@b.c","password":"Tr0ub&dor3","n":1}', "application/json"), { email: "a@b.c", password: "Tr0ub&dor3", n: "1" });
   assert.deepEqual(parseBody("a=1&b=two", "application/x-www-form-urlencoded"), { a: "1", b: "two" });
 });
@@ -260,8 +281,8 @@ test("server: dashboard data needs an account; recordings are only shown to thei
 });
 
 test("guides: unique titles and descriptions, valid structured data, all in the sitemap", async () => {
-  const { GUIDES } = await import("../src/site/guides.ts");
-  const { guidePage, guidesIndexPage } = await import("../src/site/pages.ts");
+  const { GUIDES } = await import("../apps/web/src/guides.ts");
+  const { guidePage, guidesIndexPage } = await import("../apps/web/src/pages.ts");
   assert.ok(GUIDES.length >= 6);
   for (const key of ["slug", "title", "h1", "description"] as const) {
     assert.equal(new Set(GUIDES.map((g) => g[key])).size, GUIDES.length, `${key} must be unique`);
@@ -271,19 +292,19 @@ test("guides: unique titles and descriptions, valid structured data, all in the 
     assert.ok(g.title.length <= 70, `title short enough for search results: ${g.title}`);
     assert.ok(g.description.length >= 110 && g.description.length <= 200, `description length: ${g.slug}`);
     assert.ok(sitemap.includes(`<loc>https://lab.example/guides/${g.slug}</loc>`));
-    const html = guidePage("https://lab.example", g, null);
+    const html = guidePage("https://lab.example", g);
     assert.equal((html.match(/<h1/g) ?? []).length, 1);
     const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)![1]!);
     assert.deepEqual(ld["@graph"].map((n: { "@type": string }) => n["@type"]), ["Article", "HowTo", "FAQPage", "BreadcrumbList"]);
     // Every other guide is linked from this one.
     for (const o of GUIDES) if (o.slug !== g.slug) assert.ok(html.includes(`href="/guides/${o.slug}"`));
   }
-  assert.ok(guidesIndexPage("https://lab.example", null).includes("CollectionPage"));
-  assert.ok(landingPage("https://lab.example", null).includes(`href="/guides/${GUIDES[0]!.slug}"`));
+  assert.ok(guidesIndexPage("https://lab.example").includes("CollectionPage"));
+  assert.ok(landingPage("https://lab.example").includes(`href="/guides/${GUIDES[0]!.slug}"`));
 });
 
 test("lab numbers: the pages quote the committed experiment under results/, with intervals", async () => {
-  const { siteFacts } = await import("../src/site/facts.ts");
+  const { siteFacts } = await import("../apps/web/src/facts.ts");
   const facts = siteFacts(process.cwd());
   assert.equal(facts.scenarios, 39);
   assert.equal(facts.providers, 16);
@@ -294,7 +315,7 @@ test("lab numbers: the pages quote the committed experiment under results/, with
   assert.ok(e.detected.n > 0 && e.detected.k <= e.detected.n);
   assert.ok(e.falseAlarms.n > 0);
 
-  const html = landingPage("https://lab.example", null, facts);
+  const html = landingPage("https://lab.example", facts);
   // The numbers on the page are the ones in the data, not the fallback copy, and they carry
   // the measured interval, which the fallback does not.
   assert.match(html, new RegExp(`class="stat">${e.detected.k}/${e.detected.n}<`));
@@ -305,7 +326,7 @@ test("lab numbers: the pages quote the committed experiment under results/, with
 });
 
 test("lab numbers: a summary with the newer sections publishes false success", async () => {
-  const { siteFacts } = await import("../src/site/facts.ts");
+  const { siteFacts } = await import("../apps/web/src/facts.ts");
   const root = mkdtempSync(join(tmpdir(), "lab-facts-"));
   try {
     mkdirSync(join(root, "results", "2026-10-16-live"), { recursive: true });
@@ -335,7 +356,7 @@ test("lab numbers: a summary with the newer sections publishes false success", a
     assert.deepEqual(e?.falseAlarms, { k: 1, n: 10 });
     assert.deepEqual(e?.falseSuccess, { k: 2, n: 4 });
 
-    const html = landingPage("https://lab.example", null, facts);
+    const html = landingPage("https://lab.example", facts);
     assert.match(html, /class="stat">2\/4</);
     assert.match(html, /success claims the application's records disagreed with \(agents sh-p0, sh-p1; 95% CI 15%–85%\)/);
     assert.match(llmsTxt("https://lab.example", facts), /Of the runs that claimed success, 2 of 4 were false/);
@@ -345,13 +366,13 @@ test("lab numbers: a summary with the newer sections publishes false success", a
 });
 
 test("lab numbers: a checkout without results/ keeps the committed copy", async () => {
-  const { siteFacts } = await import("../src/site/facts.ts");
+  const { siteFacts } = await import("../apps/web/src/facts.ts");
   const root = mkdtempSync(join(tmpdir(), "lab-facts-empty-"));
   try {
     const facts = siteFacts(root);
     assert.equal(facts.experiment, null);
     assert.equal(facts.scenarios, 39);
-    const html = landingPage("https://lab.example", null, facts);
+    const html = landingPage("https://lab.example", facts);
     assert.match(html, /class="stat">25\/25<small>injected faults diagnosed with the right cause \(scripted agents\)</);
     assert.match(html, /class="stat">0\/15<small>false alarms on runs with no fault injected</);
     assert.match(llmsTxt("https://lab.example", facts), /named the right cause for 25 of 25 injected faults and raised 0 false alarms on 15 fault-free runs\./);

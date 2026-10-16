@@ -32,4 +32,4 @@ EXPOSE 4320
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4320)+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 # node receives SIGTERM directly (no npm wrapper), so shutdown is graceful. Run with an init
 # process (docker --init, ECS initProcessEnabled) so Chromium's child processes are reaped.
-CMD ["node", "--import", "tsx", "src/cli.ts", "ui"]
+CMD ["node", "--import", "tsx", "apps/desktop/cli.ts", "ui"]

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lookup, withCredentials } from "../src/llm/credentials.ts";
-import { apiKey, provider } from "../src/llm/providers.ts";
+import { lookup, withCredentials } from "../packages/core/src/llm/credentials.ts";
+import { apiKey, provider } from "../packages/core/src/llm/providers.ts";
 
 test("credentials: overrides shadow process.env inside the scope only", async () => {
   const info = provider("openrouter");

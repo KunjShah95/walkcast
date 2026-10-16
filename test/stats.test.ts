@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ClaimEvent, NetworkEvent, TraceEvent } from "../src/capture/recorder.ts";
-import { causes, diagnose, symptoms } from "../src/lab/classifier.ts";
-import { renderSummary } from "../src/lab/summary.ts";
-import { formatRate, scoreLabels, wilsonInterval } from "../src/lab/stats.ts";
-import { createLeadTask, evaluateOracle } from "../src/lab/task.ts";
-import type { AppState } from "../src/app/server.ts";
+import type { ClaimEvent, NetworkEvent, TraceEvent } from "../packages/core/src/capture/recorder.ts";
+import { causes, diagnose, symptoms } from "../packages/core/src/lab/classifier.ts";
+import { renderSummary } from "../packages/core/src/lab/summary.ts";
+import { formatRate, scoreLabels, wilsonInterval } from "../packages/core/src/lab/stats.ts";
+import { createLeadTask, evaluateOracle } from "../packages/core/src/lab/task.ts";
+import type { AppState } from "../packages/core/src/app/server.ts";
 
 test("wilson interval contains the point estimate and stays inside 0..1", () => {
   const none = wilsonInterval(0, 5);

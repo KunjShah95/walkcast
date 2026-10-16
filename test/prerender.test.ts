@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { compareSlugs } from "../src/site/pages.ts";
-import { prerender } from "../src/site/prerender.ts";
-import { GUIDES } from "../src/site/guides.ts";
+import { compareSlugs } from "../apps/web/src/pages.ts";
+import { prerender } from "../apps/web/src/prerender.ts";
+import { GUIDES } from "../apps/web/src/guides.ts";
 
 const siteUrl = "https://lab.example";
 const out = mkdtempSync(join(tmpdir(), "lab-prerender-"));
@@ -16,14 +16,14 @@ const at = (p: string) => readFileSync(join(out, p), "utf8");
 
 /** A static host resolves /guides from guides/index.html, so every route is a directory. */
 const routes = [
-  "/", "/how", "/lab", "/safety", "/pricing", "/guides",
+  "/", "/how", "/lab", "/safety", "/pricing", "/download", "/guides",
   ...GUIDES.map((g) => `/guides/${g.slug}`),
   ...compareSlugs().map((s) => `/compare/${s}`),
 ];
 const routeFile = (route: string) => (route === "/" ? "index.html" : `${route.replace(/^\//, "")}/index.html`);
 
 test("prerender writes every public page, the crawler files and the assets", () => {
-  const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg", "manifest.webmanifest", "sw.js"];
+  const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg"];
   for (const route of routes) assert.ok(existsSync(join(out, routeFile(route))), `missing ${route}`);
   for (const f of files) assert.ok(existsSync(join(out, f)), `missing ${f}`);
   assert.equal(written.length, routes.length + files.length + 7, "every page, plus 5 demo/social assets and 2 fonts");
@@ -36,14 +36,13 @@ test("the export is stamped with the site URL, not localhost", () => {
   }
   assert.match(at("index.html"), new RegExp(`<link rel="canonical" href="${siteUrl}/">`));
   assert.match(at("sitemap.xml"), new RegExp(`<loc>${siteUrl}/pricing</loc>`));
-  // The sitemap must only list pages that were actually written, or it advertises 404s.
-  // Routes that only exist behind the proxy (rewrites in vercel.ts) are the allowed exception.
-  const proxied = new Set(["/signup"]);
+  // The sitemap must only list pages that were actually written, or it advertises 404s. The site
+  // is static only, so there is no server-side route to except.
   for (const loc of at("sitemap.xml").matchAll(/<loc>[^<]+<\/loc>/g)) {
     const path = loc[0].replace(/<\/?loc>/g, "").slice(siteUrl.length);
     const isFile = existsSync(join(out, path));
     const isPage = existsSync(join(out, path, "index.html"));
-    assert.ok(path === "/" || proxied.has(path) || isFile || isPage, `sitemap lists ${path}, which was not exported`);
+    assert.ok(path === "/" || isFile || isPage, `sitemap lists ${path}, which was not exported`);
   }
 });
 

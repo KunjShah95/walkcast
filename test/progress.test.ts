@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { progressThrottle } from "../src/jobs/progress.ts";
+import { progressThrottle } from "../packages/core/src/jobs/progress.ts";
 
 test("a leading value writes immediately, a burst coalesces into one trailing write of the newest", async () => {
   const writes: string[] = [];

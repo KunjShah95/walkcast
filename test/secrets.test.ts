@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { registerSecret, scrub, scrubText, unscrub } from "../src/capture/secrets.ts";
+import { registerSecret, scrub, scrubText, unscrub } from "../packages/core/src/capture/secrets.ts";
 
 test("secrets become placeholders on the way out and come back on replay", () => {
   registerSecret("t_pass", "hunter2-xyz");

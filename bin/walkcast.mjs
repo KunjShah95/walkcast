@@ -18,7 +18,7 @@ import path from 'node:path';
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const loader = path.join(root, 'node_modules', 'tsx', 'dist', 'loader.mjs');
 const loaderSpec = pathToFileURL(loader).href;
-const cli = path.join(root, 'src', 'cli.ts');
+const cli = path.join(root, 'apps', 'desktop', 'cli.ts');
 
 const extra = process.argv.slice(2);
 const args = ['--import', loaderSpec, cli, ...extra];

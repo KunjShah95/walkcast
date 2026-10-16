@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeText, remapElementIds } from "../src/llm/gateway.ts";
+import { normalizeText, remapElementIds } from "../packages/core/src/llm/gateway.ts";
 
 const req = (tree: string) => ({ messages: [{ role: "user", content: { type: "text", text: `instruction: x\nAccessibility Tree:\n${tree}` } }] });
 
