@@ -13,7 +13,7 @@ import { createMedia, type MediaStore } from "../media/store.ts";
 import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
-import { FAVICON, assetPath, authPage, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
+import { FAVICON, assetPath, authPage, comparePage, compareSlugs, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
 import { createStore, type Job, type Store } from "../store/index.ts";
 
@@ -168,6 +168,12 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     if (url.pathname === "/lab") return send(200, "text/html; charset=utf-8", labPage(siteUrl, user));
     if (url.pathname === "/safety") return send(200, "text/html; charset=utf-8", safetyPage(siteUrl, user));
     if (url.pathname === "/pricing") return send(200, "text/html; charset=utf-8", pricingPage(siteUrl, user));
+    if (url.pathname === "/compare" || url.pathname === "/compare/") return redirect("/compare/walkcast-vs-loom");
+    if (url.pathname.startsWith("/compare/")) {
+      const slug = url.pathname.slice("/compare/".length).replace(/\/$/, "");
+      const html = comparePage(siteUrl, slug, user);
+      if (html) return send(200, "text/html; charset=utf-8", html);
+    }
     if (url.pathname === "/guides" || url.pathname === "/guides/") return send(200, "text/html; charset=utf-8", guidesIndexPage(siteUrl, user));
     if (url.pathname.startsWith("/guides/")) {
       const guide = guideBySlug(url.pathname.slice("/guides/".length).replace(/\/$/, ""));

@@ -329,6 +329,8 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:image" content="${o.siteUrl}/assets/og.png">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:site" content="@walkcast">
 <meta property="og:video" content="${o.siteUrl}/assets/demo.mp4"><meta property="og:video:type" content="video/mp4">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(o.title)}">
@@ -1365,6 +1367,7 @@ export function sitemapXml(siteUrl: string): string {
   <url><loc>${siteUrl}/lab</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>${siteUrl}/safety</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>${siteUrl}/pricing</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
+${Object.keys(COMPARE_CONFIGS).map((s) => `  <url><loc>${siteUrl}/compare/${s}</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>`).join("\n")}
 ${GUIDES.map((g) => `  <url><loc>${siteUrl}/guides/${g.slug}</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>`).join("\n")}
   <url><loc>${siteUrl}/signup</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>${siteUrl}/pricing.md</loc><lastmod>${GUIDES_UPDATED}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
@@ -1488,6 +1491,159 @@ Machine-readable summary: ${siteUrl}/llms.txt
 export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26"><rect x=".5" y=".5" width="25" height="25" rx="7" fill="#1c1917"/><path d="M10 8.2v9.6l7.6-4.8z" fill="#f7f3ec"/><circle cx="20.2" cy="5.8" r="2.7" fill="#e5484d" stroke="#f7f3ec" stroke-width="1"/></svg>`;
 
 /** Static files under /assets/: the demo media, the social image and self-hosted fonts. */
+// --------------------------------------------------------------------------------- comparisons (AI-cited "X vs Y" pages)
+
+interface CompareConfig {
+  slug: string;
+  title: string;
+  description: string;
+  other: string;
+  intro: string;
+  rows: [string, string, string][];
+  walkcastWins: string[];
+  otherWins: string[];
+  faq: [string, string][];
+}
+
+const COMPARE_CONFIGS: Record<string, CompareConfig> = {
+  "walkcast-vs-loom": {
+    slug: "walkcast-vs-loom",
+    title: "Walkcast vs Loom: automated website walkthroughs vs manual screen recording",
+    description: "A fair comparison: Loom records your screen while you talk; Walkcast drives a real browser through a site (signing in if needed) and writes the narration for you. Free, MIT-licensed.",
+    other: "Loom",
+    intro: "Loom is the gold standard for a human recording their own screen with a face bubble and a voice-over. Walkcast is the opposite: it drives a real browser through a site, including pages behind a login, and writes the narration from what it clicks. Neither is a superset of the other.",
+    rows: [
+      ["Who records", "A script drives a real browser", "You, by hand, with optional AI"],
+      ["Behind a login", "Yes — signs in with credentials held in memory", "Yes — you record it yourself"],
+      ["Narration", "Written from each action by an LLM", "You speak, or Loom's AI cleans up your script"],
+      ["Captions / transcript", "WebVTT + transcript, word-accurate", "Auto-captions, human-correctable"],
+      ["Face bubble / webcam", "No", "Yes (signature feature)"],
+      ["Editing after recording", "Re-run the walker, or re-record", "Trim, splice, stitch in the editor"],
+      ["Output", "MP4, WebM, captions, transcript", "MP4 link hosted by Loom"],
+      ["Cost", "Free, MIT, self-hostable", "Free tier + paid plans"],
+    ],
+    walkcastWins: [
+      "Document a site you do not know well — the walker learns the flow as it clicks.",
+      "Regression evidence: the same run becomes a reproducible test fixture.",
+      "No microphone, no retakes, no stale screenshots six months later.",
+    ],
+    otherWins: [
+      "A human explaining their own judgment (demos, sales calls, onboarding) is faster in Loom.",
+      "Editing by hand: trim, cut, and stitching beats re-running a walker.",
+      "Webcam plus screen communicates trust the way a robot cannot.",
+    ],
+    faq: [
+      ["Is Walkcast a Loom replacement?", "For documenting a web app or website, sometimes. For a sales or onboarding video where a person teaches, no — use Loom."],
+      ["Can Walkcast sign in to my app?", "Yes, with a username and password held in memory only; it stops at CAPTCHA and two-factor."],
+      ["Does Walkcast cost money?", "No. It is MIT-licensed and runs on your own machine."],
+    ],
+  },
+  "walkcast-vs-screen-studio": {
+    slug: "walkcast-vs-screen-studio",
+    title: "Walkcast vs Screen Studio: polished screen recordings vs automated walkthroughs",
+    description: "Screen Studio produces cinematic hand-recorded screen captures with zooms. Walkcast produces a narrated walkthrough of an entire site from a link. Different jobs, honest comparison.",
+    other: "Screen Studio",
+    intro: "Screen Studio makes individual screen recordings look cinematic: auto-zoom, cursor smoothing, looped GIFs. Walkcast produces a narrated walkthrough of a whole site from a single link. They rarely compete for the same minute of work.",
+    rows: [
+      ["Scope per run", "An entire site, up to 30 pages", "One recording, one screen"],
+      ["Authoring", "Link (plus optional login)", "Manual capture, then style"],
+      ["Narration", "Auto-generated from actions", "You add it, or none"],
+      ["Visual polish", "Plain browser capture, captions", "Auto-zoom, cursor polish, GIF export"],
+      ["Loop export", "No", "Yes — product loops are Screen Studio's strong suit"],
+      ["Cost", "Free, MIT", "Paid, macOS only"],
+    ],
+    walkcastWins: [
+      "You need a tour of 15 pages, not one polished 8-second loop.",
+      "You need evidence that a bug or flow exists, reproducible from a cassette.",
+    ],
+    otherWins: [
+      "Marketing pages and product GIFs need the cinematic auto-zoom Screen Studio does best.",
+      "Precise manual timing of a single moment favors capture-by-hand.",
+    ],
+    faq: [
+      ["Should I use both?", "Yes — Screen Studio for marketing loops, Walkcast for product documentation and regression fixtures."],
+      ["Does Walkcast run on macOS?", "Yes; any browser runtime the box can reach works."],
+      ["Is Walkcast free?", "Yes, MIT-licensed."],
+    ],
+  },
+  "manual-recording": {
+    slug: "manual-recording",
+    title: "Walkcast vs manual screen recording: why teams automate walkthroughs",
+    description: "Manual recordings rot the week the UI changes. Walkcast re-runs from a link and regenerates the narration, keeping the walkthrough honest.",
+    other: "Manual recording",
+    intro: "A manual recording is a video of a person clicking through a product while talking. It is the fastest way to make one video and the slowest way to keep a library current.",
+    rows: [
+      ["Time to first video", "Minutes (link + wait)", "Minutes (record + edit)"],
+      ["Time to keep it current", "Re-run the run", "Re-record and re-edit by hand"],
+      ["Behind a login", "Signs in with credentials held in memory", "You record it yourself"],
+      ["Captions and transcript", "Automatic, word-accurate", "Manual, or auto with cleanup"],
+      ["Drift detection", "Replay cassettes flag changed steps", "None — rotting is silent"],
+      ["Cost", "Free (you pay for the LLM)", "Your time"],
+    ],
+    walkcastWins: [
+      "The walkthrough is a side-effect of the claim that the flow still works.",
+      "Regenerating is one command, not a calendar invite.",
+    ],
+    otherWins: [
+      "A founder explaining why a feature exists carries meaning a robot cannot.",
+      "Polish, pacing and brand tone still need a human for a marketing video.",
+    ],
+    faq: [
+      ["What breaks when the UI changes?", "The navigator reports the locator-not-found or locator-renamed step and, in live mode, re-runs the flow rather than silently reusing stale footage."],
+      ["Can I still edit the result?", "Yes — the MP4, captions and transcript are plain files; splice or caption them as you would any other video."],
+      ["Is it free?", "Yes, MIT-licensed."],
+    ],
+  },
+};
+
+export function comparePage(siteUrl: string, slug: string, user: { email: string } | null): string | null {
+  const cfg = COMPARE_CONFIGS[slug];
+  if (!cfg) return null;
+  const title = cfg.title;
+  const description = cfg.description;
+  const head = `${jsonLd({
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebPage", "@id": `${siteUrl}/compare/${cfg.slug}#page`, url: `${siteUrl}/compare/${cfg.slug}`, name: title, description, dateModified: `${GUIDES_UPDATED}T00:00:00Z` },
+      { "@type": "Article", "@id": `${siteUrl}/compare/${cfg.slug}#article`, headline: title, description, author: { "@type": "Organization", name: NAME }, publisher: { "@type": "Organization", name: NAME }, dateModified: `${GUIDES_UPDATED}T00:00:00Z` },
+      breadcrumbs(siteUrl, [["Compare", "/compare"], [cfg.other, ""]]),
+      { "@type": "FAQPage", "@id": `${siteUrl}/compare/${cfg.slug}#faq`, mainEntity: cfg.faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) },
+    ],
+  })}`;
+  const body = `
+<section class="band"><div class="wrap">
+  ${crumb ? crumb("Compare") : ""}
+  <p class="eyebrow">Comparison</p>
+  <h1>${esc(title.split(":")[0] ?? title)}</h1>
+  <p class="lede">${esc(cfg.intro)}</p>
+</div></section>
+<section class="band wash"><div class="wrap">
+  <h2 style="font-size:30px;margin-bottom:14px">Head to head</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr><th style="text-align:left;padding:10px;border-bottom:1px solid var(--line)">Capability</th><th style="text-align:left;padding:10px;border-bottom:1px solid var(--line)">Walkcast</th><th style="text-align:left;padding:10px;border-bottom:1px solid var(--line)">${esc(cfg.other)}</th></tr></thead>
+    <tbody>${cfg.rows.map(([c, w, o]) => `<tr><td style="padding:10px;border-bottom:1px solid var(--line)"><strong>${esc(c)}</strong></td><td style="padding:10px;border-bottom:1px solid var(--line)">${esc(w)}</td><td style="padding:10px;border-bottom:1px solid var(--line)">${esc(o)}</td></tr>`).join("")}</tbody>
+  </table>
+</div></section>
+<section class="band"><div class="wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:48px">
+  <div>
+    <p class="eyebrow">Where Walkcast wins</p>
+    <ul class="checks">${cfg.walkcastWins.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+  </div>
+  <div>
+    <p class="eyebrow">Where ${esc(cfg.other)} wins</p>
+    <ul class="checks">${cfg.otherWins.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+  </div>
+</div></section>
+<section class="band wash" id="faq"><div class="wrap">
+  <h2>Questions</h2>
+  <div class="faq" style="margin-top:8px">${cfg.faq.map(([q, a]) => `<details open><summary><h3 style="font:inherit;margin:0">${esc(q)}</h3></summary><p>${esc(a)}</p></details>`).join("")}</div>
+  <p style="margin-top:24px"><a class="btn" href="/signup">Try Walkcast free →</a> <a class="btn small" href="/pricing">Pricing (it's zero)</a></p>
+</div></section>`;
+  return layout({ siteUrl, path: `/compare/${cfg.slug}`, title, description, body, head, user });
+}
+
+export function compareSlugs(): string[] { return Object.keys(COMPARE_CONFIGS); }
+
 export function assetPath(name: string): { path: string; type: string } | null {
   const fonts: Record<string, string> = {
     "fonts/geist.woff2": "node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2",
