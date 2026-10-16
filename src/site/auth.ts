@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { promisify } from "node:util";
 import { DuplicateError, type Store, type User } from "../store/index.ts";
 import { seal } from "../jobs/secret-box.ts";
+import { chatgptHostId, s256 as cgS256, decodeJwtPayload, CHATGPT_AUTH_ENDPOINT, CHATGPT_TOKEN_ENDPOINT, CHATGPT_CLIENT_ID, CHATGPT_RESOURCE } from "./chatgpt.ts";
 
 export type { User };
 
@@ -15,6 +16,7 @@ export type { User };
 const COOKIE = "lab_session";
 const STATE_COOKIE = "lab_oauth_state";
 const STATE_COOKIE_OR = "lab_or_state";
+const STATE_COOKIE_CG = "lab_cg_state";
 const SESSION_DAYS = 30;
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number; maxmem?: number }) => Promise<Buffer>;
 
@@ -36,7 +38,7 @@ export class Sessions {
   async startSession(res: ServerResponse, user: User): Promise<void> {
     const token = randomBytes(32).toString("base64url");
     await this.store.createSession(sha256(token), user.id, new Date(Date.now() + SESSION_DAYS * 86_400_000));
-    appendCookie(res, cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure), cookie(STATE_COOKIE_OR, "", 0, this.secure));
+    appendCookie(res, cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure), cookie(STATE_COOKIE_OR, "", 0, this.secure), cookie(STATE_COOKIE_CG, "", 0, this.secure));
   }
 
   async endSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -222,6 +224,102 @@ export class Auth extends Sessions {
     }
   }
 
+  // ---------------------------------------------------------------- ChatGPT (Sign In with ChatGPT + plan usage)
+  chatgptRedirect(res: ServerResponse, next: string): void {
+    const state = randomBytes(16).toString("base64url");
+    const verifier = randomBytes(48).toString("base64url");
+    const nonce = randomBytes(16).toString("base64url");
+    const challenge = cgS256(verifier);
+    const nextEncoded = Buffer.from(safeNext(next)).toString("base64url");
+    const hostId = chatgptHostId();
+    res.writeHead(302, {
+      Location: `${CHATGPT_AUTH_ENDPOINT}?${new URLSearchParams({
+        client_id: CHATGPT_CLIENT_ID,
+        response_type: "code",
+        scope: "openid profile email offline_access chatgpt.tokens.use.direct",
+        redirect_uri: `${this.siteUrl}/auth/chatgpt/callback`,
+        state,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        nonce,
+        resource: CHATGPT_RESOURCE,
+        agent_name_hint: "walkcast",
+        ext_agent_host_id: hostId,
+      })}`,
+      "Set-Cookie": cookie(STATE_COOKIE_CG, `${state}.${verifier}.${nextEncoded}.${nonce}.${hostId}`, 600, this.secure),
+    });
+    res.end();
+  }
+
+  async chatgptCallback(req: IncomingMessage, url: URL): Promise<{ user: User; next: string }> {
+    const [state, verifier, nextEncoded = "", nonce = "", hostIdCookie = ""] = (readCookie(req, STATE_COOKIE_CG) ?? "").split(".");
+    if (state && url.searchParams.get("state") && url.searchParams.get("state") !== state) throw new AuthError(400, "Sign-in expired or was tampered with. Please try again.");
+    if (!verifier) throw new AuthError(400, "Sign-in expired. Please try again.");
+    const code = url.searchParams.get("code");
+    if (!code) throw new AuthError(400, url.searchParams.get("error") ?? "ChatGPT did not return a code.");
+    const hostId = hostIdCookie || chatgptHostId();
+    const tokenResp = await fetch(CHATGPT_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: `${this.siteUrl}/auth/chatgpt/callback`,
+        client_id: CHATGPT_CLIENT_ID,
+        code_verifier: verifier,
+      }),
+    }).then((r) => r.json() as Promise<{ access_token?: string; refresh_token?: string; id_token?: string; expires_in?: number; scope?: string; error?: string; error_description?: string }>);
+    if (!tokenResp.access_token) throw new AuthError(502, `ChatGPT sign-in failed (${tokenResp.error ?? tokenResp.error_description ?? "no token"}).`);
+    if (nonce && tokenResp.id_token) {
+      const payload = decodeJwtPayload(tokenResp.id_token);
+      if (payload && payload.nonce && payload.nonce !== nonce) throw new AuthError(400, "ChatGPT identity check failed (nonce).");
+    }
+    const idPayload = tokenResp.id_token ? (decodeJwtPayload(tokenResp.id_token) as { sub?: string; email?: string } | null) : null;
+    const grantedScope = String(tokenResp.scope ?? "");
+    const creds = {
+      clientId: CHATGPT_CLIENT_ID,
+      hostId,
+      refreshToken: tokenResp.refresh_token ? seal(tokenResp.refresh_token) : "",
+      accessToken: tokenResp.access_token ? seal(tokenResp.access_token) : undefined,
+      accessExpiresAt: tokenResp.expires_in ? new Date(Date.now() + Number(tokenResp.expires_in) * 1000).toISOString() : undefined,
+      scope: grantedScope,
+      planUsage: grantedScope.includes("chatgpt.tokens.use.direct"),
+      email: idPayload?.email,
+    };
+    const user = await this.upsertChatGPT(req, creds, idPayload?.sub);
+    return { user, next: safeNext(Buffer.from(nextEncoded, "base64url").toString()) };
+  }
+
+  async upsertChatGPT(req: IncomingMessage, creds: NonNullable<User["chatgpt"]>, sub?: string): Promise<User> {
+    const current = await this.user(req);
+    if (current) {
+      current.chatgpt = creds;
+      await this.store.updateUser(current);
+      return current;
+    }
+    const emailRaw = creds.email ? normalizeEmail(creds.email) : null;
+    const email = emailRaw ?? `cg_${createHash("sha256").update(sub ?? creds.refreshToken ?? randomBytes(8).toString("hex")).digest("hex").slice(0, 12)}@chatgpt.user`;
+    const existing = emailRaw ? await this.store.userByEmail(email) : null;
+    if (existing) {
+      existing.chatgpt = creds;
+      await this.store.updateUser(existing);
+      return existing;
+    }
+    const created: User = { id: randomBytes(9).toString("base64url"), email, name: "ChatGPT user", chatgpt: creds, createdAt: new Date().toISOString() };
+    try {
+      await this.store.insertUser(created);
+      return created;
+    } catch (e) {
+      if (e instanceof DuplicateError) {
+        const u = (await this.store.userByEmail(email))!;
+        u.chatgpt = creds;
+        await this.store.updateUser(u);
+        return u;
+      }
+      throw e;
+    }
+  }
+
   async upsertGoogle(sub: string, emailRaw: string, name?: string): Promise<User> {
     const email = normalizeEmail(emailRaw)!;
     const user = (await this.store.userByGoogle(sub)) ?? (await this.store.userByEmail(email));
@@ -258,8 +356,8 @@ export class AuthError extends Error {
   }
 }
 
-export function publicUser(user: User | null): { email: string; name?: string; google: boolean; openrouter: boolean } | null {
-  return user ? { email: user.email, ...(user.name ? { name: user.name } : {}), google: Boolean(user.google), openrouter: Boolean(user.openrouterKey) } : null;
+export function publicUser(user: User | null): { email: string; name?: string; google: boolean; openrouter: boolean; chatgpt: boolean } | null {
+  return user ? { email: user.email, ...(user.name ? { name: user.name } : {}), google: Boolean(user.google), openrouter: Boolean(user.openrouterKey), chatgpt: Boolean(user.chatgpt?.planUsage || user.chatgpt?.refreshToken) } : null;
 }
 
 function googleConfig(): { clientId: string; clientSecret: string } | null {

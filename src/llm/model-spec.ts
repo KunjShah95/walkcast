@@ -1,6 +1,7 @@
 import { ClaudeBackend, DEFAULT_CLAUDE_OPTIONS } from "./claude.ts";
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
 import { OpenAICompatibleBackend } from "./openai-compatible.ts";
+import { ChatGPTResponsesBackend } from "./chatgpt-responses.ts";
 import { provider } from "./providers.ts";
 
 /**
@@ -52,7 +53,9 @@ function single(spec: string): ModelBackend {
   const [providerId, model] = colon < 0 ? ["anthropic", spec] : [spec.slice(0, colon), spec.slice(colon + 1)];
   const info = provider(providerId);
   if (!model) throw new Error(`Model spec '${spec}' needs a model, e.g. ${info.id}:${info.exampleModel}`);
-  return info.kind === "anthropic" ? new ClaudeBackend({ ...DEFAULT_CLAUDE_OPTIONS, model }) : new OpenAICompatibleBackend(info, model);
+  if (info.kind === "anthropic") return new ClaudeBackend({ ...DEFAULT_CLAUDE_OPTIONS, model });
+  if (info.kind === "chatgpt-responses") return new ChatGPTResponsesBackend(model);
+  return new OpenAICompatibleBackend(info, model);
 }
 
 /**

@@ -17,7 +17,17 @@ export interface User {
   authId?: string;
   /** Sealed OpenRouter API key (AES-256-GCM) minted via Sign In with OpenRouter PKCE flow. */
   openrouterKey?: string;
-  /** Sealed ChatGPT plan-usage credentials will land here in a later phase. */
+  /** Sealed ChatGPT plan-usage credentials (refresh token, access token, client/host ids, granted scope). */
+  chatgpt?: {
+    clientId: string;
+    hostId: string;
+    refreshToken: string;   // sealed
+    accessToken?: string;   // sealed
+    accessExpiresAt?: string; // ISO
+    scope: string;          // space-delimited, e.g. "openid ... chatgpt.tokens.use.direct"
+    planUsage: boolean;     // whether chatgpt.tokens.use.direct was granted
+    email?: string;
+  };
   createdAt: string;
 }
 

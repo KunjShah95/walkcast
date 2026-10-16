@@ -173,12 +173,19 @@ export class Worker {
     const input = job.input as { agent: string; fault: string; seed: number; task: string; modelMode?: "live" | "replay" | "scripted" };
     // Per-user credentials: when the job owner connected OpenRouter, run models on their key.
     const prevOR = process.env.OPENROUTER_API_KEY;
+    const prevCG = process.env.CHATGPT_ACCESS_TOKEN;
     if (job.owner) {
       try {
         const u = await this.o.store.userById(job.owner);
         if (u?.openrouterKey) {
           const { open: openSecret } = await import("./secret-box.ts");
           process.env.OPENROUTER_API_KEY = openSecret(u.openrouterKey);
+        }
+        if (u?.chatgpt) {
+          const cg = await import("../site/chatgpt.ts");
+          const tok = await cg.ensureChatGPTAccessToken(u, this.o.store);
+          process.env.CHATGPT_ACCESS_TOKEN = tok;
+          // Persist refreshed tokens handled inside ensure.
         }
       } catch { /* best effort */ }
     }
@@ -197,6 +204,8 @@ export class Worker {
       // Restore previous environment so per-user credentials don't leak between jobs.
       if (prevOR === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = prevOR;
+      if (prevCG === undefined) delete process.env.CHATGPT_ACCESS_TOKEN;
+      else process.env.CHATGPT_ACCESS_TOKEN = prevCG;
     }
   }
 }

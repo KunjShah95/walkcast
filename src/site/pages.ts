@@ -753,7 +753,7 @@ const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden
 export function authPage(
   siteUrl: string,
   mode: AuthMode,
-  opts: { google: boolean; next: string; openrouter?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string },
+  opts: { google: boolean; next: string; openrouter?: boolean; chatgpt?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string },
 ): string {
   const copy = {
     signup: { eyebrow: "Create your account", h1: "Start recording", lede: "Free. Record narrated walkthroughs of sites you own or may test.", button: "Create account", title: "Create an account" },
@@ -784,6 +784,7 @@ export function authPage(
         ? `<a class="btn gbtn" style="margin-top:18px" ${opts.google ? `href="/auth/google?next=${encodeURIComponent(opts.next)}"` : `aria-disabled="true" title="${esc(googleHint)}"`}>${GOOGLE_ICON} Continue with Google</a>
     ${opts.google ? "" : `<p class="note gnote">Google sign-in isn't turned on for this server yet; use email below.</p>`}
      ${opts.openrouter ? `<a class="btn rbtn" style="margin-top:10px" href="/auth/openrouter?next=${encodeURIComponent(opts.next)}">Continue with OpenRouter (uses your credits)</a>` : ""}
+     ${opts.chatgpt ? `<a class="btn cbtn" style="margin-top:10px" href="/auth/chatgpt?next=${encodeURIComponent(opts.next)}">Continue with ChatGPT (uses your plan)</a>` : ""}
     <div class="or">or with email</div>`
         : ""
     }

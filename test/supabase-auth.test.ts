@@ -124,7 +124,7 @@ test("Google through Supabase with PKCE; a code without this browser's verifier 
   const done = await b.go(callback);
   assert.equal(done.headers.get("location"), "/app#simulator");
   const me = (await (await b.go("/api/me")).json()) as { user: { email: string; google: boolean } };
-  assert.deepEqual(me.user, { email: "gina@example.com", name: "Gina", google: true, openrouter: false });
+  assert.deepEqual(me.user, { email: "gina@example.com", name: "Gina", google: true, openrouter: false, chatgpt: false });
 });
 
 test("forgot password: reset link (PKCE) leads to a new-password form; the new password works", async () => {

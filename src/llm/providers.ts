@@ -10,7 +10,7 @@
 export interface ProviderInfo {
   id: string;
   label: string;
-  kind: "anthropic" | "openai-compatible";
+  kind: "anthropic" | "openai-compatible" | "chatgpt-responses";
   /** OpenAI-compatible base URL (unused for anthropic). Override with LAB_<ID>_BASE_URL. */
   baseURL?: string;
   /** Environment variables checked, in order, for the API key. */
@@ -172,6 +172,17 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
     strictTools: false,
     exampleModel: "llama-3.3-70b",
     docs: "https://inference-docs.cerebras.ai/models/overview",
+  },
+  chatgpt: {
+    id: "chatgpt",
+    label: "ChatGPT plan usage (Sign in with ChatGPT)",
+    kind: "chatgpt-responses",
+    baseURL: "https://api.openai.com/v1",
+    apiKeyEnv: ["CHATGPT_ACCESS_TOKEN"],
+    structuredOutput: "json_schema",
+    strictTools: false,
+    exampleModel: "gpt-5",
+    docs: "https://developers.openai.com/siwc/quickstart",
   },
   ollama: {
     id: "ollama",
