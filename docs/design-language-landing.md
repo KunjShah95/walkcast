@@ -167,4 +167,17 @@ Theatre (full-screen video + transcript) hard-coded surfaces: stage `#0d0c0b`, t
 - `dashboard/src/App.tsx` — sticky header, `Mark` record dot, nav pills.
 - `docs/screenshots/*.png` — overview, run, simulator, compare, timeline-dark (referenced only, not opened inline).
 
+## (g) Page transitions & zero-memory motion (summary)
+
+Full doctrine in `docs/page-transitions-memory.md`. Headlines:
+
+- Every transition **transfers context** (object constancy via `layoutId`, spatial continuity,
+  persistent anchors, one focal move at a time). No hard cuts without an anchor.
+- Persistent chrome thinks for the user: sticky header, sticky FlightStrip, sticky side panels,
+  breadcrumbs-as-position, URL-as-memory, optional ⌘K palette.
+- Allowed primitives only: `SharedMorph`, `Reveal`, `Carry`, `Pin`, `Scrub`, `Jolt`, `Settle`, `Spring`.
+  No idle loops, no parallax, no `translateZ`, no simultaneous transform+colour.
+- Reduced motion keeps object constancy via instant swaps + focus moves.
+
+## Source files inspected
 No `.tsx` / `.ts` source was edited. This document is spec-only.
