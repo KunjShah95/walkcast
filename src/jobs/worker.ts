@@ -171,6 +171,18 @@ export class Worker {
 
   private async labRun(job: Job): Promise<Record<string, unknown>> {
     const input = job.input as { agent: string; fault: string; seed: number; task: string; modelMode?: "live" | "replay" | "scripted" };
+    // Per-user credentials: when the job owner connected OpenRouter, run models on their key.
+    const prevOR = process.env.OPENROUTER_API_KEY;
+    if (job.owner) {
+      try {
+        const u = await this.o.store.userById(job.owner);
+        if (u?.openrouterKey) {
+          const { open: openSecret } = await import("./secret-box.ts");
+          process.env.OPENROUTER_API_KEY = openSecret(u.openrouterKey);
+        }
+      } catch { /* best effort */ }
+    }
+    try {
     const r = await runOnce({
       fault: normalizeScenario(input.fault),
       seed: input.seed,
@@ -181,5 +193,10 @@ export class Worker {
       ...(input.modelMode ? { modelMode: input.modelMode } : {}),
     });
     return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}` };
+    } finally {
+      // Restore previous environment so per-user credentials don't leak between jobs.
+      if (prevOR === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = prevOR;
+    }
   }
 }

@@ -87,7 +87,9 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   const supabaseCfg = supabaseAuthConfig();
   const auth: Auth | SupabaseAuth = supabaseCfg ? new SupabaseAuth(store, siteUrl, supabaseCfg) : new Auth(store, siteUrl);
   const authOptions = async () =>
-    auth.kind === "supabase" ? await auth.options() : { google: Boolean(auth.google), forgot: false, confirmEmail: false, signupDisabled: false };
+    auth.kind === "supabase"
+      ? { ...(await auth.options()), openrouter: true }
+      : { google: Boolean(auth.google), openrouter: true, forgot: false, confirmEmail: false, signupDisabled: false };
   const html = dashboardHtml();
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
@@ -192,7 +194,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       return send(
         200,
         "text/html; charset=utf-8",
-        authPage(siteUrl, mode, { google: opts.google, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
+        authPage(siteUrl, mode, { google: opts.google, openrouter: opts.openrouter, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
       );
     }
     if (url.pathname === "/start") {
@@ -240,6 +242,10 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       if (auth.kind === "supabase" && !(await auth.options()).google) throw new AuthError(503, "Google sign-in isn't turned on in this Supabase project.");
       return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
     }
+    if (url.pathname === "/auth/openrouter") {
+      if (auth.kind !== "local") throw new AuthError(503, "OpenRouter sign-in requires the local auth mode (not Supabase).");
+      return auth.openrouterRedirect(res, url.searchParams.get("next") ?? "/app#record");
+    }
     // Supabase Auth sends the browser back here after Google, an email confirmation or a reset link.
     if (url.pathname === "/auth/callback" && auth.kind === "supabase") {
       try {
@@ -262,7 +268,17 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
         return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
       }
     }
-    if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: (await authOptions()).google, provider: auth.kind, authRequired: requireAuth });
+    if (url.pathname === "/auth/openrouter/callback" && auth.kind === "local") {
+      try {
+        const { user: signedIn, next } = await auth.openrouterCallback(req, url);
+        await auth.startSession(res, signedIn);
+        return redirect(safeNext(next));
+      } catch (e) {
+        if (res.headersSent) return void res.end();
+        return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
+      }
+    }
+    if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: (await authOptions()).google, openrouter: (await authOptions()).openrouter, provider: auth.kind, authRequired: requireAuth });
 
     // Everything below is the dashboard: its data (recordings of signed-in pages, traces) and its
     // actions need an account when accounts are on.
