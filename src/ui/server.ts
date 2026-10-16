@@ -13,7 +13,7 @@ import { createMedia, type MediaStore } from "../media/store.ts";
 import { log } from "../ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "../site/auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "../site/supabase-auth.ts";
-import { FAVICON, assetPath, authPage, comparePage, compareSlugs, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
+import { FAVICON, assetPath, authPage, comparePage, compareSlugs, guidePage, guidesIndexPage, howPage, labPage, landingPage, llmsTxt, notFoundPage, pricingMd, pricingPage, robotsTxt, safetyPage, sitemapXml } from "../site/pages.ts";
 import { guideBySlug } from "../site/guides.ts";
 import { createStore, type Job, type Store } from "../store/index.ts";
 
@@ -127,14 +127,32 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       res.end(JSON.stringify(value));
     };
+    // HTTPS + security headers, only when this deployment is served over TLS. Local http dev is
+    // left alone: HSTS on a plain-http host strands the browser.
+    const secure = siteUrl.startsWith("https://");
+    const securityHeaders: Record<string, string> = {
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "X-Frame-Options": "SAMEORIGIN",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      ...(secure ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
+    };
     const send = (status: number, type: string, body: string, cache = "no-cache") => {
-      res.writeHead(status, { "Content-Type": type, "Cache-Control": cache, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" });
+      res.writeHead(status, { "Content-Type": type, "Cache-Control": cache, ...securityHeaders });
       res.end(body);
     };
     const redirect = (location: string) => {
-      res.writeHead(302, { Location: location });
+      res.writeHead(302, { Location: location, ...securityHeaders });
       res.end();
     };
+
+    // Canonical host + scheme: one URL per page, https, no trailing-slash duplicates.
+    if (secure && req.headers["x-forwarded-proto"] === "http") {
+      return redirect(`${siteUrl}${url.pathname}${url.search}`);
+    }
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname !== "/" && url.pathname.endsWith("/") && !url.pathname.startsWith("/app")) {
+      return redirect(`${url.pathname.replace(/\/+$/, "")}${url.search}`);
+    }
 
     // ---------------------------------------------------------------- health
     // Liveness: the process answers. Readiness: it can reach its database and isn't shutting down.
@@ -402,7 +420,10 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       });
       return void res.end(html);
     }
-    return send(404, "text/html; charset=utf-8", `<!doctype html><meta charset="utf-8"><title>Not found</title><p style="font-family:system-ui;padding:40px">Page not found. <a href="/">Home</a> · <a href="/app">Dashboard</a></p>`);
+    {
+      res.writeHead(404, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", ...securityHeaders, "X-Robots-Tag": "noindex, follow" });
+      return void res.end(notFoundPage(siteUrl));
+    }
   }
 
   /** Postgres: the recordings table. Local files: recordings/*\/recording.json (CLI ones included). */

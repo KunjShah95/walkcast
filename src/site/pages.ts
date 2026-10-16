@@ -273,6 +273,8 @@ footer{padding:36px 0 48px;color:var(--ink-3);font-size:14px}footer .wrap{displa
 .auth-story{background:#161513;color:#f3efe8;padding:36px 32px;display:flex;flex-direction:column;justify-content:flex-start;min-height:100%}
 .auth-story p{color:#cfc8bd;margin:12px 0 0;max-width:28ch}
 .auth-story .kicker{font:500 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--caption);margin:0}
+  /* the story headline is display type, not a heading: the page's only h1 is the form's */
+  .auth-story .dh{font-family:var(--display);font-weight:560;letter-spacing:-.022em;line-height:1.02;font-optical-sizing:auto;text-wrap:balance;margin:0;color:#f3efe8}
 .auth .card{box-shadow:none;border-radius:0;padding:34px 32px}.auth h1{font-size:40px;margin:10px 0 6px}
 .auth label{display:grid;gap:6px;margin-top:16px;font-size:14px;color:var(--ink-2)}
 .auth input{border:0;box-shadow:inset 0 0 0 1px var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:12px 14px;font:15px var(--body);outline:none}.auth input:focus{box-shadow:inset 0 0 0 2px var(--ember)}
@@ -329,6 +331,7 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:image" content="${o.siteUrl}/assets/og.png">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(`${NAME} — ${o.title}`)}">
 <meta property="og:locale" content="en_US">
 <meta name="twitter:site" content="@walkcast">
 <meta property="og:video" content="${o.siteUrl}/assets/demo.mp4"><meta property="og:video:type" content="video/mp4">
@@ -336,6 +339,8 @@ function layout(o: { siteUrl: string; path: string; title: string; description: 
 <meta name="twitter:title" content="${esc(o.title)}">
 <meta name="twitter:description" content="${esc(o.description)}">
 <meta name="twitter:image" content="${o.siteUrl}/assets/og.png">
+<meta name="twitter:image:alt" content="${esc(`${NAME} — ${o.title}`)}">
+<link rel="sitemap" type="application/xml" href="/sitemap.xml">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate" type="text/plain" href="${esc(o.siteUrl)}/llms.txt" title="LLM-readable summary">
 <link rel="alternate" type="text/markdown" href="${esc(o.siteUrl)}/pricing.md" title="Pricing">
@@ -772,7 +777,7 @@ export function authPage(
   <div class="auth-shell">
   <div class="auth-story">
     <p class="kicker">Walkcast</p>
-    <h2 style="font-size:clamp(32px,4vw,46px);max-width:12ch">Your site, walked and narrated.</h2>
+    <p class="dh" style="font-size:clamp(32px,4vw,46px);max-width:12ch">Your site, walked and narrated.</p>
     <p>An MP4, captions and a transcript. The password stays in memory.</p>
   </div>
   <div class="card">
@@ -1341,6 +1346,33 @@ export function robotsTxt(siteUrl: string): string {
   ];
   const rules = "Allow: /\nDisallow: /app\nDisallow: /api/\nDisallow: /auth/\nDisallow: /files/\nDisallow: /start\n";
   return `# ${NAME}: public pages are open to every crawler - search, answer engines and AI training bots.\n# Only private app pages (/app, /api, /auth, /files, /start) are off limits.\n\n${bots.map((b) => `User-agent: ${b}\n${rules}`).join("\n")}\nUser-agent: CCBot\n${rules}\nUser-agent: *\n${rules}\nSitemap: ${siteUrl}/sitemap.xml\n`;
+}
+
+/**
+ * 404. Real HTTP 404 (soft-404s are a ranking risk), `noindex` on both the meta robots tag and the
+ * `X-Robots-Tag` header the server sends, and internal links back into the site so a visitor who
+ * lands here keeps moving instead of bouncing.
+ */
+export function notFoundPage(siteUrl: string): string {
+  const title = "Page not found";
+  const links: [string, string][] = [
+    ["/", "Home — paste a link, get a narrated walkthrough"],
+    ["/how", "How it works"],
+    ["/guides", "Guides — walkthroughs by the job"],
+    ["/lab", "Lab — keep the test when an agent fails"],
+    ["/pricing", "Pricing — one price: zero"],
+  ];
+  const body = `
+<section class="band"><div class="wrap">
+  <p class="eyebrow">Error 404</p>
+  <h1 style="font-size:clamp(34px,4.4vw,56px);max-width:16ch">This page isn't here.</h1>
+  <p class="lede" style="max-width:52ch">The link may be old, or the page may have moved. Everything below still works.</p>
+  <ul class="trust" style="margin-top:34px">
+    ${links.map(([href, label]) => `<li class="card" style="padding:18px 20px"><a href="${href}"><strong style="display:block">${esc(label)}</strong></a></li>`).join("\n    ")}
+  </ul>
+  <p style="margin-top:28px"><a class="btn" href="/sitemap.xml">Sitemap</a> <a class="btn small" href="/llms.txt">llms.txt</a></p>
+</div></section>`;
+  return layout({ siteUrl, path: "/404", title: `${title} · ${NAME}`, description: "That page is not here. Links to the Walkcast home page, guides, pricing and sitemap.", body, noindex: true });
 }
 
 export function sitemapXml(siteUrl: string): string {

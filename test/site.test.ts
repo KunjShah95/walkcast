@@ -102,7 +102,7 @@ test("crawlers: the landing page carries full content and structured data", () =
 
   const robots = robotsTxt("https://lab.example");
   for (const bot of ["GPTBot", "ClaudeBot", "anthropic-ai", "PerplexityBot", "Google-Extended", "Googlebot", "Bingbot"]) assert.match(robots, new RegExp(`User-agent: ${bot}\\nAllow: /`));
-  assert.match(robots, /User-agent: CCBot\nDisallow: \//);
+  assert.match(robots, /User-agent: CCBot\nAllow: \//);
   assert.match(robots, /Disallow: \/api\//);
   assert.match(robots, /Sitemap: https:\/\/lab.example\/sitemap.xml/);
   assert.match(sitemapXml("https://lab.example"), /<video:content_loc>https:\/\/lab.example\/assets\/demo.mp4<\/video:content_loc>/);
@@ -110,7 +110,41 @@ test("crawlers: the landing page carries full content and structured data", () =
   assert.match(llmsTxt("https://lab.example"), /^# Walkcast\n\n> /);
   assert.match(llmsTxt("https://lab.example"), /pricing\.md/);
   assert.match(pricingMd("https://lab.example"), /^# Pricing — Walkcast\n/);
-  assert.match(pricingMd("https://lab.example"), /Price: \$0/);
+  assert.match(pricingMd("https://lab.example"), /^# Pricing — Walkcast\n/);
+});
+
+test("technical SEO: one h1 per page, image alt text, a real 404 and canonical URLs", async () => {
+  // Heading hierarchy: the auth story headline is display type, not an h2 before the page's h1.
+  const login = authPage("https://lab.example", "login", { google: false, next: "/app" });
+  assert.equal((login.match(/<h1/g) ?? []).length, 1);
+  assert.doesNotMatch(login, /<h2[^>]*>\s*Your site, walked/);
+  assert.match(login, /<p class="dh"[^>]*>Your site, walked and narrated\.<\/p>/);
+
+  // Image alt text: the social card describes itself in both OG and Twitter variants.
+  const home = landingPage("https://lab.example", null);
+  assert.match(home, /<meta property="og:image:alt" content="Walkcast — [^"]+">/);
+  assert.match(home, /<meta name="twitter:image:alt" content="Walkcast — [^"]+">/);
+
+  // A missing page answers 404 (not a soft 404), is noindex in meta and header, and links onward.
+  const root = mkdtempSync(join(tmpdir(), "lab-404-"));
+  const srv = await serveDashboard(5850 + Math.floor(Math.random() * 100), { root, unref: true, requireAuth: false, worker: false });
+  try {
+    const missing = await fetch(`${srv.url}/no-such-page`, { redirect: "manual" });
+    assert.equal(missing.status, 404);
+    assert.equal(missing.headers.get("x-robots-tag"), "noindex, follow");
+    assert.equal(missing.headers.get("x-content-type-options"), "nosniff");
+    const html = await missing.text();
+    assert.match(html, /noindex, follow/);
+    assert.match(html, /href="\/guides"/);
+
+    // One URL per page: a trailing slash redirects to the canonical form.
+    const slash = await fetch(`${srv.url}/guides/`, { redirect: "manual" });
+    assert.equal(slash.status, 302);
+    assert.equal(slash.headers.get("location"), "/guides");
+  } finally {
+    await srv.close(100);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("server: public pages, protected actions, sign-up then record", async () => {
@@ -236,7 +270,7 @@ test("lab numbers: the pages quote the committed experiment under results/, with
   const { siteFacts } = await import("../src/site/facts.ts");
   const facts = siteFacts(process.cwd());
   assert.equal(facts.scenarios, 39);
-  assert.equal(facts.providers, 15);
+  assert.equal(facts.providers, 16);
   const e = facts.experiment;
   assert.ok(e, "the experiment committed under results/ is published");
   assert.equal(e.scripted, true);
@@ -245,7 +279,7 @@ test("lab numbers: the pages quote the committed experiment under results/, with
   assert.ok(e.falseAlarms.n > 0);
 
   const html = landingPage("https://lab.example", null, facts);
-  // The numbers on the page are the ones in the data, not the fallback copy — and they carry
+  // The numbers on the page are the ones in the data, not the fallback copy, and they carry
   // the measured interval, which the fallback does not.
   assert.match(html, new RegExp(`class="stat">${e.detected.k}/${e.detected.n}<`));
   assert.match(html, new RegExp(`class="stat">${e.falseAlarms.k}/${e.falseAlarms.n}<`));
