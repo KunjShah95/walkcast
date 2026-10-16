@@ -10,6 +10,7 @@ import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secre
 import { Worker } from "../../../packages/core/src/jobs/worker.ts";
 import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
+import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, hasFlite, isVoice, renarrate, voiceover, voicePreview } from "../../../packages/core/src/record/media.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -361,6 +362,12 @@ export function createApp(o: ServeOptions = {}): App {
       const index = data.index(limit);
       return json(200, { ...index, recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)) });
     }
+    // The recording browser's first-run download (desktop app); "unmanaged" everywhere else.
+    if (url.pathname === "/api/browser" && (req.method === "GET" || req.method === "HEAD")) return json(200, browserSetup());
+    if (url.pathname === "/api/browser/install" && req.method === "POST") {
+      if (browserSetup().state === "unmanaged") return json(409, { error: "This server does not manage its browser." });
+      return json(202, installChromium());
+    }
     if (url.pathname === "/api/capabilities") {
       return json(200, {
         live: true,
@@ -424,6 +431,8 @@ try {
     if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
       if (draining) return json(503, { error: "The server is restarting. Try again in a moment." });
       if (o.jobsUnavailable) return json(503, { error: o.jobsUnavailable });
+      const notReady = browserNotReady();
+      if (notReady) return json(503, { error: notReady });
       const kind = url.pathname === "/api/run" ? "run" : "record";
       const b = await readJson(req);
       const input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);

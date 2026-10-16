@@ -1,10 +1,11 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -32,14 +33,32 @@ fn healthy(port: u16) -> bool {
   stream.read_exact(&mut head).is_ok() && head.ends_with(b"200")
 }
 
-fn open_window(app: &AppHandle, url: &str) -> tauri::Result<()> {
-  let url = Url::parse(url).expect("a valid local URL");
-  WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+/// 1280×820, but never larger than the screen it opens on: on a laptop at 125-150% scaling that
+/// size runs off the edge, and the dashboard's corner notices with it.
+fn open_window(app: &AppHandle, url: WebviewUrl) -> tauri::Result<WebviewWindow> {
+  let window = WebviewWindowBuilder::new(app, "main", url)
     .title("Walkcast")
     .inner_size(1280.0, 820.0)
+    .min_inner_size(720.0, 520.0)
     .resizable(true)
+    .visible(false)
     .build()?;
-  Ok(())
+  if let Ok(Some(monitor)) = window.current_monitor() {
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area().size;
+    let width = (area.width as f64 / scale * 0.92).min(1280.0);
+    let height = (area.height as f64 / scale * 0.9).min(820.0);
+    let _ = window.set_size(LogicalSize::new(width, height));
+    let _ = window.center();
+  }
+  window.show()?;
+  Ok(window)
+}
+
+/// Replace the splash's "Starting…" line with what went wrong, so a failed start says so.
+fn show_failure(window: &WebviewWindow, message: &str) {
+  let text = serde_json::to_string(message).unwrap_or_else(|_| "\"Walkcast could not start.\"".into());
+  let _ = window.eval(&format!("document.querySelector('p').textContent = {text}; document.querySelector('.bar').remove();"));
 }
 
 /// Windows hands back verbatim paths (`\\?\C:\...`), which Node cannot resolve a main module from.
@@ -52,7 +71,7 @@ fn plain(path: PathBuf) -> PathBuf {
   }
 }
 
-fn start_sidecar(app: &AppHandle) -> Result<u16, Box<dyn std::error::Error>> {
+fn start_sidecar(app: &AppHandle, exited: Arc<AtomicBool>) -> Result<u16, Box<dyn std::error::Error>> {
   let port = free_port()?;
   let resources = plain(app.path().resource_dir()?).join("sidecar");
   let data = plain(app.path().app_data_dir()?);
@@ -77,7 +96,10 @@ fn start_sidecar(app: &AppHandle) -> Result<u16, Box<dyn std::error::Error>> {
       match event {
         CommandEvent::Stdout(line) => log::info!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
         CommandEvent::Stderr(line) => log::warn!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
-        CommandEvent::Terminated(status) => log::error!("sidecar exited: {:?}", status.code),
+        CommandEvent::Terminated(status) => {
+          log::error!("sidecar exited: {:?}", status.code);
+          exited.store(true, Ordering::SeqCst);
+        }
         _ => {}
       }
     }
@@ -94,25 +116,37 @@ pub fn run() {
     .setup(|app| {
       let handle = app.handle().clone();
       if cfg!(debug_assertions) {
-        open_window(&handle, DEV_URL)?;
+        open_window(&handle, WebviewUrl::External(Url::parse(DEV_URL)?))?;
         return Ok(());
       }
-      let port = start_sidecar(&handle)?;
-      // Wait off the main thread so the event loop keeps running; open the window once it answers.
+      // The splash (apps/desktop/splash) shows at once; the app replaces it when the server answers.
+      let window = open_window(&handle, WebviewUrl::App("index.html".into()))?;
+      let exited = Arc::new(AtomicBool::new(false));
+      let port = match start_sidecar(&handle, exited.clone()) {
+        Ok(port) => port,
+        Err(e) => {
+          log::error!("could not start the app server: {e}");
+          show_failure(&window, &format!("Walkcast could not start its server: {e}"));
+          return Ok(());
+        }
+      };
+      // Wait off the main thread so the event loop keeps running.
       std::thread::spawn(move || {
         let started = Instant::now();
-        while started.elapsed() < STARTUP_TIMEOUT {
+        while started.elapsed() < STARTUP_TIMEOUT && !exited.load(Ordering::SeqCst) {
           if healthy(port) {
-            if let Err(e) = open_window(&handle, &format!("http://127.0.0.1:{port}/app")) {
-              log::error!("could not open the window: {e}");
-              handle.exit(1);
+            let url = Url::parse(&format!("http://127.0.0.1:{port}/app")).expect("a valid local URL");
+            if let Err(e) = window.navigate(url) {
+              log::error!("could not open the app: {e}");
             }
             return;
           }
           std::thread::sleep(Duration::from_millis(200));
         }
-        log::error!("the app server did not start within {}s", STARTUP_TIMEOUT.as_secs());
-        handle.exit(1);
+        let why = if exited.load(Ordering::SeqCst) { "stopped while starting" } else { "did not start in time" };
+        log::error!("the app server {why}");
+        let logs = handle.path().app_log_dir().map(|p| p.display().to_string()).unwrap_or_default();
+        show_failure(&window, &format!("Walkcast's server {why}. The log is in {logs}"));
       });
       Ok(())
     })

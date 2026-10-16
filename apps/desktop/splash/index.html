@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walkcast</title>
+<!-- Shown by the desktop shell while the app server starts; the shell then navigates to /app. -->
+<style>
+  :root { --paper: #ffffff; --ink: #1b1a17; --muted: #6b665d; --line: #e7e3db; --signal: #9c5700; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --paper: #141311; --ink: #f2efe9; --muted: #a39d92; --line: #2c2a26; } }
+  html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { height: 100%; display: grid; place-items: center; }
+  .box { display: grid; justify-items: center; gap: 14px; }
+  .name { font-weight: 700; font-size: 20px; letter-spacing: -.02em; }
+  .bar { width: 160px; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; border-radius: 3px; background: var(--signal); animation: slide 1.1s cubic-bezier(.65,0,.35,1) infinite; }
+  p { margin: 0; color: var(--muted); font-size: 13px; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; opacity: .5; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="box" role="status" aria-live="polite">
+    <svg width="44" height="44" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="7.5" fill="#874b00"/><path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff"/><circle cx="20.4" cy="5.6" r="2.6" fill="#c0321c" stroke="#ffffff" stroke-width="1.2"/></svg>
+    <span class="name">Walkcast</span>
+    <div class="bar" aria-hidden="true"><i></i></div>
+    <p>Starting…</p>
+  </div>
+</main>
+</body>
+</html>
