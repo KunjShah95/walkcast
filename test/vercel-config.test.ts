@@ -69,9 +69,17 @@ test("vercel config never ships an uninterpolated origin", async () => {
   assert.ok(config.headers.some((h) => h.source === "/assets/:path*" && h.headers.some((x) => x.key === "Cache-Control")));
 });
 
-test("a missing or malformed APP_ORIGIN fails the build instead of shipping a 404 site", async () => {
-  await assert.rejects(() => loadConfig(undefined), /APP_ORIGIN is not set/);
+test("without APP_ORIGIN the static site still deploys, with a loud warning", async () => {
+  // A docs-only deployment must not be blocked by a missing env var.
+  const config = await loadConfig(undefined);
+  assert.deepEqual(config.rewrites, [], "nothing is proxied without an origin");
+  assert.equal(config.outputDirectory, "dist");
+  assert.match(config.buildCommand, /site:build/);
+});
+
+test("a malformed APP_ORIGIN fails the build - that is a typo, not a choice", async () => {
   await assert.rejects(() => loadConfig("app.example"), /absolute http\(s\) origin/);
+  await assert.rejects(() => loadConfig("/relative/path"), /absolute http\(s\) origin/);
 });
 
 test("the retired vercel.json is gone, so there is only one config file", () => {
