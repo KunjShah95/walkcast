@@ -10,7 +10,7 @@
  *
  * What it cannot produce, because it needs a running process: `/app` (the dashboard talks to
  * `/api`), the auth pages (POST targets with per-session state), and `/api/*`. Those stay on the
- * Node server in the Docker image. See `vercel.json`.
+ * Node server in the Docker image. `vercel.ts` rewrites those paths there.
  */
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -88,7 +88,7 @@ export function prerender({ siteUrl, outDir }: PrerenderOptions): string[] {
   for (const [route, fn] of RAW) file(route, fn(siteUrl));
 
   // 404. `noindex` is already in the markup; the header needs a host-level rule, which
-  // `vercel.json` sets.
+  // `vercel.ts` sets.
   file("404.html", notFoundPage(siteUrl));
   file("favicon.svg", FAVICON);
   for (const [name] of Object.entries({

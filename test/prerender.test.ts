@@ -37,7 +37,7 @@ test("the export is stamped with the site URL, not localhost", () => {
   assert.match(at("index.html"), new RegExp(`<link rel="canonical" href="${siteUrl}/">`));
   assert.match(at("sitemap.xml"), new RegExp(`<loc>${siteUrl}/pricing</loc>`));
   // The sitemap must only list pages that were actually written, or it advertises 404s.
-  // Routes that only exist behind the proxy (rewrites in vercel.json) are the allowed exception.
+  // Routes that only exist behind the proxy (rewrites in vercel.ts) are the allowed exception.
   const proxied = new Set(["/signup"]);
   for (const loc of at("sitemap.xml").matchAll(/<loc>[^<]+<\/loc>/g)) {
     const path = loc[0].replace(/<\/?loc>/g, "").slice(siteUrl.length);
