@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { ThemeToggle } from "./components/ui.tsx";
 import { isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
+import { AnalyticsTracker } from "./lib/analytics.tsx";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
 import { Experiments } from "./views/Experiments.tsx";
@@ -206,6 +207,7 @@ export function App() {
       </main>
 
 {animations && <FilmGrain />}
+      <AnalyticsTracker route={route.view} path={location.pathname + location.hash} />
     </div>
   );
 }
