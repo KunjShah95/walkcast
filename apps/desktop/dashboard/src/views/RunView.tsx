@@ -62,19 +62,19 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
               <button
                 type="button"
                 onClick={() => go({ view: "compare", base: clean.dir, cand: dir })}
-                className="rounded-lg border border-signal/50 px-2.5 py-1 text-[12.5px] text-signal hover:bg-signal-soft"
+                className="rounded-full bg-solid px-3.5 py-1.5 text-[12.5px] font-medium text-on-solid hover:brightness-95"
               >
                 Compare with a clean run
               </button>
             ) : null;
           })()}
           {prev && (
-            <button type="button" onClick={() => go({ view: "run", dir: prev.dir })} className="rounded-lg border border-line px-2.5 py-1 text-[12.5px] text-ink-2 hover:border-signal hover:text-signal">
+            <button type="button" onClick={() => go({ view: "run", dir: prev.dir })} className="rounded-full border border-line-strong px-3.5 py-1.5 text-[12.5px] text-ink-2 hover:border-signal hover:text-signal">
               Older
             </button>
           )}
           {next && (
-            <button type="button" onClick={() => go({ view: "run", dir: next.dir })} className="rounded-lg border border-line px-2.5 py-1 text-[12.5px] text-ink-2 hover:border-signal hover:text-signal">
+            <button type="button" onClick={() => go({ view: "run", dir: next.dir })} className="rounded-full border border-line-strong px-3.5 py-1.5 text-[12.5px] text-ink-2 hover:border-signal hover:text-signal">
               Newer
             </button>
           )}
@@ -84,8 +84,8 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="eyebrow break-all">{run.id}</div>
-          <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight sm:text-[32px]">
-            {run.agent} on “{faultLabel(run.fault)}”
+          <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.02em] sm:text-[32px]">
+            {run.agent} on <span className="text-dim">“{faultLabel(run.fault)}”</span>
           </h1>
           <p className="mt-1 max-w-[72ch] text-ink-2">{result.agentSpec?.description}</p>
           <dl className="tabular mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[12px] text-ink-2">

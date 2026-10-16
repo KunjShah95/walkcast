@@ -10,18 +10,23 @@
   weight range; JetBrains Mono is for timecodes, ids and numbers.
 */
 :root {
-  --paper: #f6f5f1;
-  --panel: #fcfbf8;
-  --panel-2: #efede7;
-  --panel-3: #e5e2da;
+  /* Walkcast case-file language, aligned to the brand tokens on the site. */
+  --paper: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f5f4f1;
+  --panel-3: #eae8e3;
   --ink: #1b1a17;
   --ink-2: #4c4841;
   --ink-3: #6b665d;
-  --line: #dedad1;
-  --line-strong: #c4bfb3;
+  --dim: #8a847a;
+  --line: #e7e3db;
+  --line-strong: #cfc9bd;
   --signal: #9c5700;
   --signal-strong: #874b00;
   --signal-soft: #f4e7d2;
+  --on-signal: #ffffff;
+  --solid: #1b1a17;
+  --on-solid: #ffffff;
   --exhibit: #f1dfbd;
   --exhibit-ink: #5c3400;
   --exhibit-soft: #f8efdf;
@@ -33,12 +38,16 @@
   --fail-soft: #f8e9e6;
   --pass: #2c6a3d;
   --pass-soft: #e7f0e8;
-  --warn: #855400;
+  --warn: #9a5b00;
   --warn-soft: #f6ecd9;
   --font-display: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --radius: 6px;
+  --r: 14px;
+  --r-lg: 22px;
+  --r-sm: 8px;
+  --pill: 999px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: light;
 }
@@ -52,11 +61,15 @@
   --ink: #ece9e1;
   --ink-2: #bdb7ab;
   --ink-3: #9a9488;
+  --dim: #7e786d;
   --line: #322f2a;
   --line-strong: #46423a;
   --signal: #e0a14a;
   --signal-strong: #c98a33;
   --signal-soft: #3a2c17;
+  --on-signal: #ffffff;
+  --solid: #ece9e1;
+  --on-solid: #161512;
   --exhibit: #4a3719;
   --exhibit-ink: #f1d3a0;
   --exhibit-soft: #2e2516;
@@ -81,6 +94,7 @@
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
+  --color-dim: var(--dim);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-signal: var(--signal);
@@ -99,16 +113,20 @@
   --color-pass-soft: var(--pass-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-on-signal: var(--on-signal);
+  --color-solid: var(--solid);
+  --color-on-solid: var(--on-solid);
   --font-display: var(--font-display);
   --font-sans: var(--font-body);
   --font-mono: var(--font-mono);
-  /* One corner everywhere: every rounded-* utility up to 3xl resolves to the same radius. */
-  --radius-sm: 4px;
-  --radius-md: var(--radius);
-  --radius-lg: var(--radius);
-  --radius-xl: var(--radius);
-  --radius-2xl: var(--radius);
-  --radius-3xl: var(--radius);
+  /* Scaled corners: small chips and tags at 6, inputs at 8, cards at 10, panels at 14,
+     big surfaces at 20. Pills are still always 999px. Concentric inner/outer radii hold. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 22px;
   /* Depth comes from rules and tone, not blur. */
   --shadow-card: none;
   --shadow-hover: none;
@@ -281,6 +299,44 @@ input[type="radio"] {
   animation: skeleton 1.6s ease-in-out infinite;
   border-radius: var(--radius);
 }
+
+/* The record pill's dot: a record-red circle with a white ring, before the label. */
+.pill-rec-dot::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rec);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--on-signal) 90%, transparent);
+}
+
+/* A drawn icon tile set into a headline or an empty state: a rotated rounded square. */
+.tile {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  margin: 0 0.08em;
+  border-radius: 0.32em;
+  vertical-align: -0.28em;
+  transform: rotate(-5deg);
+  color: #fff;
+  background: var(--solid);
+  flex: none;
+}
+.tile.tilt {
+  transform: rotate(6deg);
+}
+.tile svg {
+  width: 0.62em;
+  height: 0.62em;
+}
+.tile.t-ink { background: var(--solid); color: var(--on-solid); }
+.tile.t-signal { background: var(--signal); color: var(--on-signal); }
+.tile.t-rec { background: var(--rec); color: #fff; }
+.tile.t-pass { background: var(--pass); color: #fff; }
+.tile.t-exhibit { background: var(--exhibit); color: var(--exhibit-ink); }
+.tile.t-muted { background: var(--panel-3); color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

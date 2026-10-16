@@ -170,7 +170,7 @@ export function Studio({
               onClick={() => setPrefs({ captions: !prefs.captions })}
               aria-pressed={prefs.captions}
               title={prefs.captions ? "Hide captions" : "Show captions"}
-              className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-ink-2 hover:bg-panel-2 hover:text-ink", prefs.captions && "text-ink")}
+              className={cn("inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-ink-2 hover:bg-panel-2 hover:text-ink", prefs.captions && "text-ink")}
             >
               {prefs.captions ? "Captions on" : "Captions off"}
             </button>
@@ -184,7 +184,7 @@ export function Studio({
               ).map(([file, label]) => {
                 const href = file ? mediaUrl(r.dir, file) : undefined;
                 return href ? (
-                  <a key={label} href={href} download={`${r.id}-${file}`} className="inline-flex h-8 items-center gap-1 rounded-lg border border-line px-2 text-ink-2 hover:border-line-strong hover:text-ink">
+                  <a key={label} href={href} download={`${r.id}-${file}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
                     {label}
                   </a>
                 ) : null;
@@ -209,7 +209,7 @@ export function Studio({
                 role="tab"
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
-                className={cn("h-8 flex-1 rounded-lg text-[12.5px] font-medium transition-colors", tab === id ? "bg-panel-3 text-ink" : "text-ink-3 hover:text-ink")}
+                className={cn("h-8 flex-1 rounded-full text-[12.5px] font-medium transition-colors", tab === id ? "bg-solid text-on-solid" : "text-ink-3 hover:text-ink")}
               >
                 {name}
               </button>
@@ -359,7 +359,7 @@ function ScriptEditor({ recording: r, caps, onSaved }: { recording: RecordingSum
               onChange={(e) => setLines((all) => all.map((t, j) => (j === i ? e.target.value : t)))}
               aria-label={`Line ${i + 1}`}
               className={cn(
-                "w-full resize-none rounded-lg border bg-paper/60 px-2.5 py-1.5 text-[13px] leading-snug outline-none focus:border-signal",
+                "w-full resize-none rounded-lg border bg-panel px-2.5 py-1.5 text-[13px] leading-snug outline-none transition-shadow focus:border-signal",
                 text !== r.captions[i]?.text ? "border-exhibit/50" : "border-line",
               )}
             />

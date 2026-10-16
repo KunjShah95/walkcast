@@ -27,7 +27,9 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
     <div className="grid gap-6 [&>*]:min-w-0">
       <section className="grid gap-4 border-b border-line pb-6">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
-          <h1 className="text-[28px] leading-[1.1] sm:text-[34px]">{first ? `${first}, what should we walk next?` : "What should we walk next?"}</h1>
+          <h1 className="text-[28px] leading-[1.1] sm:text-[34px]">
+            {first ? `${first}, what should we walk` : "What should we walk"} <span className="text-dim">next?</span>
+          </h1>
           <Facts index={index} caps={caps} />
         </div>
         {isSnapshot ? (
@@ -55,7 +57,9 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
           {latestRec ? (
             <Studio recording={latestRec} caps={caps} compact />
           ) : (
-            <Empty title="Your first walkthrough lands here">Paste a link in the bar above. You get the video, a transcript and captions.</Empty>
+            <Empty title="Your first walkthrough lands here" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none" /></svg>} tone="signal">
+              Paste a link in the bar above. You get the video, a transcript and captions.
+            </Empty>
           )}
         </section>
 
@@ -71,12 +75,16 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
           {latestFail ? (
             <FailureCase run={latestFail} go={go} />
           ) : runs.length ? (
-            <Empty title="No failing runs">Every recorded agent run passed its application checks.</Empty>
+            <Empty title="No failing runs" tone="pass" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>}>
+              Every recorded agent run passed its application checks.
+            </Empty>
           ) : (
             <Empty
               title="No lab runs yet"
+              tone="signal"
+              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" /><path d="M4 4v4.5h4.5" /></svg>}
               action={
-                <button type="button" onClick={() => go({ view: "simulator" })} className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] hover:bg-panel-2">
+                <button type="button" onClick={() => go({ view: "simulator" })} className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid hover:brightness-95">
                   Replay a fault
                 </button>
               }
@@ -182,7 +190,7 @@ function FailureCase({ run, go }: { run: RunSummary; go: (r: Route) => void }) {
             ))}
           </ul>
           {cited.length > 0 && (
-            <div className="border-t border-line bg-paper/40 p-3">
+            <div className="border-t border-line bg-panel-2/60 p-3">
               <div className="px-1 pb-2 text-[12px] text-ink-3">Evidence</div>
               <ol className="grid gap-1.5">
                 {cited.map((id) => {
@@ -328,7 +336,7 @@ function TaskMatrix({ runs, go }: { runs: RunSummary[]; go: (r: Route) => void }
               role="tab"
               aria-selected={task === t.id}
               onClick={() => setTask(t.id)}
-              className={cn("h-8 rounded-lg px-3 text-[12.5px] transition-colors", task === t.id ? "bg-panel-3 text-ink" : "text-ink-3 hover:text-ink")}
+              className={cn("h-8 rounded-full px-3 text-[12.5px] transition-colors", task === t.id ? "bg-solid font-medium text-on-solid" : "text-ink-3 hover:text-ink")}
             >
               {t.name}
             </button>

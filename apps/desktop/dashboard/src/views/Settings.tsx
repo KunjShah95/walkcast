@@ -14,7 +14,7 @@ export function Settings({ me }: { me: Me | null }) {
 
   return (
     <div className="grid max-w-[900px] gap-6">
-      <PageHead title="Settings" description="Your account, how new walkthroughs are recorded, and what this deployment can do." />
+      <PageHead title="Your" dim="settings." description="Your account, how new walkthroughs are recorded, and what this deployment can do." />
 
       <Account me={me} />
 
@@ -25,13 +25,13 @@ export function Settings({ me }: { me: Me | null }) {
             A small native window for the signed-in app only. It uses your system's built-in webview, so there is no bundled browser and the installer stays a couple of megabytes.
           </p>
           <div className="flex flex-wrap gap-2">
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Windows (.exe / MSI)
             </a>
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               macOS (.dmg / app)
             </a>
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Linux (.AppImage / .deb)
             </a>
           </div>
@@ -93,10 +93,10 @@ function Account({ me }: { me: Me | null }) {
         <div className="grid gap-3 px-4 py-4">
           <p className="text-[13px] text-ink-2">Sign in to keep your walkthroughs and lab runs tied to your account.</p>
           <div className="flex flex-wrap gap-2">
-            <a href={`/login?next=${next}`} className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href={`/login?next=${next}`} className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Sign in
             </a>
-            <a href={`/signup?next=${next}`} className="rounded-lg bg-signal-strong px-3.5 py-2 text-[13.5px] font-medium text-white hover:bg-signal">
+            <a href={`/signup?next=${next}`} className="rounded-full bg-solid px-4 py-2 text-[13.5px] font-medium text-on-solid hover:brightness-95">
               Create account
             </a>
           </div>
@@ -141,7 +141,7 @@ function Account({ me }: { me: Me | null }) {
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
           <span className="text-[12.5px] text-ink-3">Signed in{me.provider ? ` via ${me.provider}` : ""}.</span>
-          <a href="/auth/logout" className="rounded-lg border border-line-strong px-3 py-1.5 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
+          <a href="/auth/logout" className="rounded-full border border-line-strong px-3.5 py-1.5 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
             Sign out
           </a>
         </div>

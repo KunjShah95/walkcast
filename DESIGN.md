@@ -325,3 +325,47 @@ Auth pages keep the full navbar and drop the footer. A compact 820px shell pairs
 - **Don't** set headings, buttons or prose in mono.
 - **Don't** set small text in dim ink; it is a display tone.
 - **Don't** use square or lightly rounded buttons on the site; the 6px app radius is the app's, not the site's.
+
+---
+
+# The signed-in app (/app)
+
+The app is the same case file, open on the desk and being worked on. It shares the site's palette and grammar but keeps working density: the site persuades, the app decides. Source of truth: `apps/desktop/dashboard/src/styles.css` and `components/ui.tsx`.
+
+## Shell
+- A grey rail (`--panel-2`) on the left holds the workspaces; the desk is white paper. The active workspace is a white card with an inset hairline and an ochre bar, not a filled pill.
+- A sticky, blurred white header (64px) carries breadcrumbs, the compact record field, and the live/snapshot status in mono.
+- The record field is the site's URL pill: a link icon, a mono input and the ochre record pill with its red dot, at rest or compact in the header.
+
+## Surfaces
+- White cards separate from the desk by one step of warm grey and a 1px inset hairline ring; grey panels sit directly on the paper. No drop shadows anywhere in the app.
+- Corners are scaled to the object: 6px tags and chips, 8px inputs, 10px cards, 14px panels, 22px the recorder window, full pills on every button. Concentric radii hold (inner + padding = outer).
+- The recorder window is the one product shot: a white panel in a soft grey ring, the only large shadow in the app.
+
+## Type
+- Page heads are two-tone: the claim in ink, the consequence in dim ink, same weight and size. Section heads are 700 Schibsted Grotesk with tight tracking.
+- JetBrains Mono is only for timecodes, ids, URLs, counts and machine-literal strings. Tabular figures on every number.
+
+## Components
+- **Buttons** are pills: solid ink for go, ochre with the red dot for record, Shelf Grey for the rest, a hairline ring for ghost, fail red for danger. Press scales to 0.98.
+- **Empty states** are a drawn tile (rotated rounded square, tinted by meaning), one sentence and the single next action as a pill. No dashed boxes.
+- **Exhibits** keep the site's language: an `EX-n` tag in exhibit cream with a half-opacity dot; a citation scrolls to the evidence and lights it with a 2px ochre ring for 1.8s.
+- **Verdicts** are small pass/fail pills; **stamps** mark rows that stay listed (failed, contradicted, kept).
+- **Evidence** (a cited step, a transcript line) is exhibit cream; the active transcript line takes the exhibit wash.
+
+## Motion
+- 0.18s colour transitions on pills, links and chips; the record light blinks only while recording; a cited line holds its accent for 1.8s. `prefers-reduced-motion` zeroes all of it.
+
+## Do's and Don'ts
+### Do:
+- **Do** keep the app on white paper in light mode, with the warm unlit "Night" variant for long sessions.
+- **Do** set page heads in two tones, ink then dim.
+- **Do** make every button a pill and every container a softly rounded rectangle.
+- **Do** separate surfaces by tone and a 1px inset hairline, never by shadow.
+- **Do** tie every claim to its exhibit with a citation that seeks and spotlights it.
+
+### Don't:
+- **Don't** add drop shadows to app containers; depth comes from tone and hairlines.
+- **Don't** use ochre or red as decoration; ochre means record/evidence, red means the record light and failure.
+- **Don't** set headings, buttons or prose in mono.
+- **Don't** use the site's airy marketing density in the app; the app is a working tool.

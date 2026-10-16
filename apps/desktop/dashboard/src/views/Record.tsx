@@ -71,7 +71,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
 
   return (
     <div className="grid gap-6">
-      <PageHead title="Record a walkthrough" description="Paste a link. A real browser walks the site and narrates what it actually did, line by line, with captions and a transcript." />
+      <PageHead title="Record a" dim="walkthrough" description="Paste a link. A real browser walks the site and narrates what it actually did, line by line, with captions and a transcript." />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="overflow-hidden">
@@ -153,7 +153,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
               </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-xl border border-line bg-paper/40 p-4 text-[13px]">
+            <label className="flex items-start gap-3 rounded-xl border border-line bg-panel-2/60 p-4 text-[13px]">
               <input type="checkbox" className="mt-0.5 size-4" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} disabled={busy || isSnapshot} />
               <span className="text-ink-2">
                 <span className="font-medium text-ink">I own this site or am authorized to test it.</span> The recorder stops at CAPTCHAs and 2FA, submits no
@@ -185,8 +185,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
               <span className="text-[12.5px] text-ink-3">
                 {caps?.limits && caps.usage ? `${caps.usage.recordingsToday} of ${caps.limits.recordingsPerDay} recordings used today` : " "}
               </span>
-              <Button type="submit" tone="primary" disabled={!ready} className="h-11 px-5 text-[14px]">
-                <span className={cn("size-2 rounded-full bg-rec", busy && "rec-light")} />
+              <Button type="submit" tone="record" disabled={!ready} className="h-11 px-5 text-[14px]">
                 {busy ? "Recording…" : "Record with narration"}
               </Button>
             </div>

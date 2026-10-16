@@ -39,7 +39,9 @@ export function Compare({ base, cand, index, go }: { base: string; cand: string;
     <div className="grid gap-5 [&>*]:min-w-0">
       <div>
         <div className="eyebrow">Baseline comparison · change detection</div>
-        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">What changed between these runs</h1>
+        <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.02em]">
+          What changed <span className="text-dim">between these runs.</span>
+        </h1>
         <p className="mt-1 max-w-[80ch] text-[15px]">{report.summary}</p>
       </div>
 
@@ -229,7 +231,7 @@ function RunPick({ label, detail, other, runs, onPick }: { label: string; detail
         </span>
         <Verdict verdict={s.verdict} />
       </div>
-      <select id={id} value={s.dir} onChange={(e) => onPick(e.target.value)} className="mt-2 w-full rounded-md border border-line bg-panel px-2 py-1 font-mono text-[11.5px] text-ink-2">
+      <select id={id} value={s.dir} onChange={(e) => onPick(e.target.value)} className="mt-2 w-full rounded-full border border-line-strong bg-panel px-3 py-1.5 font-mono text-[12px] text-ink-2 shadow-[inset_0_1px_2px_rgb(27_26_23_/_0.03)]">
         {!options.some((r) => r.dir === s.dir) && <option value={s.dir}>{s.id}</option>}
         {options.map((r) => (
           <option key={r.dir} value={r.dir}>

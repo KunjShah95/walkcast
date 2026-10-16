@@ -180,11 +180,11 @@ export function App() {
         </AnimatePresence>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b border-line bg-paper" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
               <button
                 type="button"
-                className="-ml-1 inline-flex h-9 items-center justify-center rounded-lg border border-line px-2.5 text-ink-2 hover:bg-panel-2 lg:hidden"
+                className="-ml-1 inline-flex h-9 items-center justify-center rounded-full border border-line px-3 text-ink-2 hover:bg-panel-2 lg:hidden"
                 onClick={() => setDrawer(true)}
                 aria-label="Open menu"
               >
@@ -248,14 +248,14 @@ function Sidebar({
   closable: boolean;
 }) {
   return (
-    <nav aria-label="Workspaces" className="flex h-full flex-col border-r border-line bg-panel" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+    <nav aria-label="Workspaces" className="flex h-full flex-col border-r border-line bg-panel-2" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       <div className="flex h-14 items-center justify-between gap-2 px-4">
         <button type="button" onClick={() => go({ view: "dashboard" })} className="flex items-center gap-2.5 rounded-lg">
           <Mark />
           <span className="text-[16px] font-semibold tracking-tight">Walkcast</span>
         </button>
         {closable && (
-          <button type="button" onClick={onClose} aria-label="Close menu" className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-ink-3 hover:bg-panel-2 lg:hidden">
+          <button type="button" onClick={onClose} aria-label="Close menu" className="inline-flex h-8 items-center justify-center rounded-full px-2.5 text-ink-3 hover:bg-panel-2 lg:hidden">
             <span className="text-[12.5px]">Close</span>
           </button>
         )}
@@ -277,7 +277,7 @@ function Sidebar({
                       aria-current={on ? "page" : undefined}
                       className={cn(
                         "relative flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] transition-colors",
-                        on ? "bg-panel-3 text-ink" : "text-ink-2 hover:bg-panel-2 hover:text-ink",
+                        on ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
                       )}
                     >
                       {on && <span className="absolute inset-y-2 left-0 w-0.5 bg-signal" aria-hidden />}
@@ -299,7 +299,7 @@ function Sidebar({
           aria-current={active === "settings" ? "page" : undefined}
           className={cn(
             "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] transition-colors",
-            active === "settings" ? "bg-panel-3 text-ink" : "text-ink-2 hover:bg-panel-2 hover:text-ink",
+            active === "settings" ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
           )}
         >
           Settings
@@ -333,10 +333,10 @@ function Account({ me }: { me: Me | null }) {
   }
   return (
     <span className="flex items-center gap-1.5 text-[12.5px]">
-      <a href={`/login?next=${authNext()}`} className="whitespace-nowrap rounded-md px-2 py-1 text-ink-2 hover:bg-panel-2 hover:text-ink">
+      <a href={`/login?next=${authNext()}`} className="whitespace-nowrap rounded-full px-2.5 py-1 text-ink-2 hover:bg-panel-3/60 hover:text-ink">
         Sign in
       </a>
-      <a href={`/signup?next=${authNext()}`} className="whitespace-nowrap rounded-md bg-signal-strong px-2 py-1 font-medium text-white hover:bg-signal">
+      <a href={`/signup?next=${authNext()}`} className="whitespace-nowrap rounded-full bg-solid px-2.5 py-1 font-medium text-on-solid hover:brightness-95">
         Create account
       </a>
     </span>
@@ -351,15 +351,15 @@ function LoadError({ error }: { error: string }) {
       <p className="text-[14px] text-ink-2">{signedOut ? "Your walkthroughs and lab runs are tied to your account." : error}</p>
       {signedOut ? (
         <div className="flex gap-2">
-          <a href={`/login?next=${authNext()}`} className="rounded-lg bg-signal-strong px-3.5 py-2 text-[13.5px] font-medium text-white hover:bg-signal">
+          <a href={`/login?next=${authNext()}`} className="rounded-full bg-solid px-4 py-2 text-[13.5px] font-medium text-on-solid hover:brightness-95">
             Sign in
           </a>
-          <a href={`/signup?next=${authNext()}`} className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+          <a href={`/signup?next=${authNext()}`} className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
             Create account
           </a>
         </div>
       ) : (
-        <button type="button" onClick={() => location.reload()} className="rounded-lg border border-line-strong px-3.5 py-2 text-[13.5px] hover:bg-panel-2">
+        <button type="button" onClick={() => location.reload()} className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
           Try again
         </button>
       )}

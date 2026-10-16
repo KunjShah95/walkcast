@@ -32,14 +32,17 @@ export function RecordBar({ onRecord, compact, initial = "", autoFocus }: { onRe
     <form onSubmit={submit} role="search" aria-label="Record a website" className="w-full">
       <div
         className={cn(
-          "flex items-center border bg-panel transition-colors",
-          compact ? "h-9 rounded-lg border-line pl-2.5 pr-1" : "h-14 rounded-lg border-line-strong pl-4 pr-2",
-          focused && !compact && "border-ink",
-          focused && compact && "border-signal/60",
-          invalid && "border-fail/60",
+          "flex items-center gap-1 rounded-full bg-panel transition-shadow",
+          compact ? "h-9 pl-3 pr-1" : "h-14 pl-5 pr-1.5",
+          "shadow-[inset_0_0_0_1px_var(--line-strong),0_1px_2px_rgb(27_26_23_/_0.04)]",
+          focused && "shadow-[inset_0_0_0_2px_var(--signal),0_0_0_5px_var(--signal-soft)]",
+          invalid && "shadow-[inset_0_0_0_2px_var(--fail)]",
         )}
       >
-        <span aria-hidden className={cn("shrink-0 font-mono text-ink-3", compact ? "text-[11.5px]" : "text-[13px]")}>https://</span>
+        <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0 text-dim", compact ? "size-3.5" : "size-4")}>
+          <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1" />
+          <path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
+        </svg>
         <input
           type="text"
           inputMode="url"
@@ -57,18 +60,15 @@ export function RecordBar({ onRecord, compact, initial = "", autoFocus }: { onRe
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          className={cn("w-0 min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:font-sans", compact ? "px-2 text-[12.5px]" : "px-3 text-[15px]")}
+          className={cn("w-0 min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:font-sans placeholder:text-ink-3", compact ? "px-2 text-[12.5px]" : "px-3 text-[15px]")}
         />
         <button
           type="submit"
           className={cn(
-            "press inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-signal-strong font-semibold text-white transition-colors hover:bg-signal",
-            compact ? "h-7 px-2.5 text-[12px]" : "h-10 px-4 text-[14px]",
+            "press pill-rec-dot inline-flex shrink-0 items-center gap-2 rounded-full bg-signal font-semibold text-on-signal transition-colors hover:bg-signal-strong",
+            compact ? "h-7 px-3 text-[12px]" : "h-10 px-4 text-[14px]",
           )}
         >
-          <span className="relative flex size-2">
-            <span className="absolute inset-0 rounded-full bg-rec" />
-          </span>
           Record
         </button>
       </div>

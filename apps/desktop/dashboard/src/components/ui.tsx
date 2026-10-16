@@ -62,25 +62,33 @@ export function PanelHeader({ eyebrow, title, aside }: { eyebrow?: ReactNode; ti
   );
 }
 
-/** A view's title block: heading, one sentence, and its actions. */
-export function PageHead({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
+/** A view's title block: a two-tone heading (claim in ink, consequence in dim), one sentence,
+ *  and its actions. Pass `dim` for the second tone and `icon` for a drawn tile in the line. */
+export function PageHead({ title, dim, icon, description, actions }: { title: ReactNode; dim?: ReactNode; icon?: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h1 className="text-[26px] font-semibold leading-[1.15] tracking-tight sm:text-[30px]">{title}</h1>
-        {description && <p className="mt-1.5 max-w-[68ch] text-[14px] text-ink-2">{description}</p>}
+        <h1 className="text-[26px] font-bold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
+          {title}
+          {dim && <span className="text-dim"> {dim}</span>}
+          {icon}
+        </h1>
+        {description && <p className="mt-1.5 max-w-[68ch] text-[14px] leading-relaxed text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
-type ButtonTone = "primary" | "secondary" | "ghost" | "danger";
+type ButtonTone = "primary" | "secondary" | "ghost" | "danger" | "record";
+
+/* The record action: ochre, with the record-light dot before the label (added in CSS). */
 const TONE: Record<ButtonTone, string> = {
-  primary: "bg-signal-strong text-white hover:bg-signal",
-  secondary: "border border-line-strong bg-panel-2 text-ink hover:bg-panel-3",
-  ghost: "text-ink-2 hover:bg-panel-2 hover:text-ink",
-  danger: "border border-fail/40 text-fail hover:bg-fail-soft",
+  primary: "bg-solid text-on-solid hover:brightness-95",
+  record: "bg-signal text-on-signal hover:bg-signal-strong pill-rec-dot",
+  secondary: "bg-panel-2 text-ink hover:bg-panel-3",
+  ghost: "border border-line-strong bg-transparent text-ink hover:bg-panel-2",
+  danger: "border border-fail/30 text-fail hover:bg-fail-soft",
 };
 
 export function Button({ tone = "secondary", size = "md", className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: ButtonTone; size?: "sm" | "md" }) {
@@ -89,8 +97,8 @@ export function Button({ tone = "secondary", size = "md", className, ...props }:
       type="button"
       {...props}
       className={cn(
-        "press inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-        size === "sm" ? "h-8 px-2.5 text-[12.5px]" : "h-9 px-3.5 text-[13.5px]",
+        "press inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        size === "sm" ? "h-8 px-3.5 text-[12.5px]" : "h-9 px-4 text-[13.5px]",
         TONE[tone],
         className,
       )}
@@ -99,7 +107,8 @@ export function Button({ tone = "secondary", size = "md", className, ...props }:
 }
 
 export const fieldClass =
-  "w-full rounded-lg border border-line-strong bg-panel px-3 py-2 text-[13.5px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-signal disabled:opacity-60";
+  "w-full rounded-lg bg-panel px-3 py-2 text-[13.5px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:outline-none focus:ring-0 " +
+  "shadow-[inset_0_0_0_1px_var(--line-strong),0_1px_2px_rgb(27_26_23_/_0.04)] focus:shadow-[inset_0_0_0_2px_var(--signal),0_0_0_5px_var(--signal-soft)]";
 
 /* ------------------------------------------------------------------ exhibits */
 
@@ -127,15 +136,16 @@ export function useExhibits() {
   return useContext(ExhibitContext);
 }
 
-/** The tag on a piece of evidence. */
+/** The tag on a piece of evidence: exhibit cream, mono, a half-opacity dot before the label. */
 export function ExhibitTag({ n, className }: { n: string | number; className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] shrink-0 items-center rounded-sm border border-signal/40 bg-exhibit px-1.5 font-mono text-[10.5px] font-semibold leading-none text-exhibit-ink",
+        "inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[6px] bg-exhibit px-1.5 font-mono text-[10.5px] font-semibold leading-none text-exhibit-ink",
         className,
       )}
     >
+      <span className="size-[5px] rounded-full bg-current opacity-55" aria-hidden />
       EX {n}
     </span>
   );
@@ -229,13 +239,17 @@ export function ThemeToggle({ className }: { className?: string }) {
   );
 }
 
-/** Empty state: one sentence and the single next thing to do. */
-export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+/**
+ * Empty state: a drawn tile, one sentence and the single next thing to do. No dashed box — the
+ * tile carries the meaning, the sentence tells you why it is empty, the pill is the way out.
+ */
+export function Empty({ title, icon, tone = "ink", children, action }: { title: string; icon?: ReactNode; tone?: "ink" | "signal" | "rec" | "pass" | "exhibit" | "muted"; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="grid justify-items-center gap-2 rounded-2xl border border-dashed border-line-strong px-5 py-10 text-center">
-      <div className="text-[15px] font-semibold">{title}</div>
-      {children && <div className="max-w-[60ch] text-[13.5px] text-ink-2">{children}</div>}
-      {action && <div className="mt-2">{action}</div>}
+    <div className="grid justify-items-center gap-2.5 px-5 py-9 text-center">
+      {icon && <span className={`tile t-${tone}`}>{icon}</span>}
+      <div className="text-[15px] font-semibold text-ink">{title}</div>
+      {children && <div className="max-w-[56ch] text-[13.5px] leading-relaxed text-ink-2">{children}</div>}
+      {action && <div className="mt-1.5">{action}</div>}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
-import { Empty, PageHead, Stamp } from "../components/ui.tsx";
+import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, isSnapshot, loadCapabilities } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
@@ -23,8 +23,13 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   if (recordings.length === 0) {
     return (
       <div className="grid gap-6">
-        <PageHead title="Library" description="Your narrated walkthroughs live here." />
-        <Empty title="No walkthroughs yet" action={!isSnapshot && <div className="w-[min(560px,80vw)]"><RecordBar onRecord={(url) => go({ view: "record", url })} /></div>}>
+        <PageHead title="Your" dim="walkthroughs." description="Every narration line is tagged as an exhibit and seeks the video." />
+        <Empty
+          title="No walkthroughs yet"
+          tone="signal"
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" /></svg>}
+          action={!isSnapshot && <div className="w-[min(560px,80vw)]"><RecordBar onRecord={(url) => go({ view: "record", url })} /></div>}
+        >
           Paste a link to a site you own or may test. Walkcast walks it and gives you a narrated video.
         </Empty>
       </div>
@@ -34,7 +39,8 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   return (
     <div className="grid gap-6">
       <PageHead
-        title="Library"
+        title="Your"
+        dim="walkthroughs."
         description={`${recordings.length} walkthrough${recordings.length === 1 ? "" : "s"}. Every narration line is tagged as an exhibit and seeks the video.`}
       />
       <div className="grid items-start gap-5 2xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -46,7 +52,7 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter by site or page"
               aria-label="Filter walkthroughs"
-              className="h-9 w-full rounded-lg border border-line bg-panel px-3 text-[13px] outline-none focus:border-signal"
+              className={cn(fieldClass, "h-9")}
             />
           </label>
           <ul className="flex gap-2 overflow-x-auto pb-1 2xl:grid 2xl:max-h-[calc(100dvh-12rem)] 2xl:overflow-y-auto 2xl:overflow-x-visible">

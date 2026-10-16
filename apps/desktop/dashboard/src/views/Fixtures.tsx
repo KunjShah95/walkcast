@@ -5,7 +5,15 @@ import type { LabIndex } from "../lib/types.ts";
 
 export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
   if (index.fixtures.length === 0) {
-    return <Empty title="No fixtures yet">A failed run writes one automatically: npm run lab -- run --fault gateway-timeout --agent v0</Empty>;
+    return (
+      <Empty
+        title="No fixtures yet"
+        tone="signal"
+        icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>}
+      >
+        A failed run writes one automatically: <code className="font-mono">npm run lab -- run --fault gateway-timeout --agent v0</code>
+      </Empty>
+    );
   }
   const groups = new Map<string, typeof index.fixtures>();
   for (const f of index.fixtures) groups.set(f.source, [...(groups.get(f.source) ?? []), f]);
@@ -14,7 +22,9 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
     <div className="grid gap-6">
       <div>
         <div className="eyebrow">{index.fixtures.length} regression fixtures</div>
-        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">Fixtures</h1>
+        <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.02em]">
+          Regression <span className="text-dim">fixtures.</span>
+        </h1>
         <p className="mt-1 max-w-[70ch] text-ink-2">
           A fixture rebuilds a failed run's application, seed data, fault and timings. Replaying it with the same agent re-runs the recorded model calls; any
           other agent or model is judged against the application's records.

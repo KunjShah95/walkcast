@@ -27,7 +27,9 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
     <div className="grid gap-4">
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">Runs</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em] sm:text-[30px]">
+            Agent <span className="text-dim">runs.</span>
+          </h1>
           <p className="mt-1.5 text-[14px] text-ink-2">{index.runs.length} agent runs, each judged by the application's own records.</p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
@@ -49,11 +51,17 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
 
       {runs.length === 0 ? (
         index.runs.length === 0 ? (
-          <Empty title="No lab runs yet">
+          <Empty
+            title="No lab runs yet"
+            tone="signal"
+            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6L4.6 18.4A1.7 1.7 0 0 0 6.1 21h11.8a1.7 1.7 0 0 0 1.5-2.6L14 9V3" /><path d="M7.2 15h9.6" /></svg>}
+          >
             Replay a fault from Fault replay, or run <code className="font-mono">npm run lab -- run --fault stale-owners --agent v0</code>.
           </Empty>
         ) : (
-          <Empty title="No runs match these filters">Clear a filter to see more.</Empty>
+          <Empty title="No runs match these filters" tone="muted" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11" /><circle cx="4.5" cy="6.5" r="1.1" fill="currentColor" /><circle cx="4.5" cy="12" r="1.1" fill="currentColor" /><circle cx="4.5" cy="17.5" r="1.1" fill="currentColor" /></svg>}>
+            Clear a filter to see more.
+          </Empty>
         )
       ) : (
         <Panel className="overflow-hidden">
@@ -106,7 +114,7 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
 
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
   return (
-    <div role="radiogroup" className="inline-flex rounded-lg border border-line bg-panel p-0.5">
+    <div role="radiogroup" className="inline-flex rounded-full bg-panel-2 p-0.5">
       {options.map(([v, text]) => (
         <button
           key={v}
@@ -114,7 +122,7 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
           role="radio"
           aria-checked={value === v}
           onClick={() => onChange(v)}
-          className={cn("rounded-md px-2.5 py-1 text-[12.5px]", value === v ? "bg-ink text-paper" : "text-ink-2 hover:text-ink")}
+          className={cn("rounded-full px-3 py-1 text-[12.5px] transition-colors", value === v ? "bg-solid font-medium text-on-solid" : "text-ink-2 hover:text-ink")}
         >
           {text}
         </button>
@@ -139,7 +147,7 @@ function Select({
   format?: (v: string) => string;
 }) {
   return (
-    <label htmlFor={id} className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-1 text-[12.5px]">
+    <label htmlFor={id} className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-line-strong bg-panel px-3 py-1.5 text-[12.5px] shadow-[inset_0_1px_2px_rgb(27_26_23_/_0.03)]">
       <span className="text-ink-3">{label}</span>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="min-w-0 max-w-full truncate bg-transparent text-ink outline-none">
         <option value="all">All</option>

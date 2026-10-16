@@ -8,7 +8,15 @@ type Summary = ExperimentSummary["summary"];
 
 export function Experiments({ index }: { index: LabIndex }) {
   if (index.experiments.length === 0) {
-    return <Empty title="No experiments yet">npm run lab -- experiment --seeds 5 --trials 3</Empty>;
+    return (
+      <Empty
+        title="No experiments yet"
+        tone="signal"
+        icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6L4.6 18.4A1.7 1.7 0 0 0 6.1 21h11.8a1.7 1.7 0 0 0 1.5-2.6L14 9V3" /><path d="M7.2 15h9.6" /></svg>}
+      >
+        Run <code className="font-mono">npm run lab -- experiment --seeds 5 --trials 3</code> to measure detection, reproduction and pass^k.
+      </Empty>
+    );
   }
   return (
     <div className="grid gap-8">

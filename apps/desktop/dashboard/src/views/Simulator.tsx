@@ -232,13 +232,13 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
                     onClick={runLive}
                     disabled={state === "running" || stagehandUnavailable}
                     title={stagehandUnavailable ? "Stagehand agents need LAB_CHROME_PATH on the server (see README)." : "Starts a real browser against the test app; about 30 seconds."}
-                    className="rounded-lg bg-ink px-3 py-1.5 text-[13px] font-medium text-paper disabled:opacity-60"
+                    className="rounded-full bg-solid px-4 py-1.5 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95 disabled:opacity-60"
                   >
                     {state === "running" ? "Running in a real browser…" : recorded ? "Re-run live (~30 s)" : "Run it live (~30 s)"}
                   </button>
                 )}
                 {detail && (
-                  <button type="button" onClick={() => go({ view: "run", dir: detail.summary.dir })} className="rounded-lg border border-line px-3 py-1.5 text-[13px] text-ink-2 hover:border-signal hover:text-signal">
+                  <button type="button" onClick={() => go({ view: "run", dir: detail.summary.dir })} className="rounded-full border border-line-strong px-4 py-1.5 text-[13px] text-ink-2 hover:border-signal hover:text-signal">
                     Open timeline
                   </button>
                 )}
@@ -413,14 +413,14 @@ function PlayerBar({ player, disabled }: { player: Player; disabled: boolean }) 
         disabled={disabled}
         onClick={() => (player.playing ? player.pause() : player.play())}
         aria-label={player.playing ? "Pause" : "Play"}
-        className="rounded-lg bg-ink px-3 py-1.5 font-mono text-[12px] text-paper disabled:opacity-40"
+        className="rounded-full bg-solid px-4 py-1.5 font-mono text-[12px] text-on-solid transition-colors hover:brightness-95 disabled:opacity-40"
       >
         {player.playing ? "Pause" : "Play"}
       </button>
-      <button type="button" disabled={disabled} onClick={() => player.restart(true)} aria-label="Restart" className="rounded-lg border border-line px-2.5 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
+      <button type="button" disabled={disabled} onClick={() => player.restart(true)} aria-label="Restart" className="rounded-full border border-line-strong px-3 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
         Restart
       </button>
-      <button type="button" disabled={disabled} onClick={() => player.seek(player.duration)} aria-label="Skip to the result" className="rounded-lg border border-line px-2.5 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
+      <button type="button" disabled={disabled} onClick={() => player.seek(player.duration)} aria-label="Skip to the result" className="rounded-full border border-line-strong px-3 py-1 font-mono text-[12px] text-ink-2 hover:text-signal disabled:opacity-40">
         End
       </button>
       <label htmlFor="sim-scrub" className="sr-only">
@@ -440,7 +440,7 @@ function PlayerBar({ player, disabled }: { player: Player; disabled: boolean }) 
       <span className="tabular w-28 text-right font-mono text-[12px] text-ink-2">
         {ms(player.t)} / {ms(player.duration)}
       </span>
-      <div className="inline-flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Playback speed">
+      <div className="inline-flex rounded-full bg-panel-2 p-0.5" role="radiogroup" aria-label="Playback speed">
         {[1, 2, 4].map((s) => (
           <button
             key={s}
@@ -448,7 +448,7 @@ function PlayerBar({ player, disabled }: { player: Player; disabled: boolean }) 
             role="radio"
             aria-checked={player.speed === s}
             onClick={() => player.setSpeed(s)}
-            className={cn("inline-flex items-center gap-0.5 rounded-md px-2 py-0.5 font-mono text-[11.5px]", player.speed === s ? "bg-ink text-paper" : "text-ink-2")}
+            className={cn("inline-flex items-center gap-0.5 rounded-full px-2.5 py-0.5 font-mono text-[11.5px] transition-colors", player.speed === s ? "bg-solid text-on-solid" : "text-ink-2 hover:text-ink")}
           >
             {s}×
           </button>
@@ -497,7 +497,7 @@ function Narration({ captions, t, playing }: { captions: Caption[]; t: number; p
               type="button"
               onClick={() => setSpeak((s) => !s)}
               aria-pressed={speak}
-              className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12.5px]", speak ? "border-signal text-signal" : "border-line text-ink-2")}
+              className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] transition-colors", speak ? "border-signal text-signal" : "border-line-strong text-ink-2 hover:text-ink")}
             >
               {speak ? "Speaking" : "Speak"}
             </button>
@@ -538,7 +538,7 @@ function ScorePanel({ card, revealed, onReveal }: { card: Scorecard | null; reve
       {!revealed ? (
         <div className="grid gap-2 px-4 py-6 text-center">
           <p className="text-ink-2">Play the run to the end to see how it scored.</p>
-          <button type="button" onClick={onReveal} className="mx-auto rounded-lg border border-line px-3 py-1.5 text-[13px] text-ink-2 hover:border-signal hover:text-signal">
+          <button type="button" onClick={onReveal} className="mx-auto rounded-full border border-line-strong px-4 py-1.5 text-[13px] text-ink-2 hover:border-signal hover:text-signal">
             Skip to the score
           </button>
         </div>
