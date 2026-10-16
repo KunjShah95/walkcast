@@ -501,7 +501,9 @@ try {
       const id = jobMatch[1]!;
       const ifNone = req.headers["if-none-match"];
       const cached = statusCache.get(id);
-      if (cached && Date.now() - cached.at < STATUS_TTL_MS) {
+      // The cache is shared by every caller, so a hit is only served to the job's owner; anyone
+      // else falls through to the store lookup and its 404.
+      if (cached && Date.now() - cached.at < STATUS_TTL_MS && (!requireAuth || cached.owner === owner)) {
         if (ifNone && String(ifNone).trim() === cached.etag) {
           res.writeHead(304, { ...securityHeaders, ETag: cached.etag, "Cache-Control": "private, max-age=1" });
           return void res.end();
@@ -517,7 +519,7 @@ try {
       const payload = { job: await withQueue(store, job) };
       const body = JSON.stringify(payload);
       const etag = `"${createHash("sha1").update(body).digest("hex").slice(0, 16)}"`;
-      setStatusCache(id, body, etag);
+      setStatusCache(id, body, etag, job.owner ?? null);
       if (ifNone && String(ifNone).trim() === etag) {
         res.writeHead(304, { ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
         return void res.end();
@@ -611,14 +613,14 @@ try {
 
 const STATUS_TTL_MS = Number(process.env.LAB_STATUS_TTL_MS ?? 1500);
 const STATUS_CACHE_MAX = 20_000;
-const statusCache = new Map<string, { body: string; etag: string; at: number }>();
+const statusCache = new Map<string, { body: string; etag: string; owner: string | null; at: number }>();
 
-function setStatusCache(id: string, body: string, etag: string) {
+function setStatusCache(id: string, body: string, etag: string, owner: string | null) {
   if (statusCache.size >= STATUS_CACHE_MAX) {
     const first = statusCache.keys().next().value;
     if (first) statusCache.delete(first);
   }
-  statusCache.set(id, { body, etag, at: Date.now() });
+  statusCache.set(id, { body, etag, owner, at: Date.now() });
 }
 
 function publicJob(job: Job) {
