@@ -19,8 +19,9 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-# tsx runs the TypeScript sources directly, so dev dependencies stay in the image.
-RUN npm ci --no-audit --no-fund
+# tsx runs the TypeScript sources directly, so dev dependencies stay in the image (NODE_ENV=production
+# above would make npm ci skip them without --include=dev).
+RUN npm ci --include=dev --no-audit --no-fund
 COPY . .
 RUN npm run ui:build \
  && mkdir -p runs recordings .lab \
