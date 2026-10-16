@@ -63,3 +63,32 @@ test("every dashboard view renders without page errors", { timeout: 120_000 }, a
     }
   }
 });
+
+/**
+ * Sign-in and registration must be reachable from the dashboard itself, even on a self-hosted
+ * server where accounts are optional (the default). Otherwise there is no way in at all.
+ */
+test("the dashboard header offers sign in and create account", { timeout: 60_000 }, async () => {
+  const page = await browser.newPage();
+  await page.goto(srv.url + "/app#runs");
+  const signIn = page.locator("header a:has-text('Sign in')").first();
+  const register = page.locator("header a:has-text('Create account')").first();
+  await signIn.waitFor({ timeout: 15_000 });
+  await register.waitFor({ timeout: 15_000 });
+  const signInHref = (await signIn.getAttribute("href")) ?? "";
+  const registerHref = (await register.getAttribute("href")) ?? "";
+  assert.match(signInHref, /^\/login\?next=/);
+  assert.match(registerHref, /^\/signup\?next=/);
+  // The return trip keeps you on the view you were looking at.
+  assert.match(decodeURIComponent(signInHref), /\/app#runs$/);
+
+  // Both targets really serve the auth form with the expected heading.
+  for (const [href, heading] of [[signInHref, "Sign in"], [registerHref, "Start recording"]] as const) {
+    const res = await page.request.get(srv.url + href);
+    assert.equal(res.status(), 200);
+    const html = await res.text();
+    assert.match(html, /<form id="auth"/, `${href} serves the sign-in form`);
+    assert.ok(html.includes(heading), `${href} heading is "${heading}"`);
+  }
+  await page.close();
+});

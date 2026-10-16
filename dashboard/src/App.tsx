@@ -181,16 +181,22 @@ export function App() {
             transition={{ duration: reduced ? 0 : 0.22, ease: [0.4, 0, 0.2, 1] }}
           >
             {error && (
-              <p className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">
-                {error}{" "}
+              <div className="rounded-lg border border-fail/40 bg-fail-soft px-4 py-3 text-fail">
+                <p>{error}</p>
                 {/401/.test(error) ? (
-                  <a className="font-medium underline" href={`/login?next=${encodeURIComponent("/app" + location.hash)}`}>
-                    Sign in to see the dashboard.
-                  </a>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <a href={`/login?next=${authNext()}`} className="rounded-md bg-ink px-2.5 py-1 text-[12.5px] text-paper transition-opacity hover:opacity-90">
+                      Sign in
+                    </a>
+                    <a href={`/signup?next=${authNext()}`} className="rounded-md border border-line bg-panel px-2.5 py-1 text-[12.5px] text-ink transition-colors hover:bg-panel-2">
+                      Create account
+                    </a>
+                    <a href="/guides" className="px-1 text-[12.5px] text-ink-2 underline hover:text-ink">Read the guides</a>
+                  </div>
                 ) : (
-                  <>Start it with npm run ui.</>
+                  <p className="mt-1">Start it with npm run ui.</p>
                 )}
-              </p>
+              </div>
             )}
             {!index && !error && <p className="font-mono text-ink-3">Reading runs…</p>}
             {index && route.view === "overview" && <Overview index={index} go={go} />}
@@ -212,22 +218,47 @@ export function App() {
   );
 }
 
-/** Signed-in account (live server only). */
+/** Where to send someone who signs in or registers: back to this dashboard view. */
+function authNext(): string {
+  return encodeURIComponent(`/app${location.hash}`);
+}
+
+/**
+ * Signed-in account (live server only).
+ *
+ * Sign in and create-account stay visible whenever this is a live server, even when accounts are
+ * optional — otherwise a self-hosted install has no way to reach either page and the dashboard is
+ * a dead end. A baked snapshot export has no auth backend at all, so it shows neither.
+ */
 function Account() {
   const [me, setMe] = useState<{ user: { email: string } | null; authRequired: boolean } | null>(null);
   useEffect(() => {
     if (!isSnapshot) loadMe().then(setMe);
   }, []);
-  if (!me || (!me.user && !me.authRequired)) return null; // accounts off (local use): nothing to show
-  return me.user ? (
-    <span className="flex items-center gap-2 text-[12.5px] text-ink-2">
-      <span className="hidden max-w-[16ch] truncate sm:inline">{me.user.email}</span>
-      <a href="/auth/logout" className="rounded-md border border-line px-2 py-1 hover:bg-panel-2">Sign out</a>
+  if (isSnapshot) return null;
+  if (me?.user) {
+    return (
+      <span className="flex items-center gap-2 text-[12.5px] text-ink-2">
+        <span className="hidden max-w-[16ch] truncate sm:inline">{me.user.email}</span>
+        <a href="/auth/logout" className="rounded-md border border-line px-2 py-1 hover:bg-panel-2">Sign out</a>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2 text-[12.5px]">
+      <a
+        href={`/login?next=${authNext()}`}
+        className={cn(
+          "rounded-md px-2.5 py-1 transition-colors",
+          me?.authRequired ? "border border-line text-ink-2 hover:bg-panel-2 hover:text-ink" : "text-ink-2 hover:text-ink",
+        )}
+      >
+        Sign in
+      </a>
+      <a href={`/signup?next=${authNext()}`} className="rounded-md bg-ink px-2.5 py-1 text-paper transition-opacity hover:opacity-90">
+        Create account
+      </a>
     </span>
-  ) : (
-    <a href={`/login?next=${encodeURIComponent("/app" + location.hash)}`} className="rounded-md bg-ink px-2.5 py-1 text-[12.5px] text-paper">
-      Sign in
-    </a>
   );
 }
 
