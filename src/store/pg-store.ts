@@ -47,8 +47,8 @@ export class PgStore implements Store {
   }
   async insertUser(u: User) {
     try {
-      await this.sql`insert into users (id, email, name, password_hash, google_sub, auth_id, created_at)
-        values (${u.id}, ${u.email}, ${u.name ?? null}, ${u.password ?? null}, ${u.google ?? null}, ${u.authId ?? null}, ${u.createdAt})`;
+      await this.sql`insert into users (id, email, name, password_hash, google_sub, auth_id, openrouter_key, created_at)
+        values (${u.id}, ${u.email}, ${u.name ?? null}, ${u.password ?? null}, ${u.google ?? null}, ${u.authId ?? null}, ${u.openrouterKey ?? null}, ${u.createdAt})`;
     } catch (e) {
       if ((e as { code?: string }).code === "23505") throw new DuplicateError("email taken");
       throw e;
@@ -56,7 +56,7 @@ export class PgStore implements Store {
   }
   async updateUser(u: User) {
     await this.sql`update users set email = ${u.email}, name = ${u.name ?? null}, password_hash = ${u.password ?? null}, google_sub = ${u.google ?? null},
-      auth_id = ${u.authId ?? null} where id = ${u.id}`;
+      auth_id = ${u.authId ?? null}, openrouter_key = ${u.openrouterKey ?? null} where id = ${u.id}`;
   }
 
   // ---------------------------------------------------------------- sessions
@@ -205,6 +205,7 @@ function toUser(r: Row): User {
     ...(r.password_hash ? { password: String(r.password_hash) } : {}),
     ...(r.google_sub ? { google: String(r.google_sub) } : {}),
     ...(r.auth_id ? { authId: String(r.auth_id) } : {}),
+    ...(r.openrouter_key ? { openrouterKey: String(r.openrouter_key) } : {}),
     createdAt: iso(r.created_at)!,
   };
 }

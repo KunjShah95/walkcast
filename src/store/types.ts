@@ -15,6 +15,9 @@ export interface User {
   google?: string;
   /** Supabase Auth user id (auth.users.id) when Supabase handles sign-in. */
   authId?: string;
+  /** Sealed OpenRouter API key (AES-256-GCM) minted via Sign In with OpenRouter PKCE flow. */
+  openrouterKey?: string;
+  /** Sealed ChatGPT plan-usage credentials will land here in a later phase. */
   createdAt: string;
 }
 

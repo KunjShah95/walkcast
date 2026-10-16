@@ -2,6 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "no
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { promisify } from "node:util";
 import { DuplicateError, type Store, type User } from "../store/index.ts";
+import { seal } from "../jobs/secret-box.ts";
 
 export type { User };
 
@@ -13,6 +14,7 @@ export type { User };
  */
 const COOKIE = "lab_session";
 const STATE_COOKIE = "lab_oauth_state";
+const STATE_COOKIE_OR = "lab_or_state";
 const SESSION_DAYS = 30;
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number; maxmem?: number }) => Promise<Buffer>;
 
@@ -34,7 +36,7 @@ export class Sessions {
   async startSession(res: ServerResponse, user: User): Promise<void> {
     const token = randomBytes(32).toString("base64url");
     await this.store.createSession(sha256(token), user.id, new Date(Date.now() + SESSION_DAYS * 86_400_000));
-    appendCookie(res, cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure));
+    appendCookie(res, cookie(COOKIE, token, SESSION_DAYS * 86_400, this.secure), cookie(STATE_COOKIE, "", 0, this.secure), cookie(STATE_COOKIE_OR, "", 0, this.secure));
   }
 
   async endSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -149,6 +151,77 @@ export class Auth extends Sessions {
     return { user: await this.upsertGoogle(info.sub, info.email, info.name), next: safeNext(Buffer.from(nextEncoded, "base64url").toString()) };
   }
 
+  // ---------------------------------------------------------------- OpenRouter (Sign In with OpenRouter, PKCE)
+  // No client registration or secret is required: the PKCE verifier is the only proof of identity,
+  // and the exchange hands back a real, user-controlled inference key billed to the user's credits.
+
+  openrouterRedirect(res: ServerResponse, next: string): void {
+    const state = randomBytes(16).toString("base64url");
+    const verifier = randomBytes(48).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const nextEncoded = Buffer.from(safeNext(next)).toString("base64url");
+    res.writeHead(302, {
+      Location: `https://openrouter.ai/auth?${new URLSearchParams({
+        callback_url: `${this.siteUrl}/auth/openrouter/callback`,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        state,
+      })}`,
+      "Set-Cookie": cookie(STATE_COOKIE_OR, `${state}.${verifier}.${nextEncoded}`, 600, this.secure),
+    });
+    res.end();
+  }
+
+  async openrouterCallback(req: IncomingMessage, url: URL): Promise<{ user: User; next: string }> {
+    const [state, verifier, nextEncoded = ""] = (readCookie(req, STATE_COOKIE_OR) ?? "").split(".");
+    // OpenRouter echoes `state` only when the user authorizes; a denial lands here with `error` instead.
+    if (state && url.searchParams.get("state") && url.searchParams.get("state") !== state) throw new AuthError(400, "Sign-in expired or was tampered with. Please try again.");
+    if (!verifier) throw new AuthError(400, "Sign-in expired. Please try again.");
+    const code = url.searchParams.get("code");
+    if (!code) throw new AuthError(400, url.searchParams.get("error") ?? "OpenRouter did not return a code.");
+    const tokenResp = await fetch("https://openrouter.ai/api/v1/auth/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" }),
+    }).then((r) => r.json() as Promise<{ key?: string; error?: string; message?: string }>);
+    if (!tokenResp.key) throw new AuthError(502, `OpenRouter sign-in failed (${tokenResp.error ?? tokenResp.message ?? "no key"}).`);
+    const key = tokenResp.key;
+    const user = await this.upsertOpenRouter(req, key);
+    const next = safeNext(Buffer.from(nextEncoded, "base64url").toString());
+    return { user, next };
+  }
+
+  async upsertOpenRouter(req: IncomingMessage, key: string): Promise<User> {
+    const sealed = seal(key);
+    const keyHash = createHash("sha256").update(key).digest("hex");
+    const current = await this.user(req);
+    if (current) {
+      current.openrouterKey = sealed;
+      await this.store.updateUser(current);
+      return current;
+    }
+    const email = `or_${keyHash.slice(0, 12)}@openrouter.user`;
+    const existing = await this.store.userByEmail(email);
+    if (existing) {
+      existing.openrouterKey = sealed;
+      await this.store.updateUser(existing);
+      return existing;
+    }
+    const created: User = { id: randomBytes(9).toString("base64url"), email, name: "OpenRouter user", openrouterKey: sealed, createdAt: new Date().toISOString() };
+    try {
+      await this.store.insertUser(created);
+      return created;
+    } catch (e) {
+      if (e instanceof DuplicateError) {
+        const u = (await this.store.userByEmail(email))!;
+        u.openrouterKey = sealed;
+        await this.store.updateUser(u);
+        return u;
+      }
+      throw e;
+    }
+  }
+
   async upsertGoogle(sub: string, emailRaw: string, name?: string): Promise<User> {
     const email = normalizeEmail(emailRaw)!;
     const user = (await this.store.userByGoogle(sub)) ?? (await this.store.userByEmail(email));
@@ -185,8 +258,8 @@ export class AuthError extends Error {
   }
 }
 
-export function publicUser(user: User | null): { email: string; name?: string; google: boolean } | null {
-  return user ? { email: user.email, ...(user.name ? { name: user.name } : {}), google: Boolean(user.google) } : null;
+export function publicUser(user: User | null): { email: string; name?: string; google: boolean; openrouter: boolean } | null {
+  return user ? { email: user.email, ...(user.name ? { name: user.name } : {}), google: Boolean(user.google), openrouter: Boolean(user.openrouterKey) } : null;
 }
 
 function googleConfig(): { clientId: string; clientSecret: string } | null {

@@ -115,29 +115,6 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-mono);
   --shadow-card: var(--shadow);
-  /*
-    shadcn/v0 component vocabulary (used by the primitives in src/components/ui).
-    These ALIAS the tokens above, so shadcn components inherit this app's palette and
-    its light/dark switching instead of shipping a second, conflicting set of colors.
-  */
-  --color-background: var(--paper);
-  --color-foreground: var(--ink);
-  --color-card: var(--panel);
-  --color-popover: var(--panel);
-  --color-popover-foreground: var(--ink);
-  --color-primary: var(--ink);
-  --color-primary-foreground: var(--paper);
-  --color-secondary: var(--panel-2);
-  --color-secondary-foreground: var(--ink);
-  --color-muted: var(--panel-2);
-  --color-muted-foreground: var(--ink-2);
-  --color-accent: var(--panel-2);
-  --color-accent-foreground: var(--ink);
-  --color-destructive: var(--fail);
-  --color-destructive-foreground: var(--paper);
-  --color-border: var(--line);
-  --color-input: var(--line);
-  --color-ring: var(--signal);
 }
 
 html,
@@ -269,20 +246,6 @@ button, a { transition-timing-function: var(--ease-in-out); }
 /* record-light pulse (brand mark) */
 @keyframes rec-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.25); opacity: 0.55; } }
 .rec-light { animation: rec-pulse 1.6s var(--ease-in-out) infinite; transform-origin: center; }
-
-/*
-  shadcn base: give a bare `border` a real color (components/ui uses `border` with no
-  color suffix). In @layer base it stays below `border-line`/`border-signal`/... in the
-  utilities layer, so existing elements that name a color are unaffected.
-*/
-@layer base {
-  *,
-  ::before,
-  ::after,
-  ::backdrop {
-    border-color: var(--color-border);
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,
