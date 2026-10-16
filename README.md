@@ -363,11 +363,23 @@ the 404, the fonts and the demo media — 33 files. `LAB_SITE_URL` is stamped in
 the sitemap and the JSON-LD; without it the build succeeds but advertises `localhost`.
 
 **What a static host cannot serve**, because it needs a live process: `/app` (the dashboard is a SPA
-that talks to `/api`), the auth pages (POST targets with per-session state), and `/api/*`. `vercel.json`
-therefore rewrites those paths to `$APP_ORIGIN` — the Node server (the Docker image, on ECS or
-Supabase). Set `APP_ORIGIN` to that origin in the Vercel project. Proxying rather than linking to a
+that talks to `/api`), the auth pages (POST targets with per-session state), and `/api/*`. `vercel.ts`
+therefore rewrites those paths to the Node server (the Docker image, on ECS or Supabase):
+
+```sh
+APP_ORIGIN=https://your-node-server.example   # in the Vercel project
+```
+
+Set `APP_ORIGIN` to that origin in the Vercel project. Proxying rather than linking to a
 second hostname keeps it same-origin, so the session cookie still applies and the signup form posts
 to a real handler.
+
+This is `vercel.ts`, not `vercel.json`, for a reason: a rewrite `destination` must be an absolute
+pathname or an external URL, so a static config file cannot interpolate `$APP_ORIGIN`. The rewrite
+simply never matched and every proxied path — including `/login` and `/signup` — fell through to the
+static 404. `vercel.ts` runs during the build, where `process.env` is available, and it fails the
+build loudly if `APP_ORIGIN` is unset rather than shipping a site whose sign-in buttons 404.
+`test/vercel-config.test.ts` locks all of that down.
 
 `test/prerender.test.ts` guards the export: every route exists, nothing leaks a `localhost` origin,
 no sitemap entry points at a page that was not written, and a re-run does not leave stale pages
