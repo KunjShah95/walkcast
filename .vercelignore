@@ -1,0 +1,22 @@
+# Vercel uploads the working directory, not the git index: `.gitignore` does not keep these out
+# of the upload. `chrome/` alone is ~437 MB of downloaded browser binaries and blew the 100 MB
+# limit. `results/` is deliberately NOT here: the build reads the published experiment from it
+# via siteFacts() to stamp real numbers into the marketing pages.
+node_modules/
+chrome/
+runs/
+recordings/
+.lab/
+dist/
+dashboard/dist/
+failure-lab.html
+walkcast.html
+
+# Secrets. Vercel variables live in the project settings; nothing from .env is uploaded.
+.env
+.env.*
+!.env.example
+
+# Only needed locally, and .git does not ignore them because they are untracked.
+.vercel/
+*.log
