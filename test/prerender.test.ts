@@ -14,19 +14,17 @@ after(() => rmSync(out, { recursive: true, force: true }));
 const written = prerender({ siteUrl, outDir: out });
 const at = (p: string) => readFileSync(join(out, p), "utf8");
 
+/** A static host resolves /guides from guides/index.html, so every route is a directory. */
+const routes = [
+  "/", "/how", "/lab", "/safety", "/pricing", "/guides",
+  ...GUIDES.map((g) => `/guides/${g.slug}`),
+  ...compareSlugs().map((s) => `/compare/${s}`),
+];
+const routeFile = (route: string) => (route === "/" ? "index.html" : `${route.replace(/^\//, "")}/index.html`);
+
 test("prerender writes every public page, the crawler files and the assets", () => {
-  // A static host resolves /guides from guides/index.html with no rewrite rules, so each route
-  // has to exist as a directory with an index.html — a missing one is a 404, not a soft failure.
-  const routes = [
-    "/", "/how", "/lab", "/safety", "/pricing", "/guides",
-    ...GUIDES.map((g) => `/guides/${g.slug}`),
-    ...compareSlugs().map((s) => `/compare/${s}`),
-  ];
   const files = ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md", "404.html", "favicon.svg"];
-  for (const route of routes) {
-    const file = route === "/" ? "index.html" : `${route.replace(/^\//, "")}/index.html`;
-    assert.ok(existsSync(join(out, file)), `missing ${file}`);
-  }
+  for (const route of routes) assert.ok(existsSync(join(out, routeFile(route))), `missing ${route}`);
   for (const f of files) assert.ok(existsSync(join(out, f)), `missing ${f}`);
   assert.equal(written.length, routes.length + files.length + 9, "every page, plus 5 demo/social assets and 4 fonts");
 });
@@ -56,6 +54,32 @@ test("each exported page carries one h1 and noindex only where it belongs", () =
   }
   assert.doesNotMatch(at("index.html"), /noindex/);
   assert.match(at("404.html"), /noindex, follow/);
+});
+
+test("no rendered page links to a crawler file", () => {
+  // sitemap.xml, llms.txt, robots.txt and pricing.md are served for crawlers, not for visitors.
+  // A footer link to them looks like a machine-generated site, and the 404 page advertising them
+  // is worse. They stay reachable by URL; they just are not advertised in the UI.
+  const pages = [...routes.map(routeFile), "404.html"];
+  for (const p of pages) {
+    const body = at(p).split("<body")[1] ?? "";
+    for (const m of body.matchAll(/href="([^"]*)"/g)) {
+      const href = m[1] ?? "";
+      assert.ok(!/\/(sitemap\.xml|llms\.txt|robots\.txt|pricing\.md)/.test(href), `${p} links to ${href}`);
+    }
+  }
+});
+
+test("the crawler files are still served and still declared", () => {
+  // Removing the links must not remove the files or the discovery hints — that would cost the
+  // citations the SEO work was for. Only the visible advertising goes.
+  for (const f of ["robots.txt", "sitemap.xml", "llms.txt", "pricing.md"]) {
+    assert.match(at(f), new RegExp(siteUrl.replace(/[/.]/g, "\\$&")), `${f} must carry the absolute origin`);
+  }
+  const home = at("index.html");
+  assert.match(home, /<link rel="sitemap"[^>]*href="\/sitemap\.xml">/);
+  assert.match(home, /rel="alternate"[^>]*href="[^"]*\/llms\.txt"/);
+  assert.match(at("robots.txt"), new RegExp(`Sitemap: ${siteUrl}/sitemap.xml`));
 });
 
 test("media and fonts are copied so the pages render without the Node server", () => {

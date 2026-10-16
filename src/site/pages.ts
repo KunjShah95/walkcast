@@ -353,7 +353,7 @@ ${o.head ?? ""}
 <a href="#main" class="eyebrow" style="position:absolute;left:-9999px">Skip to content</a>
 <header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${NAME} home">${MARK}<span>${NAME}</span></a><nav aria-label="Main">${nav}</nav></div></header>
 <main id="main">${o.body}</main>
-<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · <a href="https://opensource.org/licenses/MIT">MIT licensed</a></span><span><a href="/how">How</a> · <a href="/lab">Lab</a> · <a href="/safety">Safety</a> · <a href="/guides">Guides</a> · <a href="/pricing">Pricing</a> · <a href="/llms.txt">llms.txt</a> · <a href="/sitemap.xml">Sitemap</a></span></div></footer>
+<footer><div class="wrap"><span>© ${new Date().getFullYear()} ${NAME} · <a href="https://opensource.org/licenses/MIT">MIT licensed</a></span><span><a href="/how">How</a> · <a href="/lab">Lab</a> · <a href="/safety">Safety</a> · <a href="/guides">Guides</a> · <a href="/pricing">Pricing</a></span></div></footer>
 </body>
 </html>`;
 }
@@ -1299,8 +1299,7 @@ export function pricingPage(siteUrl: string, user: { email: string } | null): st
     <li><h3>Chromium</h3><p>Playwright's browser. The one that signs in and walks the pages.</p></li>
     <li><h3>ffmpeg with flite</h3><p>The spoken narration. Without it you still get the silent recording and the transcript.</p></li>
   </ol>
-  <p class="meta" style="margin-top:22px">Machine-readable copy for agents: <a href="/pricing.md">pricing.md</a></p>
-</div></section>
+  </div></section>
 
 <section class="band wash" id="pricing-faq"><div class="wrap">
   <h2>Price questions.</h2>
@@ -1370,9 +1369,8 @@ export function notFoundPage(siteUrl: string): string {
   <ul class="trust" style="margin-top:34px">
     ${links.map(([href, label]) => `<li class="card" style="padding:18px 20px"><a href="${href}"><strong style="display:block">${esc(label)}</strong></a></li>`).join("\n    ")}
   </ul>
-  <p style="margin-top:28px"><a class="btn" href="/sitemap.xml">Sitemap</a> <a class="btn small" href="/llms.txt">llms.txt</a></p>
-</div></section>`;
-  return layout({ siteUrl, path: "/404", title: `${title} · ${NAME}`, description: "That page is not here. Links to the Walkcast home page, guides, pricing and sitemap.", body, noindex: true });
+  </div></section>`;
+  return layout({ siteUrl, path: "/404", title: `${title} · ${NAME}`, description: "That page is not here. Links to the Walkcast home page, guides and pricing.", body, noindex: true });
 }
 
 export function sitemapXml(siteUrl: string): string {
