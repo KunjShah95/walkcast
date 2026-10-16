@@ -39,6 +39,7 @@ jobs:
           echo "LAB_CHROME_PATH=$(awk '{print $2}' cft.txt)" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm run ui:build
+      - run: npm run web:build
       - run: npm test
       - name: Migrations apply cleanly and are idempotent
         env:
