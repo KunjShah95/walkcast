@@ -14,3 +14,8 @@ recordings/
 .env*
 apps/desktop/src-tauri/target
 apps/desktop/src-tauri/gen
+
+# Tool output: design-review screenshots, browser-automation logs
+.impeccable/review/
+.impeccable/questions/
+.playwright-mcp/
