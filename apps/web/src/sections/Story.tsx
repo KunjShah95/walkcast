@@ -51,7 +51,7 @@ export function Outputs() {
     <section className="sec" id="features">
       <div className="wrap split">
         <Reveal>
-          <Eyebrow>One take</Eyebrow>
+          <Eyebrow n={1}>One take</Eyebrow>
           <h2>
             Record once. Get the <Tile icon={Play} tone="ochre" tilt={-6} fill /> video and the <Tile icon={Captions} tone="yellow" tilt={5} /> words.{" "}
             <span className="dim">Same run.</span>
@@ -183,7 +183,7 @@ export function Recorder() {
     <section className="sec" id="login">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow>Behind the login</Eyebrow>
+          <Eyebrow n={2}>Behind the login</Eyebrow>
           <h2>
             Records the pages <Tile icon={Lock} tone="ink" tilt={-6} /> only users see. <span className="dim">Your password <Tile icon={KeyRound} tone="green" tilt={5} /> never hits disk.</span>
           </h2>
@@ -338,7 +338,7 @@ const FLOW = [
   ["/pricing", "Pricing", "Opening the pricing page."],
   ["/contact", "Contact", "Opening the contact page."],
 ] as const;
-const FLOW_COLORS = ["#f0662f", "#7a5af8", "#2f6bf0", "#2c8a4a"];
+const FLOW_COLORS = ["#c8551e", "#9c5700", "#2d4f73", "#2c6a3d"];
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -375,7 +375,7 @@ export function Flow() {
     <section className="sec">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow>Narration</Eyebrow>
+          <Eyebrow n={3}>Narration</Eyebrow>
           <h2>
             Every <Tile icon={Globe} tone="blue" tilt={-6} /> page. <br />
             <span className="dim">One <Tile icon={Captions} tone="ink" tilt={5} /> voice-over.</span>

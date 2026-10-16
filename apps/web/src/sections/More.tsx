@@ -25,6 +25,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ISSUES_URL, LICENSE_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { BrandMark, DownloadButton, Eyebrow, GithubIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
+import { FAQ, HOWTO } from "../content.ts";
 
 /* ------------------------------------------------------------------ bento */
 
@@ -54,9 +55,9 @@ function Count({ to, className }: { to: number; className?: string }) {
 
 const STATES = [
   ["Recording", "#c0321c"],
-  ["Signing in", "#f6c343"],
-  ["Stopped safely", "#7a5af8"],
-  ["Done", "#2c8a4a"],
+  ["Signing in", "#d9a441"],
+  ["Stopped safely", "#9c5700"],
+  ["Done", "#2c6a3d"],
 ] as const;
 
 function Statuses() {
@@ -110,10 +111,11 @@ export function Bento() {
     <section className="sec" id="studio">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow>Features</Eyebrow>
+          <Eyebrow n={4}>The app</Eyebrow>
           <h2>
-            A whole <Tile icon={Clapperboard} tone="ink" tilt={-6} /> video team. <br />
-            <span className="dim">One <Tile icon={AppWindow} tone="yellow" tilt={5} /> app.</span>
+            Everything a <Tile icon={Clapperboard} tone="ink" tilt={-6} /> walkthrough needs.
+            <br />
+            <span className="dim">Nothing it <Tile icon={AppWindow} tone="yellow" tilt={5} /> doesn't.</span>
           </h2>
         </Reveal>
         <div className="bento">
@@ -240,7 +242,7 @@ const USES: { title: string; text: string; art: ReactNode }[] = [
         <i className="bar" style={{ left: 40, top: 76, width: "30%" }} />
         <i className="blk anim-a" style={{ left: 40, top: 100, width: "34%", height: 62, background: "#dce7fd" }} />
         <i className="blk anim-b" style={{ left: "47%", top: 100, width: "34%", height: 62, background: "#fde7c4" }} />
-        <span className="tag" style={{ right: 16, top: 14, color: "#2f6bf0" }}>Step 1 of 4</span>
+        <span className="tag" style={{ right: 16, top: 14, color: "#2d4f73" }}>Step 1 of 4</span>
       </>
     ),
   },
@@ -276,8 +278,8 @@ const USES: { title: string; text: string; art: ReactNode }[] = [
     art: (
       <>
         <div className="bw" />
-        <span className="tag" style={{ left: 40, top: 56, color: "#2c8a4a" }}>/pricing 200</span>
-        <span className="tag" style={{ left: 40, top: 90, color: "#2c8a4a" }}>/product 200</span>
+        <span className="tag" style={{ left: 40, top: 56, color: "#2c6a3d" }}>/pricing 200</span>
+        <span className="tag" style={{ left: 40, top: 90, color: "#2c6a3d" }}>/product 200</span>
         <span className="tag anim-pulse" style={{ left: 40, top: 124, color: "#c0321c" }}>/billing 500</span>
         <i className="blk" style={{ right: 36, top: 58, width: 70, height: 92, background: "#dcf3e3" }} />
       </>
@@ -320,9 +322,9 @@ export function Uses() {
       <div className="wrap uses-head">
         <Reveal>
           <h2>
-            Made for <Tile icon={Sparkles} tone="violet" tilt={-6} />
+            One recorder. <Tile icon={Sparkles} tone="violet" tilt={-6} />
             <br />
-            <span className="dim">every kind of <Tile icon={Play} tone="rec" tilt={5} fill /> tour.</span>
+            <span className="dim">Every kind of <Tile icon={Play} tone="rec" tilt={5} fill /> tour.</span>
           </h2>
         </Reveal>
         <button className="pill sm" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
@@ -356,9 +358,9 @@ export function Pricing() {
       <div className="wrap">
         <Reveal className="sec-head center">
           <h2>
-            Start <Tile icon={Gift} tone="green" tilt={-6} /> free.
+            Free to <Tile icon={Gift} tone="green" tilt={-6} /> use.
             <br />
-            <span className="dim"><Tile icon={Check} tone="ink" tilt={5} /> Stay free.</span>
+            <span className="dim">Free to <Tile icon={FileText} tone="ink" tilt={5} /> read.</span>
           </h2>
           <p className="lede">MIT licensed. No paid tier, no seat limit, no usage meter. Walkcast runs on your own machine, so your recordings and passwords stay there too.</p>
         </Reveal>
@@ -393,14 +395,6 @@ export function Pricing() {
 
 /* ------------------------------------------------------------------ faq */
 
-const FAQ: [string, string][] = [
-  ["Which computers does Walkcast run on?", "The desktop app installs on Windows 10 or 11, 64-bit. On macOS and Linux you can run it from source with Node.js 22, Rust and ffmpeg."],
-  ["Can it record pages behind a login?", "Yes. It finds the sign-in form, including two-step email-then-password forms, signs in with the credentials you give it, and then records the pages you only see when signed in."],
-  ["Is my password stored?", "No. It is held in memory for the recording only. Traces, captions and files on disk show a placeholder, and the narration never reads it out."],
-  ["Will it change anything on my site?", "After signing in it only follows links on the same site with ordinary page loads. It submits no forms, skips sign-out, delete, cancel and unsubscribe links, and respects robots.txt."],
-  ["What happens with CAPTCHAs or two-factor?", "The recorder stops and tells you. It never tries to get past a CAPTCHA, bot check or second-factor prompt."],
-  ["Does the narration make things up?", "No. Every line is written from what the browser actually did: which page it opened, which field it typed into, what it clicked and what the site answered."],
-];
 
 export function Faq() {
   const [open, setOpen] = useState(0);
@@ -408,7 +402,7 @@ export function Faq() {
     <section className="sec" id="faq">
       <div className="wrap faq">
         <Reveal>
-          <h2 className="faq-title">Questions.</h2>
+          <h2 className="faq-title">Before you<br /><span className="dim">press record.</span></h2>
           <p className="lede left">Everything you might want to know before your first recording.</p>
           <div className="ask">
             <b>Still have a question?</b>
@@ -477,11 +471,7 @@ const INSTALLERS = [
   },
 ] as const;
 
-const STEPS = [
-  ["Download", "Pick the .exe unless your IT team asked for the .msi."],
-  ["Run the installer", "WebView2 is fetched automatically if your PC does not have it yet."],
-  ["Paste a link", "Open Walkcast, paste your site's address and press Record."],
-] as const;
+const STEPS = HOWTO;
 
 /** Windows is the only packaged build; other systems are pointed at the source. */
 function useNotWindows() {
@@ -502,7 +492,7 @@ export function DownloadSection() {
     <section className="sec" id="download">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow>Download</Eyebrow>
+          <Eyebrow n={5}>Download</Eyebrow>
           <h2>
             Get Walkcast for <Tile icon={AppWindow} tone="blue" tilt={-6} /> Windows.
             <br />
@@ -561,9 +551,9 @@ export function DownloadSection() {
 
 const HUB = [
   { label: "walkthrough.mp4", meta: "1:11 · H.264", icon: Film, color: "#c0321c", side: "l", y: 0.28 },
-  { label: "captions.vtt", meta: "13 lines", icon: Captions, color: "#7a5af8", side: "l", y: 0.72 },
-  { label: "transcript.txt", meta: "6 pages", icon: FileText, color: "#2f6bf0", side: "r", y: 0.28 },
-  { label: "narration.wav", meta: "voice · slt", icon: AudioLines, color: "#2c8a4a", side: "r", y: 0.72 },
+  { label: "captions.vtt", meta: "13 lines", icon: Captions, color: "#9c5700", side: "l", y: 0.72 },
+  { label: "transcript.txt", meta: "6 pages", icon: FileText, color: "#2d4f73", side: "r", y: 0.28 },
+  { label: "narration.wav", meta: "voice · slt", icon: AudioLines, color: "#2c6a3d", side: "r", y: 0.72 },
 ] as const;
 
 export function Closing() {

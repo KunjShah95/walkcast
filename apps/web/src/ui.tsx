@@ -40,15 +40,21 @@ export function Reveal({ children, delay = 0, className, as = "div" }: { childre
   );
 }
 
-export function Eyebrow({ children }: { children: ReactNode }) {
-  return <p className="eyebrow">{children}</p>;
+/** A case-file section mark: a mono number, then the section's name. */
+export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <p className="eyebrow">
+      <span className="eyebrow-n">§ {String(n).padStart(2, "0")}</span>
+      {children}
+    </p>
+  );
 }
 
 export function DownloadButton({ big = false, label = "Download for Windows", className = "" }: { big?: boolean; label?: string; className?: string }) {
   return (
-    <motion.a className={`pill solid ${big ? "big" : ""} ${className}`} href={WINDOWS_EXE_URL} whileTap={{ scale: 0.96 }}>
-      <Download size={big ? 18 : 16} strokeWidth={2.2} />
+    <motion.a className={`pill rec ${big ? "big" : ""} ${className}`} href={WINDOWS_EXE_URL} whileTap={{ scale: 0.96 }}>
       {label}
+      <Download size={big ? 17 : 15} strokeWidth={2.2} />
     </motion.a>
   );
 }

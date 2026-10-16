@@ -88,6 +88,15 @@ const STRIP = [
   [Globe, "Page list"],
 ] as const;
 
+/** A citation chip: points a claim at the line of the real recording that proves it. */
+function Ex({ n, at, seek }: { n: number; at: number; seek: (i: number) => void }) {
+  return (
+    <button type="button" className="ex" onClick={() => seek(at)} aria-label={`Play exhibit ${n} in the recording`}>
+      EX {String(n).padStart(2, "0")}
+    </button>
+  );
+}
+
 export function Hero() {
   const still = useReducedMotion();
   const cues = useCues("/assets/demo.vtt");
@@ -101,6 +110,16 @@ export function Hero() {
     if (el && list.current) list.current.scrollTo({ top: el.offsetTop - 8, behavior: "smooth" });
   }, [active]);
 
+  /** Seek the demo to a narration line and play it: what the EX citations in the lede do. */
+  const seek = (i: number) => {
+    const v = video.current;
+    const c = cues[i];
+    if (!v) return;
+    document.getElementById("demo")?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
+    if (c) v.currentTime = c.start + 0.01;
+    v.play().catch(() => {});
+  };
+
   const line = (i: number) => ({
     initial: still ? false : { opacity: 0, y: 28, filter: "blur(10px)" },
     animate: { opacity: 1, y: 0, filter: "blur(0px)" },
@@ -110,6 +129,9 @@ export function Hero() {
   return (
     <section className="hero" id="top">
       <div className="wrap">
+        <motion.p className="case mono" {...line(0)}>
+          <span className="case-dot" /> Case 0412 · Estate360 · 6 pages · 1:11 · unedited
+        </motion.p>
         <h1>
           <motion.span className="line" {...line(0)}>
             Paste a <Tile icon={Link} tone="ink" tilt={-6} /> link.
@@ -117,12 +139,13 @@ export function Hero() {
           <motion.span className="line" {...line(1)}>
             Get it <Tile icon={Play} tone="rec" tilt={5} fill /> narrated.
           </motion.span>
-          <motion.span className="line grad" {...line(2)}>
-            No mic. No editor.
+          <motion.span className="line dim" {...line(2)}>
+            No mic. No <span className="strike">editor</span>.
           </motion.span>
         </h1>
         <motion.p className="lede" {...line(3)}>
-          A real browser signs in, walks your pages and hands back an MP4 with a spoken voice-over, captions and a transcript. One Windows app, from a single link.
+          A real browser signs in <Ex n={1} at={0} seek={seek} />, walks your pages <Ex n={5} at={4} seek={seek} /> and hands back an MP4 with a spoken
+          voice-over, captions and a transcript <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
         </motion.p>
         <motion.div className="actions" {...line(4)}>
           <DownloadButton big />
@@ -132,14 +155,15 @@ export function Hero() {
         </motion.p>
 
         <motion.div
-          className="ring"
+          className="ring exhibit"
           id="demo"
           initial={still ? false : { opacity: 0, y: 60, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 1.1, ease: [0.2, 0.7, 0.2, 1], delay: 0.55 }}
         >
+          <span className="exhibit-tab mono">Exhibit A · real output, unedited</span>
           <div className="app">
-            <WindowBar title={<span className="mono">Estate360 · real output, unedited</span>}>
+            <WindowBar title={<span className="mono">agentic-crm-henna.vercel.app</span>}>
               <span className="live">REC</span>
             </WindowBar>
             <div className="app-body">
