@@ -86,7 +86,7 @@ export class Worker {
     this.wake?.();
     const cur = this.current;
     if (cur) {
-      const finished = await Promise.race([cur.done.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), graceMs))]);
+      const finished = await Promise.race([cur.done.then(() => true).catch(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), graceMs))]);
       if (!finished) {
         cur.abort.abort(new Error("worker shutting down"));
         await cur.done.catch(() => undefined);
@@ -151,7 +151,12 @@ export class Worker {
           if (!mine) abort.abort(new Error("lease lost"));
           else confirmed = Date.now();
         },
-        () => undefined,
+        (e) => {
+          // A failed heartbeat is indistinguishable from a lost lease from the worker's point
+          // of view, so treat it as unconfirmed (the margin check aborts if it persists) but
+          // keep the reason in the log instead of swallowing it silently.
+          log.warn("job.heartbeat_failed", { job: job.id, error: String(e) });
+        },
       );
     }, Math.max(1000, this.leaseMs / 3));
     const margin = setInterval(() => {
@@ -186,7 +191,7 @@ export class Worker {
   }
 
   private async record(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
-    const input = job.input as { url: string; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice };
+    const input = job.input as { url: string; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string };
     const password = job.secret ? open(job.secret) : undefined;
     // Object storage: record into a temp dir and upload. Local: write straight into recordings/.
     const outDir = this.o.media.kind === "local" ? join(this.o.root, "recordings") : mkdtempSync(join(tmpdir(), "walkcast-"));
@@ -197,6 +202,7 @@ export class Worker {
         ...(password ? { password } : {}),
         maxPages: Number(input.maxPages ?? 8),
         ...(input.voice ? { voice: input.voice } : {}),
+        ...(input.ttsProvider ? { ttsProvider: input.ttsProvider } : {}),
         authorized: true,
         outDir,
         blockPrivate: Boolean(input.blockPrivate),
@@ -226,7 +232,7 @@ export class Worker {
       try {
         const u = await this.o.store.userById(job.owner);
         if (u?.openrouterKey) credentials.OPENROUTER_API_KEY = open(u.openrouterKey);
-        if (u?.chatgpt) {
+        if (u?.chatgpt?.refreshToken) {
           const cg = await import("../llm/chatgpt-oauth.ts");
           credentials.CHATGPT_ACCESS_TOKEN = await cg.ensureChatGPTAccessToken(u, this.o.store);
         }

@@ -202,9 +202,9 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
 async function scriptedSession(spec: AgentSpec & { kind: "scripted" }, runDir: string, video: boolean): Promise<Session> {
   const b = await browser();
   const context = await b.newContext({
-    viewport: { width: 1280, height: 800 },
+    viewport: { width: 1920, height: 1080 },
     serviceWorkers: "block",
-    ...(video ? { recordVideo: { dir: runDir, size: { width: 1280, height: 800 } } } : {}),
+    ...(video ? { recordVideo: { dir: runDir, size: { width: 1920, height: 1080 } } } : {}),
   });
   const page = await context.newPage();
   return {
@@ -219,7 +219,7 @@ async function scriptedSession(spec: AgentSpec & { kind: "scripted" }, runDir: s
 /** Stagehand drives Chrome; Playwright attaches to the same browser over CDP to capture. */
 async function stagehandSession(spec: AgentSpec & { kind: "stagehand" }, gateway: ModelGateway): Promise<Session> {
   const port = await freePort();
-  const shBrowser = await localBrowser.launch({ headless: true, port, executablePath: chromePath(), viewport: { width: 1280, height: 800 } });
+  const shBrowser = await localBrowser.launch({ headless: true, port, executablePath: chromePath(), viewport: { width: 1920, height: 1080 } });
   let pw: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
   let stagehand: Stagehand | undefined;
   try {

@@ -13,5 +13,5 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "vite.config.ts", "build.ts"]
+  "include": ["src", "vite.config.ts", "build.ts", "indexnow.ts"]
 }

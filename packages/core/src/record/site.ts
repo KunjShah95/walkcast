@@ -5,7 +5,8 @@ import { type Page } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
-import { buildMedia, speechMs, type MediaResult, type Voice } from "./media.ts";
+import { buildMedia, speechMs, localVoice, type MediaResult, type Voice } from "./media.ts";
+import { engineFor, type VoiceEngine } from "./voice.ts";
 import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";
@@ -40,6 +41,8 @@ export interface RecordOptions {
   onProgress?: (message: string) => void;
   /** Narration voice (default: LAB_VOICE, else slt). */
   voice?: Voice;
+  /** TTS provider override (env default if omitted). */
+  ttsProvider?: string;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -116,8 +119,8 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
     const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      recordVideo: { dir, size: { width: 1280, height: 800 } },
+      viewport: { width: 1920, height: 1080 },
+      recordVideo: { dir, size: { width: 1920, height: 1080 } },
       serviceWorkers: "block",
     });
     contextRef = context;
@@ -149,7 +152,10 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   recorder.flush();
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
   options.onProgress?.("Adding narration and encoding the video");
-  const media = await buildMedia(dir, captions, options.voice);
+  const engine = options.ttsProvider
+    ? (engineFor(options.ttsProvider, options.voice ?? "slt") ?? localVoice(options.voice ?? "slt"))
+    : undefined;
+  const media = await buildMedia(dir, captions, options.voice ?? "slt", engine ?? undefined);
   const result: RecordingResult = {
     ...(options.owner ? { owner: options.owner } : {}),
     ...(blockedRequests.length ? { blockedRequests } : {}),

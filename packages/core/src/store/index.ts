@@ -22,8 +22,12 @@ export function createStore(root: string, url = databaseUrl()): Store {
   // Accounts from before the store existed (.lab/users.json) carry over on first start.
   const legacy = join(root, ".lab", "users.json");
   if (!existsSync(file) && existsSync(legacy)) {
-    const old = JSON.parse(readFileSync(legacy, "utf8")) as { users?: unknown[]; sessions?: unknown[] };
-    writeFileSync(file, JSON.stringify({ users: old.users ?? [], sessions: old.sessions ?? [] }), { mode: 0o600 });
+    try {
+      const old = JSON.parse(readFileSync(legacy, "utf8")) as { users?: unknown[]; sessions?: unknown[] };
+      writeFileSync(file, JSON.stringify({ users: old.users ?? [], sessions: old.sessions ?? [] }), { mode: 0o600 });
+    } catch {
+      // A corrupt legacy file shouldn't block startup; ignore and start with an empty store.
+    }
   }
   return new FileStore(file);
 }

@@ -141,7 +141,34 @@ The table is the design review: each row must have a *mechanism* column, not a h
 - **No exactly-once ingestion of model calls:** third-party call, honestly at-least-once, bounded
   by tenant ceilings (§3). Pretending otherwise is the classic distributed-systems lie.
 
-## 7. One-line summaries
+## 7. Desktop application shape
+
+The desktop app (Tauri shell + sidecar) runs the same `createApp` handler on a free
+`127.0.0.1` port with the app's data directory as the working root. Consequences for the
+guarantees above:
+
+- **Store**: `FileStore` only (Postgres ignored on desktop); single process, so the
+  `chain` serialization in `FileStore.write` is sufficient. Jobs that were `running` when the
+  app quit are reset to `queued` on next start (constructor sweep).
+- **Worker**: runs in-process (`LAB_WORKER` default on); `closeWarmBrowser()` is called on
+  stop so Chromium doesn't outlive the app.
+- **Media**: `LocalMedia` only; recordings live under `<data>/recordings`.
+- **Auth**: optional (loopback → no sign-in by default); Supabase Auth via the system
+  browser when configured, PKCE callback polled by the app window.
+- **Secrets**: `LAB_SECRET_KEY` is copied into the app at stage time (public by design);
+  site passwords are sealed and cleared on job end, exactly as in production.
+- **Voice**: local flite (ffmpeg in the installer) or Windows SAPI; cloud providers
+  (Sarvam, Bhashini, ElevenLabs, Google, Azure, Polly, OpenAI, Murf, Reverie, custom)
+  are selectable per recording in Settings/Record, with keys read from the environment at
+  launch. `LAB_TTS_PROVIDER` sets the default.
+- **Browser**: Chromium downloads on first launch into `<data>/browsers`; recordings asked
+  for before it finishes are refused with a clear message.
+
+The desktop is a *deployment mode*, not a different product: every guarantee in §§1–6 holds
+unchanged, with Postgres replaced by the FileStore and the worker colocated with the web
+tier.
+
+## 8. One-line summaries
 
 - Claims: exactly-once (SKIP LOCKED + PK), tested.
 - Execution: at-least-once; effects idempotent where a second run would be user-visible.

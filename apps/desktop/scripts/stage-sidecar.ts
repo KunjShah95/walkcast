@@ -46,7 +46,7 @@ const dotenv: Record<string, string> = {};
 try {
   for (const line of readFileSync(join(REPO, ".env"), "utf8").split(/\r?\n/)) {
     const m = /^(?:export\s+)?([A-Z_]+)=(.*)$/.exec(line.trim());
-    if (m) dotenv[m[1]!] = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
+    if (m) dotenv[m[1]!] = m[2]!.replace(/^(["'])(.*)\1$/, "$2").trim();
   }
 } catch {
   /* no .env */

@@ -108,7 +108,7 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
     "-i", join(dir, "captions.vtt"),
     "-filter_complex", `[0:v]tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
     "-map", "[v]", "-map", "1:a", "-map", "2:s",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
     "-c:a", "aac", "-b:a", "96k",
     "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
     "-movflags", "+faststart",

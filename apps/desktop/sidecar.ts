@@ -33,10 +33,27 @@ try {
   const file = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "desktop.env");
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
     const m = /^(SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_PUBLISHABLE_KEY)=(.+)$/.exec(line.trim());
-    if (m) process.env[m[1]!] ??= m[2]!;
+    if (m) process.env[m[1]!] ??= m[2]!.trim();
   }
 } catch {
   /* no desktop.env: accounts are local to this machine */
+}
+// Validate the Supabase URL so a stray space or typo can't silently break sign-in.
+if (process.env.SUPABASE_URL) {
+  const url = process.env.SUPABASE_URL;
+  let ok = true;
+  try {
+    const u = new URL(url);
+    ok = (u.protocol === "https:" || u.protocol === "http:") && !!u.host;
+  } catch {
+    ok = false;
+  }
+  if (!ok || url !== url.trim()) {
+    console.error(`sidecar: SUPABASE_URL is invalid ("${url}"); falling back to local accounts`);
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+    delete process.env.SUPABASE_PUBLISHABLE_KEY;
+  }
 }
 // Local data: these must be unset before the store and auth modules read them.
 for (const key of ["SUPABASE_DB_URL", "DATABASE_URL", "LAB_SITE_URL", "LAB_HOST"]) {
@@ -51,7 +68,9 @@ mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true });
 const { installChromium } = await import("../../packages/core/src/record/browser-install.ts");
 const { serveDashboard } = await import("./server/server.ts");
 
-const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: false, desktop: true });
+// One person on one machine: the dashboard opens without signing in. Accounts stay available
+// (Sign in / Create account); LAB_AUTH=on makes them required.
+const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: process.env.LAB_AUTH === "on", desktop: true });
 installChromium();
 
 let stopping = false;

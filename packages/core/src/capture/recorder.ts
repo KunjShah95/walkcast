@@ -172,8 +172,17 @@ export class Recorder {
     });
   }
 
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   push(event: TraceEvent): void {
     this.events.push(event);
+    // Write the trace incrementally (debounced) so a dashboard polling during a run can
+    // see that the agent actually reached the site and what it did, instead of waiting
+    // for the whole run to finish.
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      try { this.flush(); } catch { /* best effort */ }
+    }, 400);
   }
 
   steps(): StepEvent[] {
@@ -189,6 +198,7 @@ export class Recorder {
   }
 
   flush(): string {
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
     const path = join(this.runDir, "trace.jsonl");
     writeFileSync(path, this.events.map((e) => JSON.stringify(scrub(e))).join("\n") + "\n");
     return path;

@@ -51,17 +51,17 @@ export function Nav() {
   return (
     <header className={`nav ${scrolled ? "scrolled" : ""}`}>
       <div className="wrap nav-row">
-        <a className="brand" href="#top" aria-label="Walkcast home">
+        <a className="brand" href="/#top" aria-label="Walkcast home">
           <BrandMark />
           walkcast
         </a>
         <nav className="nav-links" aria-label="Main">
-          <a href="#features">Features</a>
-          <a href="#login">Logins</a>
-          <a href="#uses">Use cases</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#download">Download</a>
-          <a href="#faq">FAQ</a>
+          <a href="/#features">Features</a>
+          <a href="/#login">Logins</a>
+          <a href="/#uses">Use cases</a>
+          <a href="/#pricing">Pricing</a>
+          <a href="/#download">Download</a>
+          <a href="/#faq">FAQ</a>
         </nav>
         <AnimatePresence mode="popLayout" initial={false}>
           {past ? (
@@ -69,7 +69,7 @@ export function Nav() {
               <DownloadButton />
             </motion.div>
           ) : (
-            <motion.a key="light" className="pill" href="#download" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2 }}>
+            <motion.a key="light" className="pill" href="/#download" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.2 }}>
               Download
             </motion.a>
           )}

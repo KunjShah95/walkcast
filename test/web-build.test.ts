@@ -43,3 +43,29 @@ test("web:build prerenders the page and writes the crawler files", { timeout: 18
   assert.match(read("llms-full.txt"), /### Is my password stored\?/);
   assert.match(read("404.html"), /noindex/);
 });
+
+test("every route is its own prerendered, canonical, crawlable page", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const { INDEXNOW_KEY } = await import("../apps/web/src/seo.ts");
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
+  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+  const sitemap = read("sitemap.xml");
+  const llms = read("llms.txt");
+  const titles = new Set<string>();
+  for (const r of ROUTES) {
+    const loc = r.path === "/" ? `${SITE}/` : `${SITE}${r.path}`;
+    const html = read(r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
+    assert.match(html, /<div id="root"><header/, `${r.path} is prerendered`);
+    assert.ok(html.includes(`<link rel="canonical" href="${loc}">`), `${r.path} has its own canonical`);
+    const title = /<title>(.*?)<\/title>/.exec(html)![1]!;
+    assert.ok(!titles.has(title), `${r.path} has a unique title`);
+    titles.add(title);
+    assert.ok(r.description.length <= 160, `${r.path} description fits a snippet (${r.description.length})`);
+    assert.equal((html.match(/<h1[\s>]/g) ?? []).length, 1, `${r.path} has one h1`);
+    const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as { "@graph": { "@type": string }[] };
+    assert.ok(ld["@graph"].some((n) => n["@type"] === "BreadcrumbList"), `${r.path} has breadcrumbs`);
+    assert.ok(sitemap.includes(`<loc>${loc}</loc>`), `${r.path} is in the sitemap`);
+    assert.ok(llms.includes(loc), `${r.path} is linked from llms.txt`);
+  }
+  assert.equal(read(`${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
+});

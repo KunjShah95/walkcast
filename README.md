@@ -44,6 +44,18 @@ Environment variables you may want (none are required to start):
 | `LAB_CHROME_PATH` | Chrome for Testing, for the Stagehand agents |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Live model runs (`npm run lab -- providers` lists them all) |
 | `LAB_VOICE` | Narration voice: `slt` (default, female), `awb`, `kal`, `rms`; on Windows without flite these pick a female or male system voice |
+| `LAB_TTS_PROVIDER` | TTS engine for narration: `flite` (default), `sarvam`, `bhashini`, `elevenlabs`, `google`, `azure`, `awspolly`/`polly`, `openai`, `murf`, `reverie`, `custom`/`maya`. Selectable per recording in the dashboard Settings/Record page too. |
+| `LAB_TTS_LANGUAGE` | Language code for cloud TTS (e.g. `hi`, `en-IN`, `ta`). Provider-specific defaults apply. |
+| `LAB_TTS_ENDPOINT`, `LAB_TTS_API_KEY` | Custom/Maya TTS endpoint + bearer key. |
+| `SARVAM_API_KEY` | Sarvam TTS + STT. |
+| `BHASHINI_API_KEY` (or `ULCA_API_KEY`), `BHASHINI_USER_ID` (or `ULCA_USER_ID`) | Bhashini (Govt of India) TTS. |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | ElevenLabs TTS. |
+| `GOOGLE_TTS_API_KEY` (or `GOOGLE_CLOUD_API_KEY`), `GOOGLE_TTS_VOICE` | Google Cloud TTS. |
+| `AZURE_TTS_KEY` (or `AZURE_SPEECH_KEY`), `AZURE_TTS_REGION`, `AZURE_TTS_VOICE` | Azure TTS. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_POLLY_VOICE` | AWS Polly TTS (needs AWS CLI). |
+| `OPENAI_API_KEY`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE` | OpenAI TTS. |
+| `MURF_API_KEY`, `MURF_VOICE` | Murf AI TTS. |
+| `REVERIE_API_KEY`, `REVERIE_APP_ID`, `REVERIE_SPEAKER` | Reverie TTS. |
 
 ## Walkcast Lab
 
@@ -321,16 +333,25 @@ How it works (`packages/core/src/record/`):
 - **Narration** (`narration.ts`) is written only from recorded events: "Opening the leads page",
   "Typing the username into "Email"", "Sign-in succeeded". A password is announced as entered but
   never spoken.
-- **Audio and video** (`media.ts`): each line is spoken with ffmpeg's built-in flite voice
-  (`LAB_VOICE`, default `slt`). The browser **pauses after each action for as long as its line
-  takes to say** (the exact clip length, measured once and cached), so speech and video stay
-  within a few hundred ms. The clips are mixed with `adelay`/`amix` and muxed into the MP4.
-  Without ffmpeg/flite you still get the WebM video and captions.
+- **Audio and video** (`media.ts`): each line is spoken by a TTS engine. By default ffmpeg's
+  built-in flite voice (`LAB_VOICE`, default `slt`); on Windows without flite, the system
+  speech engine (SAPI). Cloud providers (Sarvam, Bhashini, ElevenLabs, Google Cloud, Azure,
+  AWS Polly, OpenAI, Murf, Reverie, or any custom/Maya endpoint) are selected with
+  `LAB_TTS_PROVIDER` or per recording in the dashboard's Settings/Record page, and support
+  Indian and other languages (`LAB_TTS_LANGUAGE`). The browser **pauses after each action for
+  as long as its line takes to say** (the exact clip length, measured once and cached), so
+  speech and video stay within a few hundred ms. The clips are mixed with `adelay`/`amix` and
+  muxed into the MP4. Without ffmpeg/flite (and no cloud key) you still get the WebM video
+  and captions.
 
 Guardrails: an explicit authorization attestation is required; the recorder never bypasses
 CAPTCHA or 2FA (it stops and says so); after sign-in it submits no forms, makes GET navigations
 only, skips sign-out/delete/cancel/unsubscribe links, honours `robots.txt` and paces requests;
 credentials are registered as secrets, so nothing on disk contains them.
+
+**Speech-to-text:** `sarvamTranscribe(audioPath, language)` (Sarvam Saaras) is available in
+`packages/core/src/record/voice.ts` for transcribing recorded audio into text, enabling
+captions or transcripts in any supported language.
 
 ## Two apps: the website and the desktop app
 
