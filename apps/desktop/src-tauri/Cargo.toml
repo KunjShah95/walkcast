@@ -1,6 +1,6 @@
 [package]
 name = "walkcast"
-version = "0.1.2"
+version = "0.2.1"
 description = "Walkcast desktop app"
 authors = ["you"]
 license = ""
