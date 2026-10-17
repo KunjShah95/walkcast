@@ -8,7 +8,7 @@
 //
 // Writes WALKCAST_FFMPEG to the environment (and to GITHUB_ENV, when running in CI).
 
-import { chmodSync, mkdirSync, rmSync, statSync, writeFileSync, appendFile } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +62,7 @@ console.log(`ffmpeg ${asset} (${mb} MB) -> ${exe}`);
 console.log(`license -> ${license}`);
 
 if (process.env.GITHUB_ENV) {
-  await appendFile(process.env.GITHUB_ENV, `WALKCAST_FFMPEG=${exe}\n`);
+  appendFileSync(process.env.GITHUB_ENV, `WALKCAST_FFMPEG=${exe}\n`);
 } else {
   console.log(`WALKCAST_FFMPEG=${exe}`);
 }
