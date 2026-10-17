@@ -34,6 +34,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The store/job tests drive routes that serve the built dashboard.
+      - run: npm run ui:build
       - name: Run migrations
         run: npm run lab -- db migrate
       - name: Run PgStore tests
