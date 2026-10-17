@@ -51,7 +51,7 @@ Commands:
                                         pass^k table for every fixture × agent; exits 1 on any failure
                                         of the last agent listed
   experiment [--task t] [--scenarios singles|pairs] [--baseline id] [--candidates a,b] [--seeds n]
-      [--trials k] [--concurrency c] [--model-mode m] [--agent-model spec] [--stagehand-model spec] [--out dir]
+      [--trials k] [--concurrency c] [--model-mode m] [--agent-model spec] [--stagehand-model spec] [--out dir] [--live]
                                         Full validation experiment (docs/ASSESSMENT.md §7). Writes
                                         summary.md with Wilson 95% intervals and the false-success rate.
 
@@ -126,6 +126,7 @@ const { positionals, values } = parseArgs({
     // New failures go to runs/_fixtures; pass --fixtures fixtures to add one to the committed CI gate.
     fixtures: { type: "string", default: join("runs", "_fixtures") },
     out: { type: "string" },
+    live: { type: "boolean", default: false },
     screenshots: { type: "boolean", default: false },
     video: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -252,6 +253,11 @@ async function main(): Promise<number> {
       console.log(`  voice: ${hasFlite() ? "flite" : sapiAvailable() ? "Windows speech" : "none"}; narration ${canNarrate() ? "OK" : "MISSING (captions only)"}`);
       const gitInfo = spawnSync("git", ["status","--porcelain"], { cwd: process.cwd(), encoding: "utf8" });
       const dirty = gitInfo.status === 0 ? gitInfo.stdout.split(/\r?\n/).filter(Boolean).length : 0;
+      const _store = (await import("../../packages/core/src/store/index.ts")).createStore(process.cwd());
+      console.log(`  store: ${_store.kind} (${_store.kind === "file" ? "single-process" : "shared"})`);
+
+      console.log(`  worker leases: tracked by the store (queueDepth=${await _store.queueDepth().catch(() => "?")})`);
+      await _store.close().catch(() => undefined);
       console.log(`  repo dirty files: ${dirty} (WIP is expected; not an error)`);
       if (major < 22) return 1;
       return 0;
@@ -411,6 +417,7 @@ async function main(): Promise<number> {
         candidates: values.candidates!.split(","),
         ...(modelMode() ? { modelMode: modelMode() } : {}),
         ...(models() ? { models: models() } : {}),
+        live: values.live,
         outDir: out,
       });
       return 0;

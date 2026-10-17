@@ -172,3 +172,21 @@ export function renarrate(id: string, captions: { start: number; end: number; te
 export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSummary> {
   return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
 }
+
+/** URL for a recording's transcript export in the requested format. */
+export function transcriptUrl(id: string, format: "srt" | "vtt" | "json"): string {
+  return `/api/recordings/${encodeURIComponent(id)}/transcript?format=${format}`;
+}
+
+/** Generate captions from the recording's audio via STT. */
+export async function sttCaptions(id: string, language = "unknown"): Promise<RecordingSummary> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/captions/stt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ language }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.recording) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  return body.recording;
+}

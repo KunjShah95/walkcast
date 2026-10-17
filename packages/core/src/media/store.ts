@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { extname, join } from "node:path";
 import { presignGet, putObject, type S3Config } from "./s3.ts";
 
@@ -67,7 +67,6 @@ export class S3Media implements MediaStore {
     for (const file of files) {
       const path = join(localDir, file);
       if (!existsSync(path)) continue;
-      const body = readFileSync(path);
       const type = MEDIA_TYPES[extname(file)] ?? "application/octet-stream";
       const key = this.key(id, file);
       // Transient network hiccups (TLS reset, S3 outage, expired role creds mid-batch) must not
@@ -78,7 +77,7 @@ export class S3Media implements MediaStore {
         try {
           // Refresh credentials between attempts in case the first one lapsed mid-upload.
           const currentCfg = await this.config();
-          await putObject(currentCfg, key, body, type);
+          await putObject(currentCfg, key, createReadStream(path), type);
           last = undefined;
           break;
         } catch (e) {

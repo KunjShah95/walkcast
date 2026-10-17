@@ -11,11 +11,12 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
   const [agent, setAgent] = useState("all");
   const [fault, setFault] = useState("all");
   const [task, setTask] = useState("all");
-  const tasks = useMemo(() => [...new Set(index.runs.map((r) => r.task))], [index]);
-  const agents = useMemo(() => [...new Set(index.runs.map((r) => r.agent))].sort(), [index]);
-  const faults = useMemo(() => [...new Set(index.runs.map((r) => r.fault))], [index]);
+  const runsAll = index.runs ?? [];
+  const tasks = useMemo(() => [...new Set(runsAll.map((r) => r.task))], [index]);
+  const agents = useMemo(() => [...new Set(runsAll.map((r) => r.agent))].sort(), [index]);
+  const faults = useMemo(() => [...new Set(runsAll.map((r) => r.fault))], [index]);
 
-  const runs = index.runs.filter(
+  const runs = runsAll.filter(
     (r) =>
       (verdict === "all" || (verdict === "false-success" ? r.symptoms.includes("false-success") : r.verdict === verdict)) &&
       (agent === "all" || r.agent === agent) &&

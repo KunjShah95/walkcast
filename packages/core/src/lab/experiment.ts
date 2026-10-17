@@ -53,6 +53,8 @@ export interface ExperimentOptions {
   /** LLM agents: model mode for new runs (default live). Fixture replays follow replayFixture's default. */
   modelMode?: GatewayMode;
   models?: ModelSelection;
+  /** Run the live-LLM arm: replay fixtures against real providers instead of recorded model calls. */
+  live?: boolean;
 }
 
 export async function runExperiment(options: ExperimentOptions): Promise<string> {
@@ -93,13 +95,14 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const fixtures: Fixture[] = [];
   for (const r of baselineRuns.filter((r) => r.diagnosis.verdict === "fail" && !r.agentError)) fixtures.push(await writeFixture(r, task, fixturesDir));
   log(`phase 2: replaying ${fixtures.length} fixtures × ${trials} trials with ${baseline}`);
-  const reproduction = await pool(fixtures, concurrency, (f) => replayFixture(f, baseline, trials, runsDir));
+  const replayMode = options.live ? "live" : options.modelMode === "scripted" ? "scripted" : undefined;
+  const reproduction = await pool(fixtures, concurrency, (f) => replayFixture(f, baseline, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}) }));
 
   // ---- Phase 3: regression comparison across agent versions
   const comparisons: ReplaySummary[] = [...reproduction];
   for (const agent of candidates) {
     log(`phase 3: replaying ${fixtures.length} fixtures × ${trials} trials with ${agent}`);
-    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir, { ...(options.modelMode === "scripted" ? { modelMode: "scripted" as const } : {}), ...(options.models ? { models: options.models } : {}) }))));
+    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}) }))));
   }
   log(`phase 3: control runs (fault=none) for ${candidates.join(", ")}`);
   const controlJobs = candidates.flatMap((agent) => Array.from({ length: seeds }, (_, i) => ({ agent, seed: i + 1 })));
@@ -117,6 +120,7 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
       agents: Object.fromEntries([baseline, ...candidates].map((a) => [a, resolveAgent(a)])),
       modelMode: options.modelMode ?? null,
       models: options.models ?? null,
+      live: options.live ?? false,
       browserVersion: baselineRuns[0]?.browserVersion ?? "unknown",
       node: process.version,
       caveat: caveat([baseline, ...candidates], options.modelMode),

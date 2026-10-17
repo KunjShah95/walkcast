@@ -1,0 +1,335 @@
+{
+  "meta": {
+    "startedAt": "2026-10-17T06:25:18.713Z",
+    "finishedAt": "2026-10-17T06:26:06.884Z",
+    "seeds": 1,
+    "trials": 1,
+    "concurrency": 3,
+    "baseline": "v0",
+    "candidates": [
+      "v1",
+      "v2"
+    ],
+    "agents": {
+      "v0": {
+        "thinkMs": 1600,
+        "settleBeforeObserve": false,
+        "reobserveBeforeAct": false,
+        "selectByLabel": false,
+        "verifySelection": false,
+        "cachedSubmitSelector": "#save-lead",
+        "submitWaitMs": 10000,
+        "readBackBeforeRetry": false,
+        "verifyOutcome": false,
+        "onSessionLoss": "assume-saved",
+        "retryReads": false,
+        "id": "v0",
+        "description": "Naive baseline: one observation, index-based targets, cached selector, retries errors blindly, trusts the toast.",
+        "kind": "scripted"
+      },
+      "v1": {
+        "thinkMs": 1600,
+        "settleBeforeObserve": true,
+        "reobserveBeforeAct": true,
+        "selectByLabel": true,
+        "verifySelection": true,
+        "cachedSubmitSelector": null,
+        "submitWaitMs": 10000,
+        "readBackBeforeRetry": true,
+        "verifyOutcome": true,
+        "onSessionLoss": "redo",
+        "retryReads": true,
+        "id": "v1",
+        "description": "Fixed: settle + re-observe, label targets, verify selection, read-back before retrying an ambiguous error, verify outcome, safe re-auth.",
+        "kind": "scripted"
+      },
+      "v2": {
+        "thinkMs": 1600,
+        "settleBeforeObserve": true,
+        "reobserveBeforeAct": true,
+        "selectByLabel": true,
+        "verifySelection": true,
+        "cachedSubmitSelector": null,
+        "submitWaitMs": 10000,
+        "readBackBeforeRetry": false,
+        "verifyOutcome": true,
+        "onSessionLoss": "redo",
+        "retryReads": true,
+        "id": "v2",
+        "description": "Regression of v1: the read-back before retrying a failed submit was removed (a 'latency optimisation').",
+        "kind": "scripted"
+      }
+    },
+    "modelMode": null,
+    "models": null,
+    "browserVersion": "141.0.7390.37",
+    "node": "v22.23.2",
+    "caveat": "Agents are deterministic scripts, not LLMs. These numbers validate the harness (capture, oracle, classifier, fixtures, replay); they say nothing about LLM agent behaviour."
+  },
+  "detection": [
+    {
+      "fault": "none",
+      "runs": 1,
+      "failing": 0,
+      "correctlyAttributed": 0,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "stale-owners",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "gateway-timeout",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "silent-owner-drop",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "session-expiry",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "ui-drift",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    }
+  ],
+  "falsePositives": {
+    "baselineCleanRunsFailed": 0,
+    "baselineCleanRuns": 1,
+    "candidateCleanRunsFailed": 0,
+    "candidateCleanRuns": 2
+  },
+  "reproduction": [
+    {
+      "fixture": "stale-owners-s1-stale-observation",
+      "reproduced": 1,
+      "trials": 1,
+      "drift": []
+    },
+    {
+      "fixture": "gateway-timeout-s1-unsafe-retry",
+      "reproduced": 1,
+      "trials": 1,
+      "drift": []
+    },
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "reproduced": 1,
+      "trials": 1,
+      "drift": []
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "reproduced": 1,
+      "trials": 1,
+      "drift": []
+    },
+    {
+      "fixture": "ui-drift-s1-locator-not-found",
+      "reproduced": 1,
+      "trials": 1,
+      "drift": []
+    }
+  ],
+  "regression": [
+    {
+      "fixture": "stale-owners-s1-stale-observation",
+      "agent": "v0",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "stale-observation"
+      ]
+    },
+    {
+      "fixture": "gateway-timeout-s1-unsafe-retry",
+      "agent": "v0",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "unsafe-retry",
+        "app-error"
+      ]
+    },
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "agent": "v0",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "app-dropped-field"
+      ]
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "agent": "v0",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "auth-lost"
+      ]
+    },
+    {
+      "fixture": "ui-drift-s1-locator-not-found",
+      "agent": "v0",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "locator-not-found"
+      ]
+    },
+    {
+      "fixture": "stale-owners-s1-stale-observation",
+      "agent": "v1",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "gateway-timeout-s1-unsafe-retry",
+      "agent": "v1",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "agent": "v1",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "agent": "v1",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "ui-drift-s1-locator-not-found",
+      "agent": "v1",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "stale-owners-s1-stale-observation",
+      "agent": "v2",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "gateway-timeout-s1-unsafe-retry",
+      "agent": "v2",
+      "passes": 0,
+      "trials": 1,
+      "passAll": false,
+      "causes": [
+        "unsafe-retry",
+        "app-error"
+      ]
+    },
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "agent": "v2",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "agent": "v2",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "ui-drift-s1-locator-not-found",
+      "agent": "v2",
+      "passes": 1,
+      "trials": 1,
+      "passAll": true,
+      "causes": []
+    }
+  ],
+  "falseSuccess": {
+    "runs": 6,
+    "successClaims": 4,
+    "falseSuccesses": 3
+  },
+  "rates": {
+    "reproductionTrials": {
+      "k": 5,
+      "n": 5
+    },
+    "passByAgent": [
+      {
+        "agent": "v0",
+        "passes": 0,
+        "trials": 5,
+        "fixturesPassed": 0,
+        "fixtures": 5
+      },
+      {
+        "agent": "v1",
+        "passes": 5,
+        "trials": 5,
+        "fixturesPassed": 5,
+        "fixtures": 5
+      },
+      {
+        "agent": "v2",
+        "passes": 4,
+        "trials": 5,
+        "fixturesPassed": 4,
+        "fixtures": 5
+      }
+    ]
+  },
+  "cost": {
+    "agentRuns": 23,
+    "modelCalls": 0,
+    "liveInputTokens": 0,
+    "liveOutputTokens": 0,
+    "medianRunMs": 4157,
+    "p95RunMs": 8995
+  }
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Voice } from "./api.ts";
 
 /** Recording defaults, kept in this browser (Settings → Recording defaults). */
-export type TtsProvider = "flite" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom";
+export type TtsProvider = "flite" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom" | "custom-voice";
 export interface RecordingPrefs {
   voice: Voice;
   ttsProvider: TtsProvider;
@@ -16,7 +16,7 @@ const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", maxPages:
 export function readPrefs(): RecordingPrefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<RecordingPrefs>;
-    const providers: TtsProvider[] = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom"];
+    const providers: TtsProvider[] = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
     return {
       voice: (["slt", "awb", "kal", "rms"] as const).includes(raw.voice as Voice) ? (raw.voice as Voice) : DEFAULTS.voice,
       ttsProvider: providers.includes(raw.ttsProvider as TtsProvider) ? (raw.ttsProvider as TtsProvider) : DEFAULTS.ttsProvider,

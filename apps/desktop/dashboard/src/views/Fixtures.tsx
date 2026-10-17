@@ -4,7 +4,8 @@ import { faultLabel } from "../lib/format.ts";
 import type { LabIndex } from "../lib/types.ts";
 
 export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
-  if (index.fixtures.length === 0) {
+  const fixturesAll = index.fixtures ?? [];
+  if (fixturesAll.length === 0) {
     return (
       <Empty
         title="No fixtures yet"
@@ -15,13 +16,13 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
       </Empty>
     );
   }
-  const groups = new Map<string, typeof index.fixtures>();
-  for (const f of index.fixtures) groups.set(f.source, [...(groups.get(f.source) ?? []), f]);
+  const groups = new Map<string, typeof fixturesAll>();
+  for (const f of fixturesAll) groups.set(f.source, [...(groups.get(f.source) ?? []), f]);
 
   return (
     <div className="grid gap-6">
       <div>
-        <div className="eyebrow">{index.fixtures.length} regression fixtures</div>
+        <div className="eyebrow">{fixturesAll.length} regression fixtures</div>
         <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.02em]">
           Regression <span className="text-dim">fixtures.</span>
         </h1>
@@ -64,11 +65,11 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
                       <dd>{m.original.model ? `${m.original.model.mode} · ${m.original.model.calls} recorded calls` : "none (scripted)"}</dd>
                       <dt className="text-ink-3">seed</dt>
                       <dd>
-                        {m.environment.seed} · owners +{m.environment.timings.ownersRefreshMs} ms · submit +{m.environment.timings.submitDelayMs} ms
+                        {m.environment?.seed ?? 0} · owners +{m.environment?.timings?.ownersRefreshMs ?? 0} ms · submit +{m.environment?.timings?.submitDelayMs ?? 0} ms
                       </dd>
                       <dt className="text-ink-3">env</dt>
                       <dd className="truncate">
-                        app {m.environment.appVersion} · pw {m.environment.playwrightVersion}
+                        app {m.environment?.appVersion ?? "?"} · pw {m.environment?.playwrightVersion ?? "?"}
                       </dd>
                     </dl>
                   </div>

@@ -1,20 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { VoicePicker } from "../components/Studio.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
 import { type Capabilities, type Me, type Voice, isSnapshot, loadCapabilities } from "../lib/api.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
+import { useI18n, LANGS } from "../lib/i18n.tsx";
 
 /** Account, recording defaults, connected providers, and what the day allows. */
 export function Settings({ me }: { me: Me | null }) {
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [prefs, setPrefs] = usePrefs();
+  const { t, lang, setLang } = useI18n();
   useEffect(() => {
     if (!isSnapshot) void loadCapabilities().then(setCaps);
   }, []);
 
   return (
     <div className="grid max-w-[900px] gap-6">
-      <PageHead title="Your" dim="settings." description="Your account, how new walkthroughs are recorded, and what this deployment can do." />
+      <PageHead title={t("settings.title")} dim={t("settings.dim")} description={t("settings.description")} />
+
+      <Panel>
+        <PanelHeader eyebrow={t("language")} title={t("language")} />
+        <div className="grid gap-2 px-4 py-4">
+          <p className="text-[12.5px] text-ink-3">{t("language.help")}</p>
+          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "hi" | "ta" | "te")} className="h-9 max-w-md rounded-lg border border-line bg-panel px-3 text-[13px]">
+            {LANGS.map((l) => (
+              <option key={l.code} value={l.code}>{l.native} ({l.label})</option>
+            ))}
+          </select>
+        </div>
+      </Panel>
 
       <Account me={me} />
 
@@ -63,6 +77,7 @@ export function Settings({ me }: { me: Me | null }) {
                 <option value="murf">Murf</option>
                 <option value="reverie">Reverie</option>
                 <option value="custom">Custom / Maya</option>
+                <option value="custom-voice">Custom voice (uploaded sample)</option>
               </select>
             </div>
           </div>
@@ -85,6 +100,8 @@ export function Settings({ me }: { me: Me | null }) {
         </div>
       </Panel>
 
+      {!isSnapshot && <CustomVoices />}
+      {!isSnapshot && <Credentials />}
       {caps && <Providers caps={caps} />}
       {caps && <Usage caps={caps} />}
     </div>
@@ -182,6 +199,157 @@ function Providers({ caps }: { caps: Capabilities }) {
         ))}
       </ul>
       <p className="px-4 py-2.5 text-[12px] text-ink-3">{caps.liveModels ? "Live model runs are allowed here." : "Live model runs are disabled on this server."}</p>
+    </Panel>
+  );
+}
+
+interface CredKey { env: string; label: string; set: boolean }
+
+function Credentials() {
+  const [keys, setKeys] = useState<CredKey[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const res = await fetch("/api/credentials");
+      if (!res.ok) return;
+      const body = (await res.json()) as { keys: CredKey[] };
+      setKeys(body.keys ?? []);
+    } catch { /* ignore */ }
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function save(env: string) {
+    setSaving(env);
+    setStatus(null);
+    try {
+      const res = await fetch("/api/credentials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ env, value: values[env] ?? "" }) });
+      const body = (await res.json()) as { ok?: boolean; set?: boolean; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
+      setStatus(`${env}: ${body.set ? "saved" : "cleared"}`);
+      setValues((v) => ({ ...v, [env]: "" }));
+      await load();
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <Panel>
+      <PanelHeader eyebrow="Credentials" title="API keys" aside={<span className="font-mono text-[11.5px] text-ink-3">stored locally, never sent to the browser again</span>} />
+      <div className="grid gap-2 px-4 py-4">
+        <p className="text-[12.5px] text-ink-3">Enter API keys for cloud providers (TTS and LLM). Saved to this machine and applied immediately.</p>
+        {status && <p className="text-[12.5px] text-ink-2">{status}</p>}
+        <ul className="grid gap-2">
+          {keys.map((k) => (
+            <li key={k.env} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-center">
+              <span className="text-[12.5px]">
+                <span className="font-medium">{k.label}</span>
+                <span className="ml-2 font-mono text-[11px] text-ink-3">{k.env}</span>
+                {k.set && <span className="ml-2 text-[11px] text-pass">configured</span>}
+              </span>
+              <input
+                type="password"
+                placeholder={k.set ? "•••••••• (leave blank to keep)" : "paste key"}
+                value={values[k.env] ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, [k.env]: e.target.value }))}
+                className="h-9 rounded-lg border border-line bg-panel px-3 text-[13px]"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={saving === k.env}
+                  onClick={() => void save(k.env)}
+                  className="h-9 rounded-lg border border-line-strong px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
+                >
+                  {saving === k.env ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Panel>
+  );
+}
+
+interface CustomVoice { id: string; name: string; url: string }
+
+function CustomVoices() {
+  const [voices, setVoices] = useState<CustomVoice[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function load() {
+    try {
+      const res = await fetch("/api/voices/custom");
+      if (!res.ok) return;
+      const body = (await res.json()) as { voices?: CustomVoice[] };
+      setVoices(body.voices ?? []);
+    } catch { /* ignore */ }
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function upload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setStatus(null);
+    try {
+      const res = await fetch("/api/voices/custom", {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": file.name },
+        body: file,
+      });
+      const body = (await res.json()) as { id?: string; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
+      setStatus(`Uploaded ${file.name}`);
+      await load();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      const res = await fetch(`/api/voices/custom/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      await load();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return (
+    <Panel>
+      <PanelHeader eyebrow="Custom voices" title="Uploaded voice samples" aside={<span className="font-mono text-[11.5px] text-ink-3">stored under data/voices/</span>} />
+      <div className="grid gap-3 px-4 py-4">
+        <p className="text-[12.5px] text-ink-3">Upload an audio sample to use as narration fallback with the "Custom voice" provider.</p>
+        {status && <p className="text-[12.5px] text-ink-2">{status}</p>}
+        <input type="file" accept="audio/*" disabled={uploading} onChange={(e) => void upload(e)} className="text-[13px]" />
+        {voices.length === 0 ? (
+          <p className="text-[12.5px] text-ink-3">No custom voices uploaded yet.</p>
+        ) : (
+          <ul className="grid gap-2">
+            {voices.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-panel-2 px-3 py-2 text-[13px]">
+                <span className="truncate">{v.name}</span>
+                <div className="flex gap-2">
+                  <audio src={v.url} controls className="h-8" />
+                  <button type="button" onClick={() => void remove(v.id)} className="rounded-lg border border-line-strong px-3 text-[12px] hover:bg-panel">Delete</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Panel>
   );
 }

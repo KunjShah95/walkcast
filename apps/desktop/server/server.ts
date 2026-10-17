@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { createReadStream, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,7 @@ import { Worker } from "../../../packages/core/src/jobs/worker.ts";
 import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
-import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview } from "../../../packages/core/src/record/media.ts";
+import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
@@ -20,6 +20,8 @@ import { openExternal } from "./open-external.ts";
 import { authPage, continueInBrowserPage, messagePage, notFoundPage } from "./pages.ts";
 import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
+import { loadWebhooks, addWebhook, removeWebhook, startWebhookDispatcher } from "../../../packages/core/src/webhooks.ts";
+import { loadSchedules, addSchedule, removeSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dashboard", "dist", "index.html");
 const TYPES: Record<string, string> = {
@@ -101,6 +103,64 @@ const LIMITS = {
  * returns 202 with a job id at once and the browser polls /api/jobs/:id, so nothing depends on a
  * request staying open for minutes behind a load balancer.
  */
+const CREDENTIAL_KEYS: { env: string; label: string }[] = [
+  { env: "ANTHROPIC_API_KEY", label: "Anthropic API key" },
+  { env: "OPENAI_API_KEY", label: "OpenAI API key" },
+  { env: "OPENROUTER_API_KEY", label: "OpenRouter API key" },
+  { env: "GEMINI_API_KEY", label: "Google Gemini API key" },
+  { env: "GOOGLE_API_KEY", label: "Google API key (alt)" },
+  { env: "GROQ_API_KEY", label: "Groq API key" },
+  { env: "MISTRAL_API_KEY", label: "Mistral API key" },
+  { env: "DEEPSEEK_API_KEY", label: "DeepSeek API key" },
+  { env: "HF_TOKEN", label: "Hugging Face token" },
+  { env: "XAI_API_KEY", label: "xAI API key" },
+  { env: "TOGETHER_API_KEY", label: "Together AI API key" },
+  { env: "FIREWORKS_API_KEY", label: "Fireworks API key" },
+  { env: "CEREBRAS_API_KEY", label: "Cerebras API key" },
+  { env: "SARVAM_API_KEY", label: "Sarvam API key" },
+  { env: "BHASHINI_API_KEY", label: "Bhashini API key" },
+  { env: "BHASHINI_USER_ID", label: "Bhashini user id" },
+  { env: "ELEVENLABS_API_KEY", label: "ElevenLabs API key" },
+  { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key" },
+  { env: "AZURE_TTS_KEY", label: "Azure TTS key" },
+  { env: "AZURE_TTS_REGION", label: "Azure TTS region" },
+  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id" },
+  { env: "AWS_REGION", label: "AWS region" },
+  { env: "MURF_API_KEY", label: "Murf API key" },
+  { env: "REVERIE_API_KEY", label: "Reverie API key" },
+  { env: "REVERIE_APP_ID", label: "Reverie app id" },
+  { env: "LAB_TTS_API_KEY", label: "Custom TTS API key" },
+  { env: "LAB_TTS_ENDPOINT", label: "Custom TTS endpoint" },
+  { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key" },
+  { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL" },
+];
+
+function credentialsPath(root: string): string {
+  return join(root, ".walkcast-credentials.json");
+}
+
+function applyCredentialsFile(root: string): void {
+  const p = credentialsPath(root);
+  if (!existsSync(p)) return;
+  try {
+    const data = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(data)) {
+      if (typeof v === "string" && CREDENTIAL_KEYS.some((c) => c.env === k)) process.env[k] = v;
+    }
+  } catch { /* ignore */ }
+}
+
+function saveCredential(root: string, env: string, value: string): void {
+  const p = credentialsPath(root);
+  let data: Record<string, string> = {};
+  if (existsSync(p)) try { data = JSON.parse(readFileSync(p, "utf8")) as Record<string, string>; } catch { data = {}; }
+  if (value) data[env] = value; else delete data[env];
+  writeFileSync(p, JSON.stringify(data, null, 2));
+  if (value) process.env[env] = value; else delete process.env[env];
+  // Capabilities depend on which credentials are set; drop cached responses.
+  capabilitiesCache.clear();
+}
+
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
   const o = typeof options === "string" ? { root: options } : options;
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
@@ -138,6 +198,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
  */
 export function createApp(o: ServeOptions = {}): App {
   const root = o.root ?? process.cwd();
+  applyCredentialsFile(root);
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
   const requireAuth = o.requireAuth ?? process.env.LAB_AUTH !== "off";
@@ -158,6 +219,8 @@ export function createApp(o: ServeOptions = {}): App {
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
   const worker = (o.worker ?? process.env.LAB_WORKER !== "off") ? new Worker({ store, media, root }).start() : null;
+    const webhookDispatcher = startWebhookDispatcher(root);
+  const scheduler = startScheduler(root, store);
   let draining = false;
 
   const handler = (req: IncomingMessage, res: ServerResponse) => {
@@ -407,7 +470,15 @@ export function createApp(o: ServeOptions = {}): App {
       return json(202, installChromium());
     }
     if (url.pathname === "/api/capabilities") {
-      return json(200, {
+      const cacheKey = user?.id ?? "__anon__";
+      const cached = capabilitiesCache.get(cacheKey);
+      if (cached && Date.now() - cached.at < CAPABILITIES_TTL_MS) {
+        // LRU touch: re-insert so recently used entries survive eviction.
+        capabilitiesCache.delete(cacheKey);
+        capabilitiesCache.set(cacheKey, cached);
+        return json(200, cached.payload);
+      }
+      const payload = {
         live: true,
         running: worker?.busy ? "a job" : null,
         queue: await store.queueDepth().catch(() => null),
@@ -422,7 +493,96 @@ export function createApp(o: ServeOptions = {}): App {
         usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
         voices: { available: canNarrate(), list: VOICES, editable: media.kind === "local" },
         jobsUnavailable: o.jobsUnavailable ?? null,
-      });
+      };
+      if (capabilitiesCache.size >= CAPABILITIES_CACHE_MAX) {
+        const first = capabilitiesCache.keys().next().value;
+        if (first) capabilitiesCache.delete(first);
+      }
+      capabilitiesCache.set(cacheKey, { payload, at: Date.now() });
+      return json(200, payload);
+    }
+    // ---------------------------------------------------------------- credentials
+    if (url.pathname === "/api/credentials" && req.method === "GET") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      return json(200, { keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: Boolean(process.env[k.env]) })) });
+    }
+    if (url.pathname === "/api/credentials" && req.method === "POST") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      const b = await readJson(req);
+      const env = String(b.env ?? "");
+      const value = String(b.value ?? "");
+      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
+      saveCredential(root, env, value.trim());
+      return json(200, { ok: true, set: Boolean(process.env[env]) });
+    }
+    if (url.pathname === "/api/credentials" && req.method === "DELETE") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      const env = url.searchParams.get("env") ?? "";
+      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
+      saveCredential(root, env, "");
+      return json(200, { ok: true });
+    }
+
+    // ---------------------------------------------------------------- custom voice upload/list
+    const voicesDir = join(root, "data", "voices");
+    if (url.pathname === "/api/voices/custom" && req.method === "GET") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      if (!existsSync(voicesDir)) return json(200, { voices: [] });
+      const files = readdirSync(voicesDir);
+      const voices = files
+        .filter((f) => /\.(wav|mp3|ogg|m4a)$/i.test(f))
+        .map((f) => ({ id: basename(f, extname(f)), name: f, url: `/api/voices/custom/${basename(f, extname(f))}` }));
+      return json(200, { voices });
+    }
+    if (url.pathname === "/api/voices/custom" && req.method === "POST") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      const tmp = await readBodyToTemp(req, 40_000_000, "voice");
+      const nameHeader = String(req.headers["x-file-name"] ?? "");
+      const ext = extname(nameHeader) || ".bin";
+      const id = randomUUID();
+      mkdirSync(voicesDir, { recursive: true });
+      const dest = join(voicesDir, `${id}${ext}`);
+      renameSync(tmp, dest);
+      capabilitiesCache.clear();
+      return json(201, { id, name: basename(dest), url: `/api/voices/custom/${id}` });
+    }
+    const customVoiceMatch = /^\/api\/voices\/custom\/([\w-]+)$/.exec(url.pathname);
+    if (customVoiceMatch && (req.method === "GET" || req.method === "HEAD")) {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      if (!existsSync(voicesDir)) return json(404, { error: "Not found." });
+      const id = customVoiceMatch[1]!;
+      const files = readdirSync(voicesDir).filter((f) => basename(f, extname(f)) === id);
+      if (files.length === 0) return json(404, { error: "Not found." });
+      const abs = join(voicesDir, files[0]!);
+      const ct = TYPES[extname(abs).toLowerCase()] ?? "application/octet-stream";
+      return void streamFile(req, res, abs, ct, "private, max-age=3600");
+    }
+    if (customVoiceMatch && req.method === "DELETE") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      if (!existsSync(voicesDir)) return json(404, { error: "Not found." });
+      const id = customVoiceMatch[1]!;
+      const files = readdirSync(voicesDir).filter((f) => basename(f, extname(f)) === id);
+      for (const f of files) rmSync(join(voicesDir, f), { force: true });
+      capabilitiesCache.clear();
+      return json(200, { ok: true });
+    }
+
+    // ---------------------------------------------------------------- voice preview (cloud providers)
+    if (url.pathname === "/api/voices/preview" && (req.method === "GET" || req.method === "HEAD")) {
+      const provider = (url.searchParams.get("provider") ?? "").trim();
+      const voice = (url.searchParams.get("voice") ?? "slt").trim();
+      if (!provider) return json(400, { error: "provider is required." });
+      try {
+        const buf = await cloudVoicePreview(provider, voice);
+        const ct = buf.length >= 4 && buf.toString("ascii", 0, 4) === "RIFF" ? "audio/wav"
+          : buf.length >= 3 && buf.toString("ascii", 0, 3) === "ID3" ? "audio/mpeg"
+          : buf.length >= 4 && buf.toString("ascii", 0, 4) === "OggS" ? "audio/ogg"
+          : "audio/wav";
+        res.writeHead(200, { "Content-Type": ct, "Content-Length": buf.length, "Cache-Control": "private, max-age=300" });
+        return void res.end(buf);
+      } catch (e) {
+        return json(503, { error: e instanceof Error ? e.message : String(e) });
+      }
     }
     // ---------------------------------------------------------------- narration
     const voiceMatch = /^\/api\/voices\/(\w+)\.wav$/.exec(url.pathname);
@@ -465,6 +625,39 @@ try {
         await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
       }
       return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
+    }
+    const sttMatch = /^\/api\/recordings\/([\w.-]+)\/captions\/stt$/.exec(url.pathname);
+    if (sttMatch && req.method === "POST") {
+      const id = sttMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "STT needs recordings kept on this server's disk." });
+      const dir = join(root, "recordings", id);
+      const file = join(dir, "recording.json");
+      if (!existsSync(file)) return json(404, { error: "Recording not found." });
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
+      const b = await readJson(req).catch(() => ({}));
+      const language = typeof (b as any)?.language === "string" ? (b as any).language : "unknown";
+      let audioFile = (summary.media as any)?.audio ?? "narration.wav";
+      if (!existsSync(join(dir, audioFile))) {
+        if (existsSync(join(dir, "video.webm"))) audioFile = "video.webm";
+        else return json(400, { error: "No audio available for this recording." });
+      }
+      try {
+        const captions = await generateCaptionsFromAudio(join(dir, audioFile), language);
+        summary.captions = captions;
+        const { toWebVtt } = await import("../../../packages/core/src/record/narration.ts");
+        writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions as any));
+        summary.media = { ...summary.media, captions: "captions.vtt" };
+        writeFileSync(file, JSON.stringify(summary, null, 2));
+        if (store.kind !== "file") {
+          const { dir: _dir, ...rest } = summary;
+          await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
+        }
+        return json(200, { recording: { ...summary, id, dir: `recordings/${id}` }, captions });
+      } catch (e) {
+        return json(500, { error: e instanceof Error ? e.message : String(e) });
+      }
     }
     if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
       if (draining) return json(503, { error: "The server is restarting. Try again in a moment." });
@@ -540,10 +733,95 @@ try {
       // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
       return json(200, snap);
     }
+    if (url.pathname === "/api/webhooks" && req.method === "GET") {
+      return json(200, { webhooks: loadWebhooks(root) });
+    }
+    if (url.pathname === "/api/webhooks" && req.method === "POST") {
+      const b = await readJson(req);
+      const u = String((b as any)?.url ?? "").trim();
+      try { new URL(u); } catch { return json(400, { error: "invalid url" }); }
+      if (!u) return json(400, { error: "url required" });
+      return json(201, { webhooks: addWebhook(root, u) });
+    }
+    if (url.pathname === "/api/webhooks" && req.method === "DELETE") {
+      const b = await readJson(req).catch(() => ({}));
+      const u = String((b as any)?.url ?? "").trim();
+      return json(200, { webhooks: removeWebhook(root, u) });
+    }
+    const webhookDeleteMatch = /^\/api\/webhooks\/(.+)$/.exec(url.pathname);
+    if (webhookDeleteMatch && req.method === "DELETE") {
+      return json(200, { webhooks: removeWebhook(root, decodeURIComponent(webhookDeleteMatch[1]!)) });
+    }
+    // ---------------------------------------------------------------- schedules
+    if (url.pathname === "/api/schedules" && req.method === "GET") {
+      return json(200, { schedules: loadSchedules(root) });
+    }
+    if (url.pathname === "/api/schedules" && req.method === "POST") {
+      const b = await readJson(req).catch(() => ({}));
+      try {
+        const sched = addSchedule(root, { url: (b as any)?.url, interval: (b as any)?.interval ?? (b as any)?.cron ?? (b as any)?.every, intervalMs: (b as any)?.intervalMs, authorized: (b as any)?.authorized === true });
+        return json(201, { schedule: sched, schedules: loadSchedules(root) });
+      } catch (e) {
+        return json(400, { error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    if (url.pathname === "/api/schedules" && req.method === "DELETE") {
+      const b = await readJson(req).catch(() => ({}));
+      const id = String((b as any)?.id ?? url.searchParams.get("id") ?? "");
+      if (!id) return json(400, { error: "id required" });
+      return json(200, { schedules: removeSchedule(root, id) });
+    }
+    const scheduleDeleteMatch = /^\/api\/schedules\/(.+)$/.exec(url.pathname);
+    if (scheduleDeleteMatch && req.method === "DELETE") {
+      return json(200, { schedules: removeSchedule(root, decodeURIComponent(scheduleDeleteMatch[1]!)) });
+    }
     if (url.pathname === "/api/run") {
       const detail = data.run(url.searchParams.get("dir") ?? "");
       return detail ? json(200, detail) : json(404, { error: "run not found" });
     }
+    const transcriptMatch = /^\/api\/recordings\/([\w.-]+)\/transcript$/.exec(url.pathname);
+    if (transcriptMatch && req.method === "GET") {
+      const id = transcriptMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "not found" });
+      const located = await media.locate(id, "recording.json");
+      if (!located || "redirect" in located) {
+        // For s3, fetch via redirect not handled; fall back to 404 for now.
+        if (located && "redirect" in located) return redirect(located.redirect);
+        return json(404, { error: "not found" });
+      }
+      let summary: { captions?: { start: number; end: number; text: string }[] } = {};
+      try { summary = JSON.parse(readFileSync(located.path, "utf8")); } catch { return json(500, { error: "bad recording" }); }
+      const caps = summary.captions ?? [];
+      const format = (url.searchParams.get("format") ?? "json").toLowerCase();
+      if (format === "json") return json(200, { captions: caps });
+      const toTime = (s: number) => {
+        const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60;
+        const pad = (n: number, w = 2) => String(Math.floor(n)).padStart(w, "0");
+        return `${pad(h)}:${pad(m)}:${pad(sec, 2)}.${String(Math.round((sec - Math.floor(sec)) * 1000)).padStart(3, "0")}`.replace(/\.\d{3}$/, (x) => x);
+      };
+      // simpler robust time formatting
+      const fmt = (s: number) => {
+        const totalMs = Math.round(s * 1000);
+        const h = Math.floor(totalMs / 3600000);
+        const m = Math.floor((totalMs % 3600000) / 60000);
+        const sec = Math.floor((totalMs % 60000) / 1000);
+        const ms = totalMs % 1000;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+      };
+      if (format === "srt") {
+        const body = caps.map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`).join("\n");
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        return void res.end(body);
+      }
+      if (format === "vtt") {
+        const body = "WEBVTT\n\n" + caps.map((c) => `${fmt(c.start).replace(",", ".")} --> ${fmt(c.end).replace(",", ".")}\n${c.text}\n`).join("\n");
+        res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" });
+        return void res.end(body);
+      }
+      return json(400, { error: "unknown format" });
+    }
+
     if (url.pathname.startsWith("/files/")) {
       let rel: string;
       try {
@@ -608,6 +886,8 @@ try {
     requireAuth,
     drain() {
       draining = true;
+      webhookDispatcher.stop();
+      scheduler.stop();
     },
   };
 }
@@ -615,6 +895,10 @@ try {
 const STATUS_TTL_MS = Number(process.env.LAB_STATUS_TTL_MS ?? 1500);
 const STATUS_CACHE_MAX = 20_000;
 const statusCache = new Map<string, { body: string; etag: string; owner: string | null; at: number }>();
+
+const CAPABILITIES_TTL_MS = Number(process.env.LAB_CAPABILITIES_TTL_MS ?? process.env.CAPABILITIES_TTL_MS ?? 5000);
+const CAPABILITIES_CACHE_MAX = 100;
+const capabilitiesCache = new Map<string, { payload: unknown; at: number }>();
 
 function setStatusCache(id: string, body: string, etag: string, owner: string | null) {
   if (statusCache.size >= STATUS_CACHE_MAX) {

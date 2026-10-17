@@ -8,7 +8,7 @@
  */
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
@@ -21,7 +21,7 @@ export interface VoiceEngine {
   /** Short label shown in `MediaResult.note` and in the voice picker. */
   readonly id: string;
   /** Where text-to-speech runs for this engine. */
-  readonly kind: "local" | "cloud";
+  readonly kind: "local" | "cloud" | "custom-voice";
   /** Synthesize `text` into `outFile`. */
   speak(text: string, outFile: string, cwd: string): Promise<void>;
   /** Zero-network engines are always available; cloud ones need a key + network. */
@@ -367,6 +367,24 @@ export function customTtsEngine(): VoiceEngine | null {
   };
 }
 
+/** Play an uploaded custom voice sample as narration (fallback: copy the first sample). */
+function customVoiceEngine(): VoiceEngine | null {
+  const dir = join(process.cwd(), "data", "voices");
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((f: string) => /\.(wav|mp3|ogg|m4a)$/i.test(f));
+  if (files.length === 0) return null;
+  const sample = join(dir, files[0]!);
+  return {
+    id: "custom-voice",
+    kind: "custom-voice",
+    available: () => true,
+    async speak(_text: string, outFile: string, _cwd: string) {
+      const { copyFileSync } = await import("node:fs");
+      copyFileSync(sample, outFile);
+    },
+  };
+}
+
 /** Resolve a VoiceEngine for a given provider name (or null to fall back to local flite). */
 export function engineFor(provider: string | undefined, voice: FliteVoice = "slt"): VoiceEngine | null {
   const p = (provider ?? process.env.LAB_TTS_PROVIDER ?? "flite").trim().toLowerCase();
@@ -380,6 +398,7 @@ export function engineFor(provider: string | undefined, voice: FliteVoice = "slt
   if (p === "murf") return murfEngine();
   if (p === "reverie") return reverieEngine();
   if (p === "custom" || p === "maya") return customTtsEngine();
+  if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine();
   // "flite" is what the dashboard sends for its local default: return null so the caller uses the
   // machine's built-in voice (media.localVoice: flite where ffmpeg has it, Windows speech otherwise).
   // Forcing flite here would fail on every Windows PC, whose ffmpeg builds have no flite.
@@ -405,6 +424,7 @@ export function chooseVoiceEngine(): VoiceEngine {
   else if (choice === "murf") { const e = tryEngine("murf", murfEngine); if (e) return e; }
   else if (choice === "reverie") { const e = tryEngine("reverie", reverieEngine); if (e) return e; }
   else if (choice === "custom" || choice === "maya") { const e = tryEngine("custom", customTtsEngine); if (e) return e; }
+  else if (choice === "custom-voice" || choice === "custom_voice") { const e = tryEngine("custom-voice", customVoiceEngine); if (e) return e; }
   return fliteEngine(process.env.LAB_TTS_VOICE ? (process.env.LAB_TTS_VOICE as any) : "slt");
 }
 

@@ -3,7 +3,7 @@ import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
 import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, isSnapshot, loadCapabilities } from "../lib/api.ts";
+import { type Capabilities, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
 
@@ -12,6 +12,7 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<Record<string, RecordingSummary>>({});
+  const [transcriptFmt, setTranscriptFmt] = useState<"srt" | "vtt" | "json">("srt");
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
   }, []);
@@ -68,9 +69,28 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
           <div className="grid min-w-0 gap-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="min-w-0 truncate text-[18px] font-semibold">{hostOf(current.url)}</h2>
-              <a href={current.url} target="_blank" rel="noreferrer" className="truncate font-mono text-[12px] text-ink-3 hover:text-ink">
-                {current.url}
-              </a>
+              <div className="flex flex-wrap items-center gap-2">
+                <a href={current.url} target="_blank" rel="noreferrer" className="truncate font-mono text-[12px] text-ink-3 hover:text-ink">
+                  {current.url}
+                </a>
+                <select
+                  value={transcriptFmt}
+                  onChange={(e) => setTranscriptFmt(e.target.value as "srt" | "vtt" | "json")}
+                  aria-label="Transcript format"
+                  className="h-8 rounded-full border border-line bg-panel px-2.5 text-[12px] text-ink-2"
+                >
+                  <option value="srt">SRT</option>
+                  <option value="vtt">VTT</option>
+                  <option value="json">JSON</option>
+                </select>
+                <a
+                  href={transcriptUrl(current.id, transcriptFmt)}
+                  download={`${current.id}-transcript.${transcriptFmt}`}
+                  className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
+                >
+                  Transcript
+                </a>
+              </div>
             </div>
             <Studio
               key={current.dir}

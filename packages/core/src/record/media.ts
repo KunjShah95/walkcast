@@ -5,7 +5,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
-import { chooseVoiceEngine, type VoiceEngine, fliteEngine, sapiAvailable, sapiEngine } from "./voice.ts";
+import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, sapiAvailable, sapiEngine, sarvamTranscribe } from "./voice.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -172,6 +172,33 @@ export async function voicePreview(voice: Voice): Promise<Buffer> {
   }
 }
 
+const cloudPreviews = new Map<string, Buffer>();
+/** A short sample synthesized through a cloud TTS provider, for choosing one before recording. */
+export async function cloudVoicePreview(provider: string, voice: string = "slt"): Promise<Buffer> {
+  const cacheKey = `${provider}:${voice}`;
+  const hit = cloudPreviews.get(cacheKey);
+  if (hit) return hit;
+  let engine: VoiceEngine | null = null;
+  const p = provider.trim().toLowerCase();
+  if (p === "flite" || p === "local" || p === "") {
+    const v = isVoice(voice) ? voice : "slt";
+    engine = localVoice(v);
+  } else {
+    engine = engineFor(p, isVoice(voice) ? voice : "slt");
+  }
+  if (!engine) throw new Error(`No TTS engine available for provider "${provider}".`);
+  const dir = mkdtempSync(join(tmpdir(), "lab-voice-"));
+  try {
+    const file = join(dir, "preview.wav");
+    await engine.speak("Opening the dashboard. Scrolling through the pricing page, then signing in.", file, dir);
+    const buf = readFileSync(file);
+    cloudPreviews.set(cacheKey, buf);
+    return buf;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 let cacheDir: string | undefined;
 const spoken = new Map<string, number>();
 
@@ -280,4 +307,35 @@ async function probeSeconds(file: string): Promise<number> {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Auto-captions from recorded audio via Sarvam STT. Returns timed cues. */
+export async function generateCaptionsFromAudio(audioPath: string, language = "unknown"): Promise<{ start: number; end: number; text: string }[]> {
+  const transcript = (await sarvamTranscribe(audioPath, language)).trim();
+  if (!transcript) return [];
+  let duration = 0;
+  try { duration = await probeSeconds(audioPath); } catch { duration = 0; }
+  if (!Number.isFinite(duration) || duration <= 0) {
+    const words = transcript.split(/\s+/).filter(Boolean).length;
+    duration = Math.max(2, words * 0.35);
+  }
+  const sentences = transcript.match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) ?? [transcript];
+  const chunks: string[] = [];
+  for (const s of sentences) {
+    const words = s.split(/\s+/).filter(Boolean);
+    if (words.length <= 16) { chunks.push(s); continue; }
+    for (let i = 0; i < words.length; i += 16) chunks.push(words.slice(i, i + 16).join(" "));
+  }
+  const counts = chunks.map((c) => Math.max(1, c.split(/\s+/).filter(Boolean).length));
+  const total = counts.reduce((a, b) => a + b, 0) || 1;
+  let cursor = 0;
+  return chunks.map((c, i) => {
+    const frac = counts[i]! / total;
+    const dur = Math.max(0.8, duration * frac);
+    const start = round(cursor);
+    const end = round(Math.min(duration, cursor + dur));
+    cursor = end > start ? end : start + 0.8;
+    if (cursor > duration) cursor = duration;
+    return { start, end: end > start ? end : round(start + 0.8), text: c };
+  });
 }

@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import { Readable } from "node:stream";
 
 /**
  * Minimal S3 client (AWS Signature V4): upload objects and presign downloads. Enough for
@@ -83,9 +84,39 @@ export function signHeaders(cfg: S3Config, method: string, url: URL, payloadHash
   return { ...rest, authorization: `AWS4-HMAC-SHA256 Credential=${cfg.accessKeyId}/${scope}, SignedHeaders=${names.join(";")}, Signature=${signature}` };
 }
 
-export async function putObject(cfg: S3Config, key: string, body: Buffer, contentType: string): Promise<void> {
+async function toBuffer(body: Buffer | Readable | ReadableStream<Uint8Array>): Promise<Buffer> {
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  }
+  // ReadableStream
+  const res = new Response(body);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+function toReadableStream(buf: Buffer): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buf));
+      controller.close();
+    },
+  });
+}
+
+export async function putObject(cfg: S3Config, key: string, body: Buffer | Readable | ReadableStream<Uint8Array>, contentType: string): Promise<void> {
+  const buf = await toBuffer(body);
   const url = objectUrl(cfg, key);
-  const headers = signHeaders(cfg, "PUT", url, sha256(body), { "content-type": contentType });
-  const res = await fetch(url, { method: "PUT", headers, body: new Uint8Array(body), signal: AbortSignal.timeout(120_000) });
+  const headers = signHeaders(cfg, "PUT", url, sha256(buf), { "content-type": contentType });
+  const stream = toReadableStream(buf);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers,
+    body: stream,
+    // Node's fetch requires duplex when streaming a request body.
+    duplex: "half",
+    signal: AbortSignal.timeout(120_000),
+  } as RequestInit & { duplex?: string });
   if (!res.ok) throw new Error(`Upload of ${key} failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
 }

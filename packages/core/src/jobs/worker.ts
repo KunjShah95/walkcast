@@ -13,6 +13,7 @@ import { runOnce } from "../lab/runner.ts";
 import { taskById } from "../lab/task.ts";
 import { withCredentials } from "../llm/credentials.ts";
 import type { Job, JobKind, Store } from "../store/types.ts";
+import { enqueueWebhook } from "../webhooks.ts";
 import { progressThrottle } from "./progress.ts";
 import { open } from "./secret-box.ts";
 
@@ -174,13 +175,16 @@ export class Worker {
     try {
       const result = job.kind === "record" ? await this.record(job, abort.signal, (p) => progress.push(p)) : await this.labRun(job);
       await finish({ status: "succeeded", result });
+      enqueueWebhook(this.o.root, "job.completed", { job: { id: job.id, kind: job.kind, status: "succeeded", result, owner: job.owner, finishedAt: new Date().toISOString() } });
       log.info("job.succeeded", { job: job.id, kind: job.kind, ms: Date.now() - started });
     } catch (e) {
       const message = e instanceof Error ? e.message.split("\n")[0]! : String(e);
       if (this.stopping && abort.signal.aborted) return; // handed back by stop()
       // Bad input won't get better on retry; crashes and timeouts get one more try.
       const retry = !(e instanceof RecordError) && !abort.signal.aborted;
-      await finish({ status: "failed", error: abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message, retry }).catch(() => undefined);
+      const err = abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message;
+      await finish({ status: "failed", error: err, retry }).catch(() => undefined);
+      enqueueWebhook(this.o.root, "job.completed", { job: { id: job.id, kind: job.kind, status: "failed", error: err, owner: job.owner, finishedAt: new Date().toISOString() } });
       log.warn("job.failed", { job: job.id, kind: job.kind, ms: Date.now() - started, error: message, retry });
     } finally {
       clearInterval(beat);

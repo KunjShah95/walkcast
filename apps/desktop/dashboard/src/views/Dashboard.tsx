@@ -5,6 +5,7 @@ import { Spotlight, DotGrid, TextGenerate } from "../components/aceternity.tsx";
 import { Studio, hostOf } from "../components/Studio.tsx";
 import { Cite, Empty, ExhibitTag, FindingChip, Panel, PanelHeader, Stamp, Verdict } from "../components/ui.tsx";
 import { type Capabilities, type Me, fileUrl, isSnapshot, loadCapabilities, loadRun } from "../lib/api.ts";
+import { useI18n } from "../lib/i18n.tsx";
 import { TASKS } from "../lib/agents.ts";
 import { FAULT_LABEL, ago, cn, faultLabel, label, ms } from "../lib/format.ts";
 import type { LabIndex, RunDetail, RunSummary, StepEvent } from "../lib/types.ts";
@@ -14,6 +15,7 @@ import type { LabIndex, RunDetail, RunSummary, StepEvent } from "../lib/types.ts
  * failure (its cause citing the steps it rests on). One link in the bar above starts the next.
  */
 export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; go: (r: Route) => void }) {
+  const { t } = useI18n();
   const [caps, setCaps] = useState<Capabilities | null>(null);
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
@@ -30,11 +32,11 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
         <DotGrid />
         <Spotlight />
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
-          <TextGenerate text={first ? `${first}, what should we walk next?` : "What should we walk next?"} className="text-[28px] font-semibold leading-[1.05] tracking-tight sm:text-[40px]" />
+          <TextGenerate text={first ? `${first}, ${t("dashboard.prompt")}` : t("dashboard.prompt")} className="text-[28px] font-semibold leading-[1.05] tracking-tight sm:text-[40px]" />
           <Facts index={index} caps={caps} />
         </div>
         {isSnapshot ? (
-          <p className="text-[13px] text-ink-3">This is a read-only snapshot.</p>
+          <p className="text-[13px] text-ink-3">{t("dashboard.readOnlySnapshot")}</p>
         ) : (
           <div className="max-w-3xl">
             <RecordBar onRecord={(url) => go({ view: "record", url })} />
@@ -48,7 +50,7 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
       <div className="grid items-start gap-5 xl:grid-cols-12">
         <section className="grid min-w-0 gap-3 xl:col-span-7">
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="text-[16px] font-semibold">Latest walkthrough</h2>
+            <h2 className="text-[16px] font-semibold">{t("dashboard.latestWalkthrough")}</h2>
             {latestRec && (
               <button type="button" onClick={() => go({ view: "library", dir: latestRec.id })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
                 {hostOf(latestRec.url)} · open in the studio

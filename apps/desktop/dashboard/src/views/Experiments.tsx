@@ -7,7 +7,8 @@ import type { ExperimentSummary, LabIndex } from "../lib/types.ts";
 type Summary = ExperimentSummary["summary"];
 
 export function Experiments({ index }: { index: LabIndex }) {
-  if (index.experiments.length === 0) {
+  const experimentsAll = index.experiments ?? [];
+  if (experimentsAll.length === 0) {
     return (
       <Empty
         title="No experiments yet"
@@ -20,7 +21,7 @@ export function Experiments({ index }: { index: LabIndex }) {
   }
   return (
     <div className="grid gap-8">
-      {index.experiments.map((e) => (
+      {experimentsAll.map((e) => (
         <Experiment key={e.id} id={e.id} s={e.summary} />
       ))}
     </div>
@@ -34,22 +35,25 @@ function ci(k: number, n: number): string {
 }
 
 function Experiment({ id, s }: { id: string; s: Summary }) {
-  const reproducedAll = s.reproduction.filter((r) => r.reproduced === r.trials).length;
-  const agents = [s.meta.baseline, ...s.meta.candidates];
-  const fixtures = [...new Set(s.regression.map((r) => r.fixture))];
-  const faulty = s.detection.filter((d) => d.fault !== "none");
+  const reproduction = s.reproduction ?? [];
+  const reproducedAll = reproduction.filter((r) => r.reproduced === r.trials).length;
+  const agents = [s.meta?.baseline ?? "baseline", ...(s.meta?.candidates ?? [])];
+  const regression = s.regression ?? [];
+  const fixtures = [...new Set(regression.map((r) => r.fixture))];
+  const detection = s.detection ?? [];
+  const faulty = detection.filter((d) => d.fault !== "none");
   const attributed = faulty.reduce((n, d) => n + d.correctlyAttributed, 0);
   const failing = faulty.reduce((n, d) => n + d.failing, 0);
-  const fp = s.falsePositives;
+  const fp = s.falsePositives ?? { baselineCleanRunsFailed: 0, candidateCleanRunsFailed: 0, baselineCleanRuns: 0, candidateCleanRuns: 0 };
   const cleanFlagged = fp.baselineCleanRunsFailed + fp.candidateCleanRunsFailed;
   const cleanRuns = fp.baselineCleanRuns + fp.candidateCleanRuns;
   const fs = s.falseSuccess;
-  const reproduced = s.rates.reproductionTrials;
+  const reproduced = s.rates?.reproductionTrials ?? { k: 0, n: 0 };
 
   return (
     <section className="grid gap-4">
       <div>
-        <div className="eyebrow">{new Date(s.meta.startedAt).toLocaleString()} · {s.meta.seeds} seeds/fault · {s.meta.trials} trials/replay</div>
+        <div className="eyebrow">{new Date(s.meta?.startedAt ?? Date.now()).toLocaleString()} · {s.meta?.seeds ?? 0} seeds/fault · {s.meta?.trials ?? 0} trials/replay</div>
         <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">{id}</h1>
         <p className="mt-2 max-w-[80ch] rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-[13px]">{s.meta.caveat}</p>
       </div>
@@ -63,7 +67,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
           note={fs ? `of success claims${ci(fs.falseSuccesses, fs.successClaims)}` : "of success claims · not recorded"}
           good={fs ? fs.falseSuccesses === 0 : undefined}
         />
-        <Metric k="Reproduced" v={`${reproducedAll}/${s.reproduction.length}`} note={`fixtures, every one of ${s.meta.trials} trials${ci(reproduced.k, reproduced.n)}`} good={reproducedAll === s.reproduction.length} />
+        <Metric k="Reproduced" v={`${reproducedAll}/${reproduction.length}`} note={`fixtures, every one of ${s.meta?.trials ?? 0} trials${ci(reproduced.k, reproduced.n)}`} good={reproducedAll === reproduction.length} />
         <Metric k="Cost" v={`${s.cost.modelCalls}`} note={`model calls · median run ${ms(s.cost.medianRunMs)}`} />
       </dl>
 
@@ -80,7 +84,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {s.detection.map((d) => (
+                {detection.map((d) => (
                   <tr key={d.fault}>
                     <td className="px-4 py-2">{faultLabel(d.fault)}</td>
                     <td className="px-2 py-2 font-mono">
@@ -115,7 +119,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
                       {f}
                     </td>
                     {agents.map((a) => {
-                      const r = s.regression.find((x) => x.fixture === f && x.agent === a);
+                      const r = regression.find((x) => x.fixture === f && x.agent === a);
                       if (!r) return <td key={a} />;
                       return (
                         <td

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Store, type StoreMetrics, type User } from "./types.ts";
 
@@ -20,8 +20,40 @@ export class FileStore implements Store {
   readonly kind = "file" as const;
   private data: Data;
   private chain: Promise<unknown> = Promise.resolve();
+  private timer: NodeJS.Timeout | null = null;
+  private readonly debounceMs = 50;
+  private exitHandler: (() => void) | null = null;
+  private sigintHandler: (() => void) | null = null;
+  private sigtermHandler: (() => void) | null = null;
+  private closed = false;
 
   constructor(readonly file: string) {
+    // Runtime guard: refuse to share one FileStore across processes.
+    const lock = `${file}.lock`;
+    if (existsSync(lock)) {
+      try {
+        const pid = Number(readFileSync(lock, "utf8").trim());
+        if (pid && pid !== process.pid) {
+          try { process.kill(pid, 0); throw new Error(`FileStore is already in use by process ${pid} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`); } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e;
+            // stale lock; fall through
+          }
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith("FileStore is already in use")) throw e;
+      }
+    }
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(lock, String(process.pid));
+    const cleanup = () => { try { if (existsSync(lock) && readFileSync(lock, "utf8").trim() === String(process.pid)) unlinkSync(lock); } catch { /* best effort */ } };
+    const flushOnExit = () => { try { this.flushSync(); } catch { /* best effort */ } cleanup(); };
+    this.exitHandler = flushOnExit;
+    this.sigintHandler = () => { flushOnExit(); process.exit(0); };
+    this.sigtermHandler = () => { flushOnExit(); process.exit(0); };
+    process.on("exit", this.exitHandler);
+    process.on("SIGINT", this.sigintHandler);
+    process.on("SIGTERM", this.sigtermHandler);
+
     let loaded: Partial<Data> = {};
     if (existsSync(file)) {
       try {
@@ -38,31 +70,55 @@ export class FileStore implements Store {
     for (const j of this.data.jobs) if (j.status === "running") Object.assign(j, { status: "queued", lockedBy: null, leaseUntil: null });
   }
 
-  /** Run a mutation, then persist; mutations never interleave. */
+  /** Run a mutation immediately (in memory), then schedule a debounced persist. Mutations never interleave. */
   private write<T>(fn: () => T): Promise<T> {
     const next = this.chain.then(() => {
       const value = fn();
-      mkdirSync(dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.${process.pid}.tmp`;
-      writeFileSync(tmp, JSON.stringify(this.data), { mode: 0o600 });
-      // On Windows the rename above a just-written file can fail transiently (EPERM/EBUSY) while
-      // another component (antivirus, indexer) holds it. The swap is the store's atomic commit;
-      // retry the rename with a short backoff instead of failing the write.
-      let tries = 0;
-      for (;;) {
-        try {
-          renameSync(tmp, this.file);
-          break;
-        } catch (e) {
-          const code = (e as NodeJS.ErrnoException).code;
-          if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || ++tries > 4) throw e;
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * 2 ** (tries - 1));
-        }
-      }
+      this.schedulePersist();
       return value;
     });
-    this.chain = next.catch(() => undefined);
+    this.chain = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  /** Coalesce rapid mutations: persist at most once after a short idle window. */
+  private schedulePersist() {
+    if (this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const task = this.chain.then(() => {
+        try { this.persistSync(); } catch (e) { console.error(`FileStore: persist failed (${e instanceof Error ? e.message : String(e)})`); }
+      });
+      this.chain = task.then(() => undefined, () => undefined);
+    }, this.debounceMs);
+    this.timer?.unref?.();
+  }
+
+  /** Synchronous atomic persist (temp file + rename). */
+  private persistSync() {
+    mkdirSync(dirname(this.file), { recursive: true });
+    const tmp = `${this.file}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(this.data), { mode: 0o600 });
+    // On Windows the rename above a just-written file can fail transiently (EPERM/EBUSY) while
+    // another component (antivirus, indexer) holds it. The swap is the store's atomic commit;
+    // retry the rename with a short backoff instead of failing the write.
+    let tries = 0;
+    for (;;) {
+      try {
+        renameSync(tmp, this.file);
+        break;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || ++tries > 4) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * 2 ** (tries - 1));
+      }
+    }
+  }
+
+  /** Flush any pending debounced write synchronously. */
+  private flushSync() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    try { this.persistSync(); } catch { /* best effort */ }
   }
 
   async userByEmail(email: string) {
@@ -290,7 +346,17 @@ export class FileStore implements Store {
 
   async ping() {}
   async close() {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     await this.chain;
+    try { this.persistSync(); } catch { /* best effort */ }
+    if (this.exitHandler) process.off("exit", this.exitHandler);
+    if (this.sigintHandler) process.off("SIGINT", this.sigintHandler);
+    if (this.sigtermHandler) process.off("SIGTERM", this.sigtermHandler);
+    this.exitHandler = null;
+    this.sigintHandler = null;
+    this.sigtermHandler = null;
   }
 }
 

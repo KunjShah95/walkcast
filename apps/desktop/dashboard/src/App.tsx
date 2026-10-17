@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
+import { I18nProvider } from "./lib/i18n.tsx";
 import { DotGrid } from "./components/aceternity.tsx";
 import { type Me, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
@@ -18,6 +19,8 @@ import { Simulator } from "./views/Simulator.tsx";
 import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
+import { Schedules } from "./views/Schedules.tsx";
+import { Mobile } from "./views/Mobile.tsx";
 
 export type Route =
   | { view: "dashboard" }
@@ -25,11 +28,13 @@ export type Route =
   | { view: "record"; url?: string }
   | { view: "library"; dir?: string }
   | { view: "settings" }
+  | { view: "schedules" }
   | { view: "runs" }
   | { view: "fixtures" }
   | { view: "experiments" }
   | { view: "run"; dir: string }
-  | { view: "compare"; base: string; cand: string };
+  | { view: "compare"; base: string; cand: string }
+  | { view: "mobile" };
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
@@ -41,7 +46,8 @@ function parse(hash: string): Route {
   if (h.startsWith("library/")) return { view: "library", dir: decodeURIComponent(h.slice(8)) };
   if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
   if (h === "overview") return { view: "dashboard" };
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "library" || h === "settings" || h === "dashboard")
+  if (h === "mobile") return { view: "mobile" };
+  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "library" || h === "settings" || h === "schedules" || h === "dashboard")
     return { view: h };
   return { view: "dashboard" };
 }
@@ -80,12 +86,14 @@ const TITLES: Record<Route["view"], string> = {
   record: "Record",
   library: "Library",
   settings: "Settings",
+  schedules: "Schedules",
   runs: "Runs",
   run: "Run",
   compare: "Compare",
   simulator: "Fault replay",
   fixtures: "Fixtures",
   experiments: "Experiments",
+  mobile: "Mobile",
 };
 
 export function App() {
@@ -149,6 +157,7 @@ export function App() {
   const sidebar = <Sidebar active={active} index={index} me={me} go={go} onClose={() => setDrawer(false)} closable={drawer} />;
 
   return (
+    <I18nProvider>
     <ExhibitProvider>
       <div className="relative min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <DotGrid className="opacity-40" />
@@ -224,13 +233,16 @@ export function App() {
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
                 {route.view === "settings" && <Settings me={me} />}
+                {route.view === "schedules" && <Schedules />}
                 {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
+                {index && route.view === "mobile" && <Mobile index={index} go={go} refresh={refresh} />}
             </div>
           </main>
         </div>
       </div>
       <AnalyticsTracker route={route.view} path={location.pathname + location.hash} />
     </ExhibitProvider>
+    </I18nProvider>
   );
 }
 

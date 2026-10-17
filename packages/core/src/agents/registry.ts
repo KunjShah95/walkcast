@@ -1,3 +1,4 @@
+import { log } from "../ops/log.ts";
 import { AGENTS, type AgentConfig } from "./scripted.ts";
 import { STAGEHAND_AGENTS, type StagehandAgentSpec } from "./stagehand-agent.ts";
 
@@ -12,6 +13,9 @@ export function allAgents(): AgentSpec[] {
 export function resolveAgent(agent: string | AgentSpec): AgentSpec {
   if (typeof agent !== "string") return agent;
   const spec = allAgents().find((a) => a.id === agent);
-  if (!spec) throw new Error(`Unknown agent '${agent}'. Known: ${allAgents().map((a) => a.id).join(", ")}`);
+  if (!spec) {
+    log.warn("agent.unknown", { requested: agent, known: allAgents().map((a) => a.id) });
+    throw new Error(`Unknown agent '${agent}'. Known: ${allAgents().map((a) => a.id).join(", ")}`);
+  }
   return spec;
 }

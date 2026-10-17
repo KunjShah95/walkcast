@@ -32,6 +32,8 @@ function crumbsFor(route: Route): Crumb[] {
     }
     case "compare":
       return [LAB, { label: "Runs", route: { view: "runs" } }, { label: "Compare", current: true }];
+    default:
+      return [];
   }
 }
 

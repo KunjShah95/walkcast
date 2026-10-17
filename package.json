@@ -1,6 +1,6 @@
 {
   "name": "walkcast",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "bin": {
     "walkcast": "bin/walkcast.mjs"
@@ -31,7 +31,12 @@
     "cli": "node --import tsx apps/desktop/cli.ts",
     "doctor": "node --import tsx apps/desktop/cli.ts doctor",
     "walkcast": "node bin/walkcast.mjs",
-    "qa": "npm run typecheck && npm run ui:build"
+    "qa": "npm run typecheck && npm run ui:build",
+    "lint": "eslint . --ext .ts,.tsx",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": "eslint --fix"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
@@ -64,6 +69,8 @@
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vite": "8.3.4",
-    "vite-plugin-singlefile": "2.3.3"
+    "vite-plugin-singlefile": "2.3.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10"
   }
 }

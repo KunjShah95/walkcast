@@ -11,6 +11,7 @@ import { runScriptedAgent } from "../agents/scripted.ts";
 import { runStagehandAgent } from "../agents/stagehand-agent.ts";
 import { Recorder, type ClaimEvent } from "../capture/recorder.ts";
 import { BrowserTools } from "../capture/tools.ts";
+import { log } from "../ops/log.ts";
 import { ModelGateway, readCassette, type GatewayMode, type GatewayStatus } from "../llm/gateway.ts";
 import { ScriptedModel } from "../llm/scripted-model.ts";
 import { backendForSelection, defaultSelection, type ModelSelection } from "../llm/model-spec.ts";
@@ -103,6 +104,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   const task = options.task ?? createLeadTask();
   const runId = `${task.id === "create-lead" ? "" : `${task.id}.`}${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const runDir = join(options.outDir, runId);
+  log.info("run.start", { runId, agent: spec.id, kind: spec.kind, task: task.id, fault: options.fault, seed: options.seed, mode: options.modelMode ?? "live" });
   const recorder = new Recorder(runDir, { screenshots: options.screenshots ?? false });
   assertApplicable(normalizeScenario(options.fault), task.id);
   const app = await startApp({ fault: options.fault, seed: options.seed, task: task.id, seedLeads: seedFor(task) });

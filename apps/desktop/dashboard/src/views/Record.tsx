@@ -166,6 +166,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                   <option value="murf">Murf</option>
                   <option value="reverie">Reverie</option>
                   <option value="custom">Custom / Maya</option>
+                <option value="custom-voice">Custom voice (uploaded sample)</option>
                 </select>
               </div>
             </div>

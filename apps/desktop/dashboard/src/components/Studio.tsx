@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Capabilities, type Voice, mediaUrl, renarrate, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { type Capabilities, type Voice, mediaUrl, renarrate, sttCaptions, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
 import type { RecordingSummary } from "../lib/types.ts";
@@ -74,6 +74,7 @@ export function Studio({
   const chapter = chapters.reduce((at, c, i) => (time >= c.start ? i : at), 0);
   // Bust the browser cache after a re-render (same file names, new content).
   const [version, setVersion] = useState(0);
+  const [sttBusy, setSttBusy] = useState(false);
 
   useEffect(() => {
     const track = video.current?.textTracks[0];
@@ -181,6 +182,24 @@ export function Studio({
               className={cn("inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-ink-2 hover:bg-panel-2 hover:text-ink", prefs.captions && "text-ink")}
             >
               {prefs.captions ? "Captions on" : "Captions off"}
+            </button>
+            <button
+              type="button"
+              disabled={sttBusy}
+              onClick={async () => {
+                setSttBusy(true);
+                try {
+                  const next = await sttCaptions(r.id);
+                  onChange?.(next);
+                } catch (e) {
+                  window.alert(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setSttBusy(false);
+                }
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40"
+            >
+              {sttBusy ? "Transcribing..." : "Auto-captions (STT)"}
             </button>
             {!compact &&
               (

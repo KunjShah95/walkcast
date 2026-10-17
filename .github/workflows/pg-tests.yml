@@ -1,0 +1,40 @@
+name: pg-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: pg-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: walkcast
+          POSTGRES_PASSWORD: walkcast
+          POSTGRES_DB: walkcast_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U walkcast" --health-interval 2s --health-retries 30
+    env:
+      SUPABASE_DB_URL: postgres://walkcast:walkcast@127.0.0.1:5432/walkcast_test
+      TEST_DATABASE_URL: postgres://walkcast:walkcast@127.0.0.1:5432/walkcast_test
+      LAB_LOG: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run migrations
+        run: npm run lab -- db migrate
+      - name: Run PgStore tests
+        run: npx tsx --test test/store.test.ts test/jobs.test.ts
