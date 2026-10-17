@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
+import { Spotlight, DotGrid, TextGenerate } from "../components/aceternity.tsx";
 import { Studio, hostOf } from "../components/Studio.tsx";
 import { Cite, Empty, ExhibitTag, FindingChip, Panel, PanelHeader, Stamp, Verdict } from "../components/ui.tsx";
 import { type Capabilities, type Me, fileUrl, isSnapshot, loadCapabilities, loadRun } from "../lib/api.ts";
@@ -25,11 +26,11 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
 
   return (
     <div className="grid gap-6 [&>*]:min-w-0">
-      <section className="grid gap-4 border-b border-line pb-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
-          <h1 className="text-[28px] leading-[1.1] sm:text-[34px]">
-            {first ? `${first}, what should we walk` : "What should we walk"} <span className="text-dim">next?</span>
-          </h1>
+      <section className="relative grid gap-4 overflow-hidden border-b border-line pb-6">
+        <DotGrid />
+        <Spotlight />
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
+          <TextGenerate text={first ? `${first}, what should we walk next?` : "What should we walk next?"} className="text-[28px] font-semibold leading-[1.05] tracking-tight sm:text-[40px]" />
           <Facts index={index} caps={caps} />
         </div>
         {isSnapshot ? (

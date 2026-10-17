@@ -52,37 +52,38 @@
   color-scheme: light;
 }
 
-/* Night variant: the same paper, unlit. */
+/* Night variant: Manu Arora / Aceternity — true black canvas, single violet accent, glow depth. */
 :root[data-theme="dark"] {
-  --paper: #161512;
-  --panel: #1c1b18;
-  --panel-2: #23221e;
-  --panel-3: #2c2a25;
-  --ink: #ece9e1;
-  --ink-2: #bdb7ab;
-  --ink-3: #9a9488;
-  --dim: #7e786d;
-  --line: #322f2a;
-  --line-strong: #46423a;
-  --signal: #e0a14a;
-  --signal-strong: #c98a33;
-  --signal-soft: #3a2c17;
+  --paper: #0a0a0a;
+  --panel: #111111;
+  --panel-2: #161616;
+  --panel-3: #1f1f1f;
+  --ink: #fafafa;
+  --ink-2: #a1a1aa;
+  --ink-3: #71717a;
+  --dim: #52525b;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --signal: #b45309;
+  --signal-strong: #92400e;
+  --signal-soft: rgba(180, 83, 9, 0.18);
   --on-signal: #ffffff;
-  --solid: #ece9e1;
-  --on-solid: #161512;
-  --exhibit: #4a3719;
-  --exhibit-ink: #f1d3a0;
-  --exhibit-soft: #2e2516;
-  --rec: #ef6a55;
-  --ember: #e0a14a;
-  --highlight: #3a2c17;
-  --highlight-ink: #f1d3a0;
-  --fail: #ef7b6c;
-  --fail-soft: #3a1f1b;
-  --pass: #79c18c;
-  --pass-soft: #1d2f22;
-  --warn: #e0a14a;
-  --warn-soft: #33281a;
+  --solid: #fafafa;
+  --on-solid: #0a0a0a;
+  --exhibit: rgba(180, 83, 9, 0.14);
+  --exhibit-ink: #fcd34d;
+  --exhibit-soft: rgba(180, 83, 9, 0.09);
+  --rec: #f87171;
+  --ember: #d97706;
+  --highlight: rgba(180, 83, 9, 0.18);
+  --highlight-ink: #fcd34d;
+  --fail: #f87171;
+  --fail-soft: rgba(248, 113, 113, 0.12);
+  --pass: #34d399;
+  --pass-soft: rgba(52, 211, 153, 0.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --shadow-card: 0 0 0 1px rgba(180, 83, 9, 0.10), 0 12px 40px -16px rgba(180, 83, 9, 0.22);
   color-scheme: dark;
 }
 

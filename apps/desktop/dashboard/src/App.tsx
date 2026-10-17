@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
+import { DotGrid } from "./components/aceternity.tsx";
 import { type Me, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
 import { ago, cn } from "./lib/format.ts";
@@ -149,7 +150,8 @@ export function App() {
 
   return (
     <ExhibitProvider>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <div className="relative min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+        <DotGrid className="opacity-40" />
         <div className="hidden lg:block">
           <div className="sticky top-0 h-dvh">{sidebar}</div>
         </div>
