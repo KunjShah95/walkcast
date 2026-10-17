@@ -145,7 +145,8 @@ export function createApp(o: ServeOptions = {}): App {
   const media = o.media ?? createMedia(root);
   const data = new LabData(root);
   // Supabase Auth when SUPABASE_URL + SUPABASE_ANON_KEY are set; otherwise built-in accounts.
-  const supabaseCfg = supabaseAuthConfig();
+  const forceLocal = process.env.LAB_AUTH === "local" || process.env.LAB_AUTH === "off";
+  const supabaseCfg = forceLocal ? null : supabaseAuthConfig();
   const auth: Auth | SupabaseAuth = supabaseCfg ? new SupabaseAuth(store, siteUrl, supabaseCfg) : new Auth(store, siteUrl);
   const authOptions = async () =>
     auth.kind === "supabase"
@@ -673,11 +674,14 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new AuthError(400, "Only http(s) addresses can be recorded.");
   const pages = Number(b.maxPages);
+  const allowedTts = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "polly", "openai", "murf", "reverie", "custom", "maya"];
+  const ttsProvider = typeof b.ttsProvider === "string" && allowedTts.includes(b.ttsProvider.toLowerCase()) ? b.ttsProvider.toLowerCase() : undefined;
   return {
     url: url.toString(),
     ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
     maxPages: Number.isFinite(pages) ? Math.max(1, Math.min(30, Math.trunc(pages))) : 8,
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
+    ...(ttsProvider ? { ttsProvider } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
 }

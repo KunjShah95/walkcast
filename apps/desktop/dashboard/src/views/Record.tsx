@@ -5,7 +5,7 @@ import { VoicePicker, hostOf } from "../components/Studio.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, type JobStatus, SignInRequired, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
-import { usePrefs } from "../lib/prefs.ts";
+import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import type { LabIndex } from "../lib/types.ts";
 
 type Attempt = { url: string; status: "running" | "failed"; message: string; at: number };
@@ -23,6 +23,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [showPassword, setShowPassword] = useState(false);
   const [maxPages, setMaxPages] = useState(prefs.maxPages);
   const [voice, setVoice] = useState(prefs.voice);
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
   const [authorized, setAuthorized] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [needsAccount, setNeedsAccount] = useState(false);
@@ -52,7 +53,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording({ url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice }, (s) => setJob(s));
+      const dir = await startRecording({ url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -150,6 +151,22 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
               <div className="grid content-start gap-2">
                 <span className="text-[13px] font-medium">Narration voice</span>
                 <VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />
+              </div>
+              <div className="grid content-start gap-2">
+                <span className="text-[13px] font-medium">TTS provider</span>
+                <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} disabled={busy} className={fieldClass}>
+                  <option value="flite">Built-in voice (local, offline)</option>
+                  <option value="sarvam">Sarvam (Indian)</option>
+                  <option value="bhashini">Bhashini (Indian, govt)</option>
+                  <option value="elevenlabs">ElevenLabs</option>
+                  <option value="google">Google Cloud</option>
+                  <option value="azure">Azure</option>
+                  <option value="awspolly">AWS Polly</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="murf">Murf</option>
+                  <option value="reverie">Reverie</option>
+                  <option value="custom">Custom / Maya</option>
+                </select>
               </div>
             </div>
 

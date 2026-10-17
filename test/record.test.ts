@@ -68,3 +68,13 @@ test("WebVTT cue text from page titles can't break the file", () => {
 test("WebVTT output", () => {
   assert.equal(toWebVtt([{ start: 1.5, end: 62.25, text: "Hello." }]), "WEBVTT\n\n1\n00:00:01.500 --> 00:01:02.250\nHello.\n");
 });
+
+test("the dashboard's local voice choice resolves to this machine's voice, never a missing one", async () => {
+  const { engineFor } = await import("../packages/core/src/record/voice.ts");
+  const { localVoice } = await import("../packages/core/src/record/media.ts");
+  // "flite" is the dashboard default; it must fall through to localVoice (Windows speech on Windows).
+  assert.equal(engineFor("flite", "slt"), null);
+  assert.equal(engineFor("", "slt"), null);
+  const local = localVoice("slt");
+  if (local) assert.match(local.id, /^(flite|windows):/);
+});
