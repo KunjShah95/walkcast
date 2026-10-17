@@ -5,6 +5,93 @@
  */
 
 export const NAME = "Walkcast";
+/** The canonical origin. SITE_URL overrides it for a one-off build (tests, staging). */
+export const SITE_ORIGIN = "https://walkcast.kunjshah.in";
+/** Who builds it: named on every page and in the JSON-LD, so engines can attribute the answers. */
+export const AUTHOR = { name: "Kunj Shah", url: "https://github.com/KunjShah95" };
+/** When the page copy last changed in substance (dateModified, sitemap lastmod). */
+export const UPDATED = "2026-10-17";
+
+/** Every prerendered page: the landing page plus the documents engines can cite on their own. */
+export interface Route {
+  path: string;
+  title: string;
+  description: string;
+  /** Breadcrumb label. */
+  label: string;
+}
+export const ROUTES: Route[] = [
+  {
+    path: "/",
+    label: "Home",
+    title: "Walkcast · Narrated video walkthroughs of any website",
+    description:
+      "Paste a site link, get a narrated video walkthrough: an MP4 with voice-over, captions and transcript. Walkcast signs in and walks the pages. Free for Windows.",
+  },
+  {
+    path: "/guides/narrated-website-walkthrough",
+    label: "How to make a narrated website walkthrough",
+    title: "How to make a narrated video walkthrough of a website (free) · Walkcast",
+    description:
+      "Step by step: turn a website link into a narrated MP4 with captions and a transcript, even behind a login. No microphone, screen recorder or editing.",
+  },
+  {
+    path: "/compare/screen-recording",
+    label: "Walkcast vs screen recording",
+    title: "Walkcast vs screen recording (Loom, OBS, Xbox Game Bar) · Walkcast",
+    description:
+      "When a generated, narrated walkthrough beats recording your screen, and when it does not. A fair comparison of effort, consistency, captions, privacy and cost.",
+  },
+  {
+    path: "/faq",
+    label: "FAQ",
+    title: "Walkcast FAQ: logins, passwords, voices, output files · Walkcast",
+    description:
+      "Answers about Walkcast: which PCs it runs on, recording pages behind a login, what happens to your password, CAPTCHAs, voices, output files and price.",
+  },
+  {
+    path: "/download",
+    label: "Download",
+    title: "Download Walkcast for Windows (free) · Walkcast",
+    description:
+      "Download Walkcast free for Windows 10 and 11: the .exe installer (no admin rights) or the .msi package. Requirements, SmartScreen and running from source.",
+  },
+  {
+    path: "/privacy",
+    label: "Privacy",
+    title: "Walkcast privacy: what stays on your PC · Walkcast",
+    description:
+      "Walkcast runs on your own PC. Recordings, the browser and your passwords stay there; the app has no analytics. Exactly which network requests it makes, and why.",
+  },
+];
+
+/** Questions answered on /faq beyond the landing page's list. */
+export const MORE_FAQ: [string, string][] = [
+  [
+    "What files does a recording produce?",
+    "An MP4 (H.264 video, AAC narration and an embedded caption track), a WebM copy with the narration, the narration as a WAV file, WebVTT captions, and a list of every page visited with its HTTP status.",
+  ],
+  [
+    "How long does a recording take?",
+    "Usually a minute or two. A six-page site records, narrates and encodes in under a minute on an ordinary laptop; it scales with the number of pages, up to 30.",
+  ],
+  [
+    "Which voices does it use?",
+    "On Windows the narration is spoken by the voices built into Windows (a female or a male voice). When run from source on Linux or macOS it uses ffmpeg's flite voices. Nothing is sent to a speech service unless you configure one.",
+  ],
+  [
+    "Can I edit the narration?",
+    "Yes. In the app's Studio you can rewrite any line of the script and re-narrate the video, or replace the voice with your own recording.",
+  ],
+  [
+    "Does Walkcast upload my recordings?",
+    "No. Recordings are written to the app's folder on your PC and are not uploaded anywhere. You share the MP4 yourself.",
+  ],
+  [
+    "Can it record internal tools or a local development site?",
+    "Yes. Because it runs on your PC, it can record any site that PC can reach, including localhost and company intranets, as long as you may test it.",
+  ],
+];
 export const TAGLINE = "Narrated video walkthroughs of any website, from a link";
 export const DESCRIPTION =
   "Paste your website's link and get a narrated video walkthrough. Walkcast signs in, walks your pages and hands back an MP4 with a spoken voice-over, captions and a transcript. Free desktop app for Windows.";

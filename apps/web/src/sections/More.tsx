@@ -637,7 +637,7 @@ export function Footer() {
       <div className="wrap">
         <div className="foot">
           <div>
-            <a className="brand" href="#top"><BrandMark />walkcast</a>
+            <a className="brand" href="/#top"><BrandMark />walkcast</a>
             <p>Narrated video walkthroughs of any website, made on your Windows PC.</p>
             <DownloadButton />
             <span className="ver mono"><a href={RELEASES_URL}>v{VERSION}</a> · Windows 10/11 · x64</span>
@@ -645,12 +645,12 @@ export function Footer() {
           <div>
             <h4>Product</h4>
             <ul>
-              <li><a href="#features">Features</a></li>
-              <li><a href="#login">Logins</a></li>
-              <li><a href="#studio">The app</a></li>
-              <li><a href="#uses">Use cases</a></li>
-              <li><a href="#pricing">Pricing</a></li>
-              <li><a href="#faq">FAQ</a></li>
+              <li><a href="/#features">Features</a></li>
+              <li><a href="/#login">Logins</a></li>
+              <li><a href="/#studio">The app</a></li>
+              <li><a href="/#uses">Use cases</a></li>
+              <li><a href="/#pricing">Pricing</a></li>
+              <li><a href="/#faq">FAQ</a></li>
             </ul>
           </div>
           <div>
@@ -659,6 +659,16 @@ export function Footer() {
               <li><a href={WINDOWS_EXE_URL}><WindowsIcon width={14} height={14} />Windows .exe</a></li>
               <li><a href={WINDOWS_MSI_URL}><WindowsIcon width={14} height={14} />Windows .msi</a></li>
               <li><a href={RELEASES_URL}><Rocket size={14} />All releases</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Learn</h4>
+            <ul>
+              <li><a href="/guides/narrated-website-walkthrough">How-to guide</a></li>
+              <li><a href="/compare/screen-recording">vs screen recording</a></li>
+              <li><a href="/faq">All questions</a></li>
+              <li><a href="/download">Download details</a></li>
+              <li><a href="/privacy">Privacy</a></li>
             </ul>
           </div>
           <div>
