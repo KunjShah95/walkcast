@@ -11,7 +11,7 @@ import { Worker } from "../../../packages/core/src/jobs/worker.ts";
 import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
-import { VOICES, hasFlite, isVoice, renarrate, voiceover, voicePreview } from "../../../packages/core/src/record/media.ts";
+import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview } from "../../../packages/core/src/record/media.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
@@ -419,7 +419,7 @@ export function createApp(o: ServeOptions = {}): App {
         scenarios: allScenarios("pairs"),
         limits: LIMITS,
         usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
-        voices: { available: hasFlite(), list: VOICES, editable: media.kind === "local" },
+        voices: { available: canNarrate(), list: VOICES, editable: media.kind === "local" },
         jobsUnavailable: o.jobsUnavailable ?? null,
       });
     }
@@ -427,7 +427,7 @@ export function createApp(o: ServeOptions = {}): App {
     const voiceMatch = /^\/api\/voices\/(\w+)\.wav$/.exec(url.pathname);
     if (voiceMatch) {
       if (!isVoice(voiceMatch[1])) return json(404, { error: "Unknown voice." });
-      if (!hasFlite()) return json(503, { error: "Voice previews need ffmpeg with the flite voice on this server." });
+      if (!canNarrate()) return json(503, { error: "Voice previews need ffmpeg, plus its flite voice or Windows speech." });
       const wav = await voicePreview(voiceMatch[1]);
       res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length, "Cache-Control": "private, max-age=86400" });
       return void res.end(wav);

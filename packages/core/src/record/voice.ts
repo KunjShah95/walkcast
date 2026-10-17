@@ -6,7 +6,7 @@
  * `elevenlabs`). Any failure to reach the provider throws so the recording still ships with video
  * + captions (the existing `buildMedia` catch keeps what we have). Keys never leave the server.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -69,6 +69,58 @@ export function sarvamEngine(): VoiceEngine | null {
       await writeFile(outFile, buf);
     },
   };
+}
+
+/**
+ * The speech engine built into Windows (SAPI, System.Speech), driven through PowerShell. Every
+ * Windows 10/11 install has it, while the ffmpeg builds people get on Windows (gyan.dev, BtbN)
+ * leave out flite, so this is what narrates on Windows. The flite voice names map to a gender:
+ * slt is female, the others male; Windows picks its installed voice for that gender.
+ */
+export function sapiEngine(voice: FliteVoice): VoiceEngine {
+  const gender = voice === "slt" ? "Female" : "Male";
+  return {
+    id: `windows:${gender.toLowerCase()}`,
+    kind: "local",
+    available: sapiAvailable,
+    async speak(text, outFile, cwd) {
+      const txt = join(cwd, ".tts-tmp.txt");
+      writeFileSync(txt, text, "utf8");
+      // Paths and text reach PowerShell through the environment, so nothing needs quoting.
+      await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SAPI_SCRIPT], {
+        env: { ...process.env, WALKCAST_TTS_IN: txt, WALKCAST_TTS_OUT: outFile, WALKCAST_TTS_GENDER: gender },
+        timeout: 60_000,
+        windowsHide: true,
+      });
+      if (!existsSync(outFile)) throw new Error("Windows speech produced no audio");
+    },
+  };
+}
+
+const SAPI_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  "Add-Type -AssemblyName System.Speech",
+  "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+  "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::$env:WALKCAST_TTS_GENDER) } catch {}",
+  "$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(22050, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)",
+  "$s.SetOutputToWaveFile($env:WALKCAST_TTS_OUT, $f)",
+  "$s.Speak([IO.File]::ReadAllText($env:WALKCAST_TTS_IN))",
+  "$s.Dispose()",
+].join("; ");
+
+let sapi: boolean | undefined;
+/** Whether Windows speech is usable here: Windows, PowerShell, and at least one installed voice. */
+export function sapiAvailable(): boolean {
+  if (sapi === undefined) {
+    if (process.platform !== "win32" || process.env.LAB_TTS_PROVIDER === "flite") return (sapi = false);
+    const out = spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices().Count"],
+      { encoding: "utf8", timeout: 30_000, windowsHide: true },
+    );
+    sapi = out.status === 0 && Number.parseInt(out.stdout.trim(), 10) > 0;
+  }
+  return sapi;
 }
 
 export function chooseVoiceEngine(): VoiceEngine {

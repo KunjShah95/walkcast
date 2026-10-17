@@ -5,7 +5,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
-import { chooseVoiceEngine, type VoiceEngine, type FliteVoice, fliteEngine } from "./voice.ts";
+import { chooseVoiceEngine, type VoiceEngine, fliteEngine, sapiAvailable, sapiEngine } from "./voice.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -17,7 +17,7 @@ export interface MediaResult {
   /** Narration audio on its own (WAV). */
   audio: string | null;
   captions: string;
-  /** Who speaks: the flite voice, the user's own recording, or nobody (captions only). */
+  /** Who speaks: a synthetic voice ("flite" for any engine, kept for older recordings), the user's own recording, or nobody. */
   voice: "flite" | "own" | "none";
   note: string;
 }
@@ -33,12 +33,13 @@ export function isVoice(v: unknown): v is Voice {
 const VOICE: Voice = isVoice(process.env.LAB_VOICE) ? process.env.LAB_VOICE : "slt";
 
 /**
- * Turn the browser video and captions into a narrated MP4. Each caption is spoken with ffmpeg's
- * built-in flite voice, the clips are laid out without overlapping (captions shift to match the
- * speech), mixed into one track, and muxed with the video plus a caption track. Without ffmpeg
- * (or flite) the recording still has the WebM video and WebVTT captions for the dashboard player.
+ * Turn the browser video and captions into a narrated MP4. Each caption is spoken by the local
+ * voice (ffmpeg's flite where the build has it, Windows speech otherwise, or a configured cloud
+ * engine), the clips are laid out without overlapping (captions shift to match the speech), mixed
+ * into one track, and muxed with the video plus a caption track. Without ffmpeg or any voice the
+ * recording still has the WebM video and WebVTT captions for the dashboard player.
  */
-export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine = chooseVoiceEngine()): Promise<MediaResult> {
+export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice)): Promise<MediaResult> {
   const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
   const result: MediaResult = { video, mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
   const finish = (note: string) => {
@@ -47,7 +48,8 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
     return result;
   };
   if (!video) return finish("The browser produced no video.");
-  if (!hasFlite()) return finish("ffmpeg with the flite voice is not installed; the recording has video and captions only.");
+  if (!canEncode()) return finish("ffmpeg (with libx264) is not installed; the recording has video and captions only.");
+  if (!engine) return finish("No voice is available (ffmpeg has no flite and this is not Windows); the recording has video and captions only.");
 
   try {
     return await narrate(dir, video, captions, result, engine);
@@ -127,10 +129,11 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
  */
 export async function renarrate(dir: string, captions: Caption[], voice: Voice): Promise<MediaResult> {
   if (!existsSync(join(dir, "video.webm"))) throw new Error("The original browser video isn't kept for this recording, so it can't be re-narrated.");
-  if (!hasFlite()) throw new Error("ffmpeg with the flite voice isn't installed on this server.");
+  const engine = localVoice(voice);
+  if (!canEncode() || !engine) throw new Error("This machine has no narration voice (ffmpeg with flite, or Windows speech).");
   const result: MediaResult = { video: "video.webm", mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
   try {
-    return await narrate(dir, "video.webm", captions, result, fliteEngine(voice));
+    return await narrate(dir, "video.webm", captions, result, engine);
   } finally {
     for (const [i] of captions.entries()) {
       rmSync(join(dir, `.tts-${i}.wav`), { force: true });
@@ -156,11 +159,11 @@ const previews = new Map<Voice, Buffer>();
 export async function voicePreview(voice: Voice): Promise<Buffer> {
   const hit = previews.get(voice);
   if (hit) return hit;
-  if (!hasFlite()) throw new Error("ffmpeg with the flite voice isn't installed on this server.");
+  const engine = localVoice(voice);
+  if (!engine) throw new Error("This machine has no narration voice (ffmpeg with flite, or Windows speech).");
   const dir = mkdtempSync(join(tmpdir(), "lab-voice-"));
   try {
-    writeFileSync(join(dir, "t.txt"), "Opening the dashboard. Scrolling through the pricing page, then signing in.");
-    await run(["-f", "lavfi", "-i", `flite=textfile=t.txt:voice=${voice}`, "-ar", "22050", "-ac", "1", "p.wav"], { cwd: dir });
+    await engine.speak("Opening the dashboard. Scrolling through the pricing page, then signing in.", join(dir, "p.wav"), dir);
     const buf = readFileSync(join(dir, "p.wav"));
     previews.set(voice, buf);
     return buf;
@@ -177,7 +180,8 @@ const spoken = new Map<string, number>();
  * synthesized once (and cached) so the measurement is exact; otherwise it is estimated.
  */
 export async function speechMs(text: string): Promise<number> {
-  if (!hasFlite()) return text.split(/\s+/).filter(Boolean).length * 380 + 400;
+  const engine = localVoice(VOICE);
+  if (!engine) return text.split(/\s+/).filter(Boolean).length * 380 + 400;
   const cached = spoken.get(text);
   if (cached !== undefined) return cached;
   cacheDir ??= mkdtempSync(join(tmpdir(), "lab-tts-"));
@@ -185,7 +189,7 @@ export async function speechMs(text: string): Promise<number> {
   const txt = join(cacheDir, `${i}.txt`);
   const wav = join(cacheDir, `${i}.wav`);
   writeFileSync(txt, text.replace(/[{}]/g, ""));
-  await run(["-f", "lavfi", "-i", `flite=textfile=${i}.txt:voice=${VOICE}`, "-ar", "22050", "-ac", "1", wav], { cwd: cacheDir });
+  await engine.speak(text.replace(/[{}]/g, ""), wav, cacheDir);
   const ms = Math.round(wavSeconds(wav) * 1000);
   rmSync(txt, { force: true });
   rmSync(wav, { force: true });
@@ -197,16 +201,49 @@ const execFileAsync = promisify(execFile);
 
 /** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
 async function run(args: string[], opts: { cwd?: string } = {}): Promise<void> {
-  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL" });
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL", windowsHide: true });
+}
+
+let encoder: boolean | undefined;
+/** ffmpeg runs and can write H.264: enough to build the MP4 whoever speaks. */
+export function canEncode(): boolean {
+  if (encoder === undefined) {
+    const out = spawnSync(FFMPEG, ["-hide_banner", "-encoders"], { encoding: "utf8", windowsHide: true });
+    encoder = out.status === 0 && /libx264/.test(out.stdout ?? "");
+  }
+  return encoder;
 }
 
 let fliteAvailable: boolean | undefined;
+/** ffmpeg has its built-in flite voice (and H.264). Most Linux and Homebrew builds; not Windows ones. */
 export function hasFlite(): boolean {
   if (fliteAvailable === undefined) {
-    const out = spawnSync(FFMPEG, ["-hide_banner", "-filters"], { encoding: "utf8" });
-    fliteAvailable = out.status === 0 && /\bflite\b/.test(out.stdout) && /libx264/.test(spawnSync(FFMPEG, ["-hide_banner", "-encoders"], { encoding: "utf8" }).stdout ?? "");
+    const out = spawnSync(FFMPEG, ["-hide_banner", "-filters"], { encoding: "utf8", windowsHide: true });
+    fliteAvailable = out.status === 0 && /\bflite\b/.test(out.stdout) && canEncode();
   }
   return fliteAvailable;
+}
+
+/** The voice that speaks locally for `voice`: flite where ffmpeg has it, else Windows speech. */
+export function localVoice(voice: Voice): VoiceEngine | null {
+  if (hasFlite()) return fliteEngine(voice);
+  if (canEncode() && sapiAvailable()) return sapiEngine(voice);
+  return null;
+}
+
+/** Whether recordings here get a spoken narration track. */
+export function canNarrate(): boolean {
+  return canEncode() && localVoice(VOICE) !== null;
+}
+
+/** A configured cloud voice (LAB_TTS_PROVIDER) wins; otherwise the local one. */
+function pickEngine(voice: Voice): VoiceEngine | null {
+  const provider = process.env.LAB_TTS_PROVIDER?.trim().toLowerCase();
+  if (provider && provider !== "flite") {
+    const engine = chooseVoiceEngine();
+    if (engine.kind === "cloud") return engine;
+  }
+  return localVoice(voice);
 }
 
 /** Duration of a PCM WAV from its header (avoids a probe per clip). */
@@ -229,7 +266,15 @@ async function probeSeconds(file: string): Promise<number> {
   if (Number.isFinite(n)) return n;
   // Playwright WebM files sometimes lack a duration header; use the last frame's timestamp instead.
   const times = (await probe(["-select_streams", "v", "-show_entries", "packet=pts_time", "-of", "csv=p=0"])).split("\n").map(Number.parseFloat).filter(Number.isFinite);
-  return times.length ? Math.max(...times) : 0;
+  if (times.length) return Math.max(...times);
+  // No ffprobe (the desktop installer ships ffmpeg alone): stream-copy to nowhere and read the
+  // last progress time ffmpeg prints.
+  const err = await execFileAsync(FFMPEG, ["-hide_banner", "-i", file, "-map", "0:v:0", "-c", "copy", "-f", "null", "-"], { timeout: 60_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true }).then(
+    (r) => r.stderr,
+    (e: { stderr?: string }) => e.stderr ?? "",
+  );
+  const stamps = [...err.matchAll(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/g)].map(([, h, m, sec]) => Number(h) * 3600 + Number(m) * 60 + Number(sec));
+  return stamps.length ? Math.max(...stamps) : 0;
 }
 
 

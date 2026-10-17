@@ -232,10 +232,10 @@ async function main(): Promise<number> {
       const ffmpegBin = process.env.LAB_FFMPEG || "ffmpeg";
       const ffprobe = process.env.LAB_FFPROBE || "ffprobe";
       const filterProbe = spawnSync(ffmpegBin, ["-hide_banner","-filters"], { encoding: "utf8" });
-      const encProbe = spawnSync(ffmpegBin, ["-hide_banner","-encoders"], { encoding: "utf8" });
-      const hasFlite = filterProbe.status === 0 && /\bflite\b/.test(filterProbe.stdout || "") && /libx264/.test(encProbe.stdout || "");
-      console.log(`  ffmpeg: ${filterProbe.status === 0 ? "present" : "missing"} (${ffmpegBin})`);
-      console.log(`  flite voice + libx264: ${hasFlite ? "ready (narration OK)" : "MISSING (captions only)"}`);
+      const { canEncode, hasFlite, canNarrate } = await import("../../packages/core/src/record/media.ts");
+      const { sapiAvailable } = await import("../../packages/core/src/record/voice.ts");
+      console.log(`  ffmpeg: ${filterProbe.status === 0 ? "present" : "missing"} (${ffmpegBin}), libx264: ${canEncode() ? "yes" : "no"}`);
+      console.log(`  voice: ${hasFlite() ? "flite" : sapiAvailable() ? "Windows speech" : "none"}; narration ${canNarrate() ? "OK" : "MISSING (captions only)"}`);
       const gitInfo = spawnSync("git", ["status","--porcelain"], { cwd: process.cwd(), encoding: "utf8" });
       const dirty = gitInfo.status === 0 ? gitInfo.stdout.split(/\r?\n/).filter(Boolean).length : 0;
       console.log(`  repo dirty files: ${dirty} (WIP is expected; not an error)`);
