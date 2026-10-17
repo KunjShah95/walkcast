@@ -92,5 +92,21 @@ mkdirSync(BIN, { recursive: true });
 const node = join(BIN, `walkcast-node-${triple}${process.platform === "win32" ? ".exe" : ""}`);
 copyFileSync(process.execPath, node);
 
+// ffmpeg: encodes the MP4 and mixes the narration. People rarely have it on PATH, so the installer
+// ships one (WALKCAST_FFMPEG: path to the ffmpeg executable; the release workflow downloads a
+// static build). Its license file travels with it. Without it the app records video and captions only.
+const ffmpegSrc = process.env.WALKCAST_FFMPEG;
+if (ffmpegSrc) {
+  if (!existsSync(ffmpegSrc)) throw new Error(`WALKCAST_FFMPEG points at ${ffmpegSrc}, which does not exist`);
+  const binDir = join(OUT, "bin");
+  mkdirSync(binDir, { recursive: true });
+  copyFileSync(ffmpegSrc, join(binDir, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"));
+  const license = ["LICENSE", "LICENSE.txt", "COPYING.GPLv3"].map((f) => join(dirname(dirname(ffmpegSrc)), f)).find(existsSync);
+  if (license) copyFileSync(license, join(binDir, "FFMPEG-LICENSE.txt"));
+  console.log(`ffmpeg -> ${relative(REPO, binDir)}${license ? " (with its license)" : ""}`);
+} else {
+  console.warn("WALKCAST_FFMPEG unset: the installer ships no ffmpeg, so recordings fall back to video and captions unless ffmpeg is on PATH");
+}
+
 console.log(`Staged ${Object.keys(dependencies).length} packages into ${relative(REPO, OUT)}: ${Object.keys(dependencies).join(", ")}`);
 console.log(`Node ${process.version} -> ${relative(REPO, node)}`);

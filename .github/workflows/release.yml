@@ -42,6 +42,21 @@ jobs:
 
       - run: npm ci
 
+      # The installer ships ffmpeg (stage-sidecar.ts copies WALKCAST_FFMPEG): the static "essentials"
+      # build has libx264; narration on Windows comes from the system's own speech engine.
+      - name: Fetch ffmpeg
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\ffmpeg.zip"
+          Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile $zip
+          $want = (Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256).Content.Trim()
+          $got = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($got -ne $want) { throw "ffmpeg checksum mismatch: $got vs $want" }
+          Expand-Archive $zip "$env:RUNNER_TEMP\ffmpeg"
+          $exe = Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          & $exe.FullName -hide_banner -encoders | Select-String libx264
+          "WALKCAST_FFMPEG=$($exe.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
       # tauri build runs beforeBuildCommand (dashboard build + sidecar staging) itself.
       - uses: tauri-apps/tauri-action@v0
         env:
