@@ -97,7 +97,15 @@ export function Studio({
   };
 
   const outcome = OUTCOME[r.signIn.outcome] ?? { text: r.signIn.outcome, tone: "muted" as const };
-  const voiceLine = r.media.voice === "own" ? "Your voice" : r.media.voice === "flite" ? r.media.note.match(/"(\w+)" voice/)?.[1]?.toUpperCase() ?? "Synthetic voice" : "Captions only";
+  const engine = r.media.note.match(/"([\w:]+)" voice/)?.[1] ?? "";
+  const voiceLine =
+    r.media.voice === "own"
+      ? "Your voice"
+      : r.media.voice === "flite"
+        ? engine.startsWith("windows:")
+          ? `Windows voice (${engine.slice("windows:".length)})`
+          : engine.replace(/^flite:/, "").toUpperCase() || "Synthetic voice"
+        : "Captions only";
 
   return (
     <div className={cn("grid min-w-0 gap-4", !compact && "xl:grid-cols-[minmax(0,1fr)_380px]")}>

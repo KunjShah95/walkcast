@@ -40,11 +40,11 @@ export function Reveal({ children, delay = 0, className, as = "div" }: { childre
   );
 }
 
-/** A case-file section mark: a mono number, then the section's name. */
+/** A section mark: a mono number, then the section's name. */
 export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
   return (
     <p className="eyebrow">
-      <span className="eyebrow-n">§ {String(n).padStart(2, "0")}</span>
+      <span className="eyebrow-n">{String(n).padStart(2, "0")}</span>
       {children}
     </p>
   );

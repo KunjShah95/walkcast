@@ -43,7 +43,7 @@ Environment variables you may want (none are required to start):
 | `LAB_ALLOW_PRIVATE=1`, `LAB_ALLOW_LIVE_RUNS=1` | On a hosted server: allow recording private addresses / paid live-model runs |
 | `LAB_CHROME_PATH` | Chrome for Testing, for the Stagehand agents |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Live model runs (`npm run lab -- providers` lists them all) |
-| `LAB_VOICE` | flite voice for narration: `slt` (default), `awb`, `kal`, `rms` |
+| `LAB_VOICE` | Narration voice: `slt` (default, female), `awb`, `kal`, `rms`; on Windows without flite these pick a female or male system voice |
 
 ## Walkcast Lab
 
@@ -362,8 +362,11 @@ the server when the app quits.
 Inside the app data is local: a file store under the data directory, and hosted-database settings
 in the environment are ignored. Chromium (about 250 MB across a few files) downloads once on first
 launch into `<data>/browsers`, with progress in a corner of the dashboard; a recording asked for
-before it finishes is refused with a message saying so. ffmpeg is not bundled: without it on
-`PATH`, recordings have no narration audio. Logs go to the app's log directory
+before it finishes is refused with a message saying so. The installer ships ffmpeg (the static
+gyan.dev "essentials" build, fetched and checksum-verified by the release workflow; its license is
+in `sidecar/bin`). Windows ffmpeg builds have no flite voice, so on Windows the narration is spoken
+by the system's own speech engine (SAPI): female for `slt`, male for the other voices. Elsewhere
+flite is used when ffmpeg has it. `npm run doctor` shows which voice a machine will use. Logs go to the app's log directory
 (`%LOCALAPPDATA%\com.walkcast.desktop\logs` on Windows).
 
 **Accounts are optional.** Everything works signed out. With Supabase configured, Sign in / Create

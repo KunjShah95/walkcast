@@ -104,15 +104,20 @@ export class PgStore implements Store {
   }
 
   async enqueueLimited(job: NewJob, maxActive: number) {
-    // One statement holds the whole invariant: the active-job count and the insert, so two
-    // instances racing the same owner cannot both pass a read-then-write check.
-    const [inserted] = await this.sql`
-      insert into jobs (kind, owner, input, secret, idempotency_key, max_attempts)
-      select ${job.kind}, ${job.owner}, ${this.sql.json(job.input as postgres.JSONValue)}, ${job.secret ?? null}, ${job.idempotencyKey ?? null}, ${job.maxAttempts ?? 2}
-      where (select count(*)::int from jobs j
-             where j.owner is not distinct from ${job.owner} and j.status in ('queued', 'running')) < ${maxActive}
-      on conflict (owner, idempotency_key) where idempotency_key is not null do nothing
-      returning *`;
+    // A single insert-if-count-below statement is not enough: under READ COMMITTED, concurrent
+    // statements each count from a snapshot without the others' uncommitted rows, so all of them
+    // pass. A transaction-scoped advisory lock per owner serializes the count and the insert across
+    // every connection and instance; the next submit counts only after this one has committed.
+    const [inserted] = await this.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtext(${`jobs:${job.owner ?? ""}`}))`;
+      return tx`
+        insert into jobs (kind, owner, input, secret, idempotency_key, max_attempts)
+        select ${job.kind}, ${job.owner}, ${tx.json(job.input as postgres.JSONValue)}, ${job.secret ?? null}, ${job.idempotencyKey ?? null}, ${job.maxAttempts ?? 2}
+        where (select count(*)::int from jobs j
+               where j.owner is not distinct from ${job.owner} and j.status in ('queued', 'running')) < ${maxActive}
+        on conflict (owner, idempotency_key) where idempotency_key is not null do nothing
+        returning *`;
+    });
     if (inserted) return toJob(inserted);
     // No row: either the owner was at the limit, or an idempotent resubmit hit the conflict.
     if (job.idempotencyKey) {

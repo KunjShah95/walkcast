@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -42,6 +42,9 @@ try {
 for (const key of ["SUPABASE_DB_URL", "DATABASE_URL", "LAB_SITE_URL", "LAB_HOST"]) {
   delete process.env[key];
 }
+// The ffmpeg the installer ships (stage-sidecar.ts), set before the media modules read it.
+const bundledFfmpeg = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+if (existsSync(bundledFfmpeg)) process.env.LAB_FFMPEG ??= bundledFfmpeg;
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(root, "browsers");
 mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true });
 

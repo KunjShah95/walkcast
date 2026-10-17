@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { startApp } from "../packages/core/src/app/server.ts";
 import { SEED_LEADS } from "../packages/core/src/lab/task.ts";
-import { hasFlite } from "../packages/core/src/record/media.ts";
+import { canNarrate } from "../packages/core/src/record/media.ts";
 import { toWebVtt } from "../packages/core/src/record/narration.ts";
 import { recordSite } from "../packages/core/src/record/site.ts";
 
@@ -39,7 +39,7 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
   assert.ok(r.captions.every((c) => !c.text.includes("demo-pass")));
   assert.ok(existsSync(join(r.dir, "captions.vtt")));
   assert.ok(existsSync(join(r.dir, "video.webm")));
-  if (hasFlite()) {
+  if (canNarrate()) {
     assert.equal(r.media.mp4, "recording.mp4");
     assert.equal(r.media.voice, "flite");
     // Spoken lines never overlap.
