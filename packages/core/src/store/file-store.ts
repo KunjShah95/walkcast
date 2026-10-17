@@ -22,7 +22,17 @@ export class FileStore implements Store {
   private chain: Promise<unknown> = Promise.resolve();
 
   constructor(readonly file: string) {
-    const loaded = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Partial<Data>) : {};
+    let loaded: Partial<Data> = {};
+    if (existsSync(file)) {
+      try {
+        loaded = JSON.parse(readFileSync(file, "utf8")) as Partial<Data>;
+      } catch (e) {
+        const backup = `${file}.corrupt-${Date.now()}`;
+        try { renameSync(file, backup); } catch { /* best effort */ }
+        console.error(`FileStore: could not parse ${file} (${e instanceof Error ? e.message : String(e)}); moved to ${backup} and starting empty.`);
+        loaded = {};
+      }
+    }
     this.data = { users: [], sessions: [], limits: {}, jobs: [], recordings: [], ...loaded };
     // Jobs that were running when the process stopped go back to the queue.
     for (const j of this.data.jobs) if (j.status === "running") Object.assign(j, { status: "queued", lockedBy: null, leaseUntil: null });
@@ -167,7 +177,7 @@ export class FileStore implements Store {
           Object.assign(job, { status: "failed", error: "The worker stopped responding too many times.", secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
           continue;
         }
-        Object.assign(job, { status: "running", lockedBy: workerId, leaseUntil: now + leaseMs, attempts: job.attempts + 1, startedAt: new Date().toISOString() });
+        Object.assign(job, { status: "running", lockedBy: workerId, leaseUntil: now + leaseMs, attempts: job.attempts + 1, startedAt: new Date().toISOString(), finishedAt: null, error: null });
         return strip(job);
       }
       return null;

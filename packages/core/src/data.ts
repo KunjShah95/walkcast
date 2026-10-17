@@ -136,6 +136,8 @@ export class LabData {
 
   /** Parsed run summaries keyed by result.json path, reused while its mtime is unchanged. */
   private cache = new Map<string, { mtimeMs: number; summary: RunSummary | null }>();
+  /** Parsed recordings keyed by recording.json path, reused while its mtime is unchanged. */
+  private recordingCache = new Map<string, { mtimeMs: number; summary: RecordingSummary | null }>();
 
   /** Newest `limit` runs (all by default). Unchanged runs are served from an mtime-keyed cache. */
   index(limit = Number.POSITIVE_INFINITY): LabIndex {
@@ -185,15 +187,20 @@ export class LabData {
     for (const name of this.dirs("recordings")) {
       const path = join(this.root, "recordings", name, "recording.json");
       if (!existsSync(path)) continue;
-      try {
-        const r = readJson(path) as RecordingSummary;
-        // `join` would give "recordings\<name>" on Windows. `dir` becomes part of a URL
-        // (`/files/<dir>/<file>`), so it must use forward slashes on every platform or the
-        // client's per-segment encoding turns the separator into %5C and the server 404s.
-        out.push({ ...r, dir: `recordings/${name}` });
-      } catch {
-        // half-written recording
+      let mtimeMs: number;
+      try { mtimeMs = statSync(path).mtimeMs; } catch { continue; }
+      const hit = this.recordingCache.get(path);
+      let r: RecordingSummary | null;
+      if (hit && hit.mtimeMs === mtimeMs) r = hit.summary;
+      else {
+        try { r = readJson(path) as RecordingSummary; } catch { r = null; }
+        this.recordingCache.set(path, { mtimeMs, summary: r });
       }
+      if (!r) continue; // half-written recording
+      // `join` would give "recordings\<name>" on Windows. `dir` becomes part of a URL
+      // (`/files/<dir>/<file>`), so it must use forward slashes on every platform or the
+      // client's per-segment encoding turns the separator into %5C and the server 404s.
+      out.push({ ...r, dir: `recordings/${name}` });
     }
     return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }

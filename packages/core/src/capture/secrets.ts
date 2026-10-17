@@ -6,6 +6,9 @@
 const SECRETS = new Map<string, string>();
 
 export function registerSecret(name: string, value: string): void {
+  // Scrubbing is a find-and-replace over serialized JSON, so a one- or two-character "secret"
+  // would rewrite every occurrence of those characters (keys, quotes) and corrupt the trace.
+  // Values under 4 characters are not real credentials; skip them.
   if (value.length >= 4) SECRETS.set(name, value);
 }
 
@@ -18,13 +21,16 @@ export function scrub<T>(value: T): T {
   if (SECRETS.size === 0) return value;
   let text = JSON.stringify(value);
   if (text === undefined) return value;
-  for (const [name, secret] of SECRETS) text = text.split(jsonEscape(secret)).join(`{{secret:${name}}}`);
+  // Longest secrets first, so a secret that is a substring of another can't be partially replaced.
+  const ordered = [...SECRETS.entries()].sort((a, b) => b[1].length - a[1].length);
+  for (const [name, secret] of ordered) text = text.split(jsonEscape(secret)).join(`{{secret:${name}}}`);
   return JSON.parse(text) as T;
 }
 
 export function scrubText(text: string): string {
   let out = text;
-  for (const [name, secret] of SECRETS) out = out.split(secret).join(`{{secret:${name}}}`);
+  const ordered = [...SECRETS.entries()].sort((a, b) => b[1].length - a[1].length);
+  for (const [name, secret] of ordered) out = out.split(secret).join(`{{secret:${name}}}`);
   return out;
 }
 
@@ -32,7 +38,10 @@ export function unscrub<T>(value: T): T {
   if (SECRETS.size === 0) return value;
   let text = JSON.stringify(value);
   if (text === undefined) return value;
-  for (const [name, secret] of SECRETS) text = text.split(`{{secret:${name}}}`).join(jsonEscape(secret));
+  // Placeholders are distinct strings, so order is not strictly required, but sorting by secret length
+  // keeps behaviour symmetric with scrub().
+  const ordered = [...SECRETS.entries()].sort((a, b) => b[1].length - a[1].length);
+  for (const [name, secret] of ordered) text = text.split(`{{secret:${name}}}`).join(jsonEscape(secret));
   return JSON.parse(text) as T;
 }
 

@@ -134,6 +134,7 @@ export class PgStore implements Store {
       where status = 'running' and lease_until < now() and attempts >= max_attempts`;
     const [r] = await this.sql`
       update jobs set status = 'running', locked_by = ${workerId}, attempts = attempts + 1, started_at = now(),
+        finished_at = null, error = null,
         lease_until = now() + (${leaseMs} * interval '1 millisecond')
       where id = (
         select id from jobs
