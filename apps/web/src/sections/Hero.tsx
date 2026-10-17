@@ -129,9 +129,6 @@ export function Hero() {
   return (
     <section className="hero" id="top">
       <div className="wrap">
-        <motion.p className="case mono" {...line(0)}>
-          <span className="case-dot" /> Case 0412 · Estate360 · 6 pages · 1:11 · unedited
-        </motion.p>
         <h1>
           <motion.span className="line" {...line(0)}>
             Paste a <Tile icon={Link} tone="ink" tilt={-6} /> link.
