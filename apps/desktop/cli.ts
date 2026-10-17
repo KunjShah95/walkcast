@@ -221,6 +221,20 @@ async function main(): Promise<number> {
       const envFile = ".env";
       console.log(`  .env: ${existsSync(envFile) ? "present" : "missing — copy .env.example => .env"}`);
       const apiKeys = ["ANTHROPIC_API_KEY","OPENAI_API_KEY","OPENROUTER_API_KEY","GROQ_API_KEY","AI_GATEWAY_API_KEY","GEMINI_API_KEY","MISTRAL_API_KEY","DEEPSEEK_API_KEY","XAI_API_KEY","HF_TOKEN","TOGETHER_API_KEY","FIREWORKS_API_KEY","CEREBRAS_API_KEY"];
+      if (existsSync(".env")) {
+        try {
+          for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
+            const m = /^(SUPABASE_URL|SUPABASE_ANON_KEY)=(.+)$/.exec(line.trim());
+            if (m) {
+              const val = m[2]!.trim();
+              const hasSpace = m[2] !== m[2]!.trim();
+              let valid = true;
+              if (m[1] === "SUPABASE_URL") { try { const u = new URL(val); valid = (u.protocol === "https:" || u.protocol === "http:") && !!u.host; } catch { valid = false; } }
+              console.log(`  ${m[1]}: ${valid ? "ok" : "INVALID"}${hasSpace ? " (had surrounding whitespace)" : ""}`);
+            }
+          }
+        } catch { /* ignore */ }
+      }
       console.log("  AI provider keys:");
       for (const key of apiKeys) {
         console.log(`    ${key.padEnd(22)} ${process.env[key]?.trim() ? "set" : "empty"}`);
