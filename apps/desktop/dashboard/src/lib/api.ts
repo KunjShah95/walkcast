@@ -45,6 +45,27 @@ export function fileUrl(runDir: string, absolutePath: string): string | undefine
 
 export type Voice = "slt" | "awb" | "kal" | "rms";
 
+/** One selectable voice inside a cloud TTS provider (an ElevenLabs voice id, an OpenAI voice, ...). */
+export interface CloudVoice {
+  id: string;
+  name: string;
+  note?: string;
+}
+
+/** One narration provider as the server reports it: which voices it has and whether it can speak. */
+export interface TtsProviderInfo {
+  id: string;
+  label: string;
+  /** False for the offline built-in voice and an uploaded sample. */
+  cloud: boolean;
+  /** False when the provider's voice ids aren't a public list: the picker takes a text box. */
+  hasList: boolean;
+  /** The server holds credentials for this provider. */
+  configured: boolean;
+  defaultVoice: string;
+  voices: CloudVoice[];
+}
+
 export interface Capabilities {
   live: boolean;
   /** Sample-site recordings allowed (always on desktop; LAB_DEMO_SITE=1 on a shared server). */
@@ -57,6 +78,8 @@ export interface Capabilities {
   limits?: { activeJobsPerUser: number; recordingsPerDay: number; runsPerDay: number };
   usage?: { recordingsToday: number };
   voices?: { available: boolean; list: Voice[]; editable: boolean };
+  /** Cloud narration providers, their voices, and which of them are configured. */
+  tts?: { providers: string[]; configured: string[] };
   /** Set when this deployment can't run recordings or lab runs at all. */
   jobsUnavailable?: string | null;
 }
@@ -125,7 +148,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
@@ -155,6 +178,24 @@ export async function loadMe(): Promise<Me | null> {
 /** A short spoken sample of a narration voice. */
 export function voicePreviewUrl(voice: Voice): string {
   return `/api/voices/${voice}.wav`;
+}
+
+/** A short sample of one cloud provider's voice, synthesized by the server. */
+export function cloudVoicePreviewUrl(provider: string, voice: string): string {
+  return `/api/voices/preview?provider=${encodeURIComponent(provider)}&voice=${encodeURIComponent(voice)}`;
+}
+
+/** The server's voice catalog: providers, their voices, and their defaults. */
+export async function loadTtsProviders(): Promise<TtsProviderInfo[]> {
+  if (baked) return [];
+  try {
+    const res = await fetch("/api/voices");
+    if (!res.ok) return [];
+    const body = (await res.json()) as { providers?: TtsProviderInfo[] };
+    return body.providers ?? [];
+  } catch {
+    return [];
+  }
 }
 
 async function recordingCall(id: string, what: "narration" | "voiceover", init: RequestInit): Promise<RecordingSummary> {

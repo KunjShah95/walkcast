@@ -12,6 +12,8 @@ import { configuredProviders } from "../../../packages/core/src/llm/providers.ts
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
+import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
+import { defaultVoiceFor, isCloudProvider, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
@@ -139,6 +141,24 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key" },
   { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL" },
 ];
+
+/** Every narration provider the dashboard may select, local ones first. */
+const TTS_PROVIDERS = ["flite", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
+
+const TTS_PROVIDER_LABEL: Record<string, string> = {
+  flite: "Built-in voice (local, offline)",
+  elevenlabs: "ElevenLabs",
+  openai: "OpenAI",
+  google: "Google Cloud",
+  azure: "Azure",
+  awspolly: "AWS Polly",
+  sarvam: "Sarvam (Indian)",
+  bhashini: "Bhashini (Indian, govt)",
+  murf: "Murf",
+  reverie: "Reverie",
+  custom: "Custom / Maya",
+  "custom-voice": "Custom voice (uploaded sample)",
+};
 
 function credentialsPath(root: string): string {
   return join(root, ".walkcast-credentials.json");
@@ -511,6 +531,7 @@ export function createApp(o: ServeOptions = {}): App {
         limits: LIMITS,
         usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
         voices: { available: canNarrate(), list: VOICES, editable: media.kind === "local" },
+        tts: { providers: TTS_PROVIDERS, configured: configuredCloudProviders() },
         jobsUnavailable: o.jobsUnavailable ?? null,
       };
       if (capabilitiesCache.size >= CAPABILITIES_CACHE_MAX) {
@@ -587,6 +608,27 @@ export function createApp(o: ServeOptions = {}): App {
     }
 
     // ---------------------------------------------------------------- voice preview (cloud providers)
+    // The voice catalog the TTS picker renders: each provider's voices, its default, and whether
+    // the server holds credentials for it. Providers with no public list (Murf, custom) are typed in.
+    if (url.pathname === "/api/voices" && req.method === "GET") {
+      return json(200, {
+        providers: TTS_PROVIDERS.map((p) => {
+          const cloud = isCloudProvider(p);
+          const voices = voicesFor(p);
+          return {
+            id: p,
+            label: TTS_PROVIDER_LABEL[p] ?? p,
+            cloud,
+            /** A provider with credentials, so a choice here can actually speak. */
+            configured: !cloud || configuredCloudProviders().includes(p),
+            /** False when the provider's voice ids aren't a public list: the picker takes a text box. */
+            hasList: voices.length > 0,
+            defaultVoice: cloud ? defaultVoiceFor(p) : (p === "flite" ? VOICES[0] : ""),
+            voices,
+          };
+        }),
+      });
+    }
     if (url.pathname === "/api/voices/preview" && (req.method === "GET" || req.method === "HEAD")) {
       const provider = (url.searchParams.get("provider") ?? "").trim();
       const voice = (url.searchParams.get("voice") ?? "slt").trim();
@@ -1040,14 +1082,21 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new AuthError(400, "Only http(s) addresses can be recorded.");
   const pages = Number(b.maxPages);
-  const allowedTts = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "polly", "openai", "murf", "reverie", "custom", "maya"];
-  const ttsProvider = typeof b.ttsProvider === "string" && allowedTts.includes(b.ttsProvider.toLowerCase()) ? b.ttsProvider.toLowerCase() : undefined;
+  // "polly" and "maya" are older aliases of two providers still in the list.
+  const allowedTts = [...TTS_PROVIDERS, "polly", "maya"];
+  const ttsProvider = typeof b.ttsProvider === "string" && allowedTts.includes(b.ttsProvider.toLowerCase() as typeof allowedTts[number]) ? b.ttsProvider.toLowerCase() : undefined;
+  // A chosen voice must be one this provider actually has, unless the provider has no public list
+  // (Murf, a custom endpoint), where the id is passed through as typed.
+  const chosen = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
+  const list = ttsProvider ? voicesFor(ttsProvider) : [];
+  const ttsVoice = ttsProvider && chosen && (list.length === 0 || list.some((v) => v.id === chosen)) ? chosen : undefined;
   return {
     url: url.toString(),
     ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
     maxPages: Number.isFinite(pages) ? Math.max(1, Math.min(30, Math.trunc(pages))) : 8,
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
     ...(ttsProvider ? { ttsProvider } : {}),
+    ...(ttsVoice ? { ttsVoice } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
 }

@@ -10,6 +10,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveVoice } from "./voices.ts";
 
 const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
 const execFileAsync = promisify(execFile);
@@ -44,19 +45,20 @@ export function fliteEngine(voice: FliteVoice): VoiceEngine {
 }
 
 /** Best-effort Sarvam (Bulbul) backend. Endpoint shape per Sarvam's public API as of 2026. */
-export function sarvamEngine(): VoiceEngine | null {
+export function sarvamEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.SARVAM_API_KEY?.trim();
   if (!key) return null;
   const language = process.env.LAB_TTS_LANGUAGE ?? "en-IN";
+  const speaker = cloudVoice?.trim() || process.env.SARVAM_SPEAKER?.trim() || "anushka";
   return {
-    id: "sarvam:bulbul",
+    id: `sarvam:${speaker}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
       const res = await fetch("https://api.sarvam.ai/text-to-speech", {
         method: "POST",
         headers: { "Content-Type": "application/json", "api-subscription-key": key },
-        body: JSON.stringify({ inputs: [text], target_language_code: language, speaker: process.env.SARVAM_SPEAKER ?? "anushka", model: "bulbul:v2" }),
+        body: JSON.stringify({ inputs: [text], target_language_code: language, speaker, model: "bulbul:v2" }),
         signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) throw new Error(`sarvam TTS failed (${res.status})`);
@@ -122,14 +124,14 @@ export function sapiAvailable(): boolean {
   return sapi;
 }
 
-export function bhashiniEngine(): VoiceEngine | null {
+export function bhashiniEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.BHASHINI_API_KEY?.trim() || process.env.ULCA_API_KEY?.trim();
   const userId = process.env.BHASHINI_USER_ID?.trim() || process.env.ULCA_USER_ID?.trim();
   if (!key || !userId) return null;
   const language = process.env.LAB_TTS_LANGUAGE ?? "hi";
-  const serviceId = process.env.BHASHINI_TTS_SERVICE_ID?.trim() || "ai4bharat/indic-tts-coqui-indic--gpu--t4";
+  const serviceId = cloudVoice?.trim() || process.env.BHASHINI_TTS_SERVICE_ID?.trim() || "ai4bharat/indic-tts-coqui-indic--gpu--t4";
   return {
-    id: "bhashini:tts",
+    id: `bhashini:${serviceId.split("/").pop()}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && userId),
     async speak(text, outFile) {
@@ -149,13 +151,13 @@ export function bhashiniEngine(): VoiceEngine | null {
   };
 }
 
-export function elevenLabsEngine(): VoiceEngine | null {
+export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
   if (!key) return null;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || "21m00Tcm4TlvDq8ikWAM";
+  const voiceId = resolveVoice("elevenlabs", cloudVoice);
   const model = process.env.ELEVENLABS_MODEL?.trim() || "eleven_multilingual_v2";
   return {
-    id: "elevenlabs:tts",
+    id: `elevenlabs:${voiceId}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
@@ -178,13 +180,13 @@ export function elevenLabsEngine(): VoiceEngine | null {
 }
 
 /** Google Cloud Text-to-Speech (Indian voices: en-IN, hi-IN, ta-IN, te-IN, ...). */
-export function googleCloudTtsEngine(): VoiceEngine | null {
+export function googleCloudTtsEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.GOOGLE_TTS_API_KEY?.trim() || process.env.GOOGLE_CLOUD_API_KEY?.trim();
   if (!key) return null;
   const language = process.env.LAB_TTS_LANGUAGE ?? "en-IN";
-  const voice = process.env.GOOGLE_TTS_VOICE?.trim() || (language.startsWith("hi") ? "hi-IN-Wavenet-A" : "en-IN-Wavenet-A");
+  const voice = resolveVoice("google", cloudVoice) || (language.startsWith("hi") ? "hi-IN-Wavenet-A" : "en-IN-Wavenet-A");
   return {
-    id: "google:tts",
+    id: `google:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
@@ -204,14 +206,14 @@ export function googleCloudTtsEngine(): VoiceEngine | null {
 }
 
 /** Azure Cognitive Services TTS (Indian voices). */
-export function azureTtsEngine(): VoiceEngine | null {
+export function azureTtsEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.AZURE_TTS_KEY?.trim() || process.env.AZURE_SPEECH_KEY?.trim();
   const region = process.env.AZURE_TTS_REGION?.trim() || process.env.AZURE_SPEECH_REGION?.trim();
   if (!key || !region) return null;
   const language = process.env.LAB_TTS_LANGUAGE ?? "en-IN";
-  const voice = process.env.AZURE_TTS_VOICE?.trim() || (language.startsWith("hi") ? "hi-IN-SwaraNeural" : "en-IN-NeerjaNeural");
+  const voice = resolveVoice("azure", cloudVoice) || (language.startsWith("hi") ? "hi-IN-SwaraNeural" : "en-IN-NeerjaNeural");
   return {
-    id: "azure:tts",
+    id: `azure:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && region),
     async speak(text, outFile) {
@@ -235,12 +237,12 @@ export function azureTtsEngine(): VoiceEngine | null {
  *  For production, set AWS credentials and use the AWS CLI/SDK; here we hit Polly's synthesize
  *  endpoint with the standard AWS4 signing via fetch is not trivial, so this engine is a thin
  *  wrapper that shells out to the AWS CLI when available. */
-export function awsPollyEngine(): VoiceEngine | null {
-  const voice = process.env.AWS_POLLY_VOICE?.trim() || "Aditi";
+export function awsPollyEngine(cloudVoice?: string): VoiceEngine | null {
+  const voice = resolveVoice("awspolly", cloudVoice) || "Aditi";
   const region = process.env.AWS_REGION?.trim() || "ap-south-1";
   const lang = process.env.LAB_TTS_LANGUAGE ?? "en-IN";
   return {
-    id: "awspolly:tts",
+    id: `awspolly:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(process.env.AWS_ACCESS_KEY_ID || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI),
     async speak(text, outFile) {
@@ -257,13 +259,13 @@ export function awsPollyEngine(): VoiceEngine | null {
 }
 
 /** OpenAI TTS (gpt-4o-mini-tts / tts-1). */
-export function openaiTtsEngine(): VoiceEngine | null {
+export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) return null;
   const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
-  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "alloy";
+  const voice = resolveVoice("openai", cloudVoice) || "alloy";
   return {
-    id: "openai:tts",
+    id: `openai:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
@@ -281,12 +283,12 @@ export function openaiTtsEngine(): VoiceEngine | null {
 }
 
 /** Murf AI TTS (Indian voices). */
-export function murfEngine(): VoiceEngine | null {
+export function murfEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.MURF_API_KEY?.trim();
   if (!key) return null;
-  const voice = process.env.MURF_VOICE?.trim() || "en-IN-isha";
+  const voice = cloudVoice?.trim() || process.env.MURF_VOICE?.trim() || "en-IN-isha";
   return {
-    id: "murf:tts",
+    id: `murf:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
@@ -307,20 +309,21 @@ export function murfEngine(): VoiceEngine | null {
 }
 
 /** Reverie (Indian language TTS). */
-export function reverieEngine(): VoiceEngine | null {
+export function reverieEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.REVERIE_API_KEY?.trim();
   const appId = process.env.REVERIE_APP_ID?.trim();
   if (!key || !appId) return null;
   const language = process.env.LAB_TTS_LANGUAGE ?? "hi";
+  const speaker = cloudVoice?.trim() || process.env.REVERIE_SPEAKER?.trim() || "female";
   return {
-    id: "reverie:tts",
+    id: `reverie:${speaker}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && appId),
     async speak(text, outFile) {
       const res = await fetch("https://revapi.reverieinc.com/", {
         method: "POST",
         headers: { "Content-Type": "application/json", "REV-API-KEY": key, "REV-APP-ID": appId, "src_lang": language, "tgt_lang": language, "REV-APPNAME": "tts" },
-        body: JSON.stringify({ text, speaker: process.env.REVERIE_SPEAKER ?? "female" }),
+        body: JSON.stringify({ text, speaker }),
         signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) throw new Error(`reverie TTS failed (${res.status})`);
@@ -331,20 +334,21 @@ export function reverieEngine(): VoiceEngine | null {
 }
 
 /** Generic "Maya"-style / custom HTTP TTS endpoint. POST {text} -> audio bytes or {audio}. */
-export function customTtsEngine(): VoiceEngine | null {
+export function customTtsEngine(cloudVoice?: string): VoiceEngine | null {
   const endpoint = process.env.LAB_TTS_ENDPOINT?.trim();
   if (!endpoint) return null;
   const key = process.env.LAB_TTS_API_KEY?.trim();
   const language = process.env.LAB_TTS_LANGUAGE ?? "en";
+  const voice = cloudVoice?.trim() || process.env.LAB_TTS_VOICE?.trim() || undefined;
   return {
-    id: "custom:tts",
+    id: `custom:${voice ?? "default"}`,
     kind: "cloud",
     available: (): boolean => Boolean(endpoint),
     async speak(text, outFile) {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(key ? { "Authorization": `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ text, language, voice: process.env.LAB_TTS_VOICE }),
+        body: JSON.stringify({ text, language, voice }),
         signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) throw new Error(`custom TTS failed (${res.status})`);
@@ -384,25 +388,34 @@ function customVoiceEngine(): VoiceEngine | null {
   };
 }
 
-/** Resolve a VoiceEngine for a given provider name (or null to fall back to local flite). */
-export function engineFor(provider: string | undefined, voice: FliteVoice = "slt"): VoiceEngine | null {
+/** Resolve a VoiceEngine for a given provider name (or null to fall back to local flite).
+ *
+ * `voice` is the local flite name; `cloudVoice` is the provider-specific voice id the dashboard
+ * picker chose (see `voices.ts`). Each provider falls back to its own default when it's absent. */
+export function engineFor(provider: string | undefined, voice: FliteVoice = "slt", cloudVoice?: string): VoiceEngine | null {
   const p = (provider ?? process.env.LAB_TTS_PROVIDER ?? "flite").trim().toLowerCase();
-  if (p === "sarvam") return sarvamEngine();
-  if (p === "bhashini") return bhashiniEngine();
-  if (p === "elevenlabs") return elevenLabsEngine();
-  if (p === "google") return googleCloudTtsEngine();
-  if (p === "azure") return azureTtsEngine();
-  if (p === "awspolly" || p === "polly") return awsPollyEngine();
-  if (p === "openai") return openaiTtsEngine();
-  if (p === "murf") return murfEngine();
-  if (p === "reverie") return reverieEngine();
-  if (p === "custom" || p === "maya") return customTtsEngine();
+  if (p === "sarvam") return sarvamEngine(cloudVoice);
+  if (p === "bhashini") return bhashiniEngine(cloudVoice);
+  if (p === "elevenlabs") return elevenLabsEngine(cloudVoice);
+  if (p === "google") return googleCloudTtsEngine(cloudVoice);
+  if (p === "azure") return azureTtsEngine(cloudVoice);
+  if (p === "awspolly" || p === "polly") return awsPollyEngine(cloudVoice);
+  if (p === "openai") return openaiTtsEngine(cloudVoice);
+  if (p === "murf") return murfEngine(cloudVoice);
+  if (p === "reverie") return reverieEngine(cloudVoice);
+  if (p === "custom" || p === "maya") return customTtsEngine(cloudVoice);
   if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine();
   // "flite" is what the dashboard sends for its local default: return null so the caller uses the
   // machine's built-in voice (media.localVoice: flite where ffmpeg has it, Windows speech otherwise).
   // Forcing flite here would fail on every Windows PC, whose ffmpeg builds have no flite.
   void voice;
   return null;
+}
+
+/** The cloud providers that have credentials in this server's environment, for the TTS picker. */
+export function configuredCloudProviders(): string[] {
+  const candidates = ["sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom"];
+  return candidates.filter((p) => engineFor(p) !== null);
 }
 
 export function chooseVoiceEngine(): VoiceEngine {

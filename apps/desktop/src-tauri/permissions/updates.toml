@@ -1,0 +1,15 @@
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+# The dashboard calls these two commands from the local sidecar (see capabilities/updates.json).
+# Tauri-build only auto-generates ACL entries for core/plugin commands, so the app's own
+# commands need an explicit permission or every invoke() fails with "not allowed by ACL".
+
+[[permission]]
+identifier = "allow-check-update"
+description = "Lets the dashboard ask whether a newer signed release exists."
+commands.allow = ["check_update"]
+
+[[permission]]
+identifier = "allow-install-update"
+description = "Lets the dashboard download, verify and install an update, then restart the app."
+commands.allow = ["install_update"]

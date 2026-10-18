@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
 import { VoicePicker, hostOf } from "../components/Studio.tsx";
+import { TtsPicker } from "../components/TtsPicker.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, type JobStatus, SignInRequired, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
@@ -24,6 +25,8 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [maxPages, setMaxPages] = useState(prefs.maxPages);
   const [voice, setVoice] = useState(prefs.voice);
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
+  // Which voice inside the chosen provider; remembered per provider in prefs.
+  const [ttsVoice, setTtsVoice] = useState(prefs.ttsVoices[ttsProvider] ?? "");
   const [authorized, setAuthorized] = useState(false);
   const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
@@ -54,7 +57,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider }, (s) => setJob(s));
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}) }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -171,26 +174,23 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 <input id="rec-pages" type="range" min={1} max={30} value={maxPages} onChange={(e) => setMaxPages(Number(e.target.value))} disabled={busy} />
                 <p className="text-[12px] text-ink-3">Stops sooner if the site has fewer pages to reach.</p>
               </div>
-              <div className="grid content-start gap-2">
+              <div className="grid content-start gap-2 sm:col-span-2">
                 <span className="text-[13px] font-medium">Narration voice</span>
-                <VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />
-              </div>
-              <div className="grid content-start gap-2">
-                <span className="text-[13px] font-medium">TTS provider</span>
-                <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} disabled={busy} className={fieldClass}>
-                  <option value="flite">Built-in voice (local, offline)</option>
-                  <option value="sarvam">Sarvam (Indian)</option>
-                  <option value="bhashini">Bhashini (Indian, govt)</option>
-                  <option value="elevenlabs">ElevenLabs</option>
-                  <option value="google">Google Cloud</option>
-                  <option value="azure">Azure</option>
-                  <option value="awspolly">AWS Polly</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="murf">Murf</option>
-                  <option value="reverie">Reverie</option>
-                  <option value="custom">Custom / Maya</option>
-                <option value="custom-voice">Custom voice (uploaded sample)</option>
-                </select>
+                <TtsPicker
+                  provider={ttsProvider}
+                  voice={ttsVoice}
+                  disabled={busy}
+                  selectClassName={fieldClass}
+                  onProvider={(p) => {
+                    setTtsProvider(p);
+                    setTtsVoice(prefs.ttsVoices[p] ?? "");
+                  }}
+                  onVoice={(v) => {
+                    setTtsVoice(v);
+                    setPrefs({ ttsVoices: { ...prefs.ttsVoices, [ttsProvider]: v } });
+                  }}
+                  localVoicePicker={<VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />}
+                />
               </div>
             </div>
 

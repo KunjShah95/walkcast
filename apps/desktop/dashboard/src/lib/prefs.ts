@@ -6,26 +6,39 @@ export type TtsProvider = "flite" | "sarvam" | "bhashini" | "elevenlabs" | "goog
 export interface RecordingPrefs {
   voice: Voice;
   ttsProvider: TtsProvider;
+  /** The voice chosen inside each cloud provider, remembered per provider so switching back and
+   *  forth between ElevenLabs and Azure keeps the voice you picked in each. */
+  ttsVoices: Record<string, string>;
   maxPages: number;
   captions: boolean;
 }
 
 const KEY = "walkcast:recording-prefs";
-const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", maxPages: 8, captions: true };
+const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, maxPages: 8, captions: true };
+const PROVIDERS: TtsProvider[] = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
 
 export function readPrefs(): RecordingPrefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<RecordingPrefs>;
-    const providers: TtsProvider[] = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
     return {
       voice: (["slt", "awb", "kal", "rms"] as const).includes(raw.voice as Voice) ? (raw.voice as Voice) : DEFAULTS.voice,
-      ttsProvider: providers.includes(raw.ttsProvider as TtsProvider) ? (raw.ttsProvider as TtsProvider) : DEFAULTS.ttsProvider,
+      ttsProvider: PROVIDERS.includes(raw.ttsProvider as TtsProvider) ? (raw.ttsProvider as TtsProvider) : DEFAULTS.ttsProvider,
+      ttsVoices: raw.ttsVoices && typeof raw.ttsVoices === "object" ? sanitizeVoices(raw.ttsVoices) : {},
       maxPages: Number.isFinite(raw.maxPages) ? Math.max(1, Math.min(30, Math.trunc(raw.maxPages!))) : DEFAULTS.maxPages,
       captions: typeof raw.captions === "boolean" ? raw.captions : DEFAULTS.captions,
     };
   } catch {
     return DEFAULTS;
   }
+}
+
+/** Voice ids go into provider requests, so keep them to the shape an id can take. */
+function sanitizeVoices(raw: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [provider, voice] of Object.entries(raw)) {
+    if (PROVIDERS.includes(provider as TtsProvider) && typeof voice === "string" && /^[\w.:+-]{1,120}$/.test(voice)) out[provider] = voice;
+  }
+  return out;
 }
 
 export function usePrefs(): [RecordingPrefs, (patch: Partial<RecordingPrefs>) => void] {

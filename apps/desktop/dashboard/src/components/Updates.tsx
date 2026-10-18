@@ -77,11 +77,22 @@ export function Updates() {
 
   if (isSnapshot) return null;
   const busy = phase !== "idle";
+  // A failed check is not an up-to-date app: say which one it is.
+  const failed = Boolean(error || status?.error);
+  const title = status?.available
+    ? `Walkcast ${status.version} is available`
+    : failed
+      ? "Couldn't check for updates"
+      : status
+        ? "Walkcast is up to date"
+        : busy
+          ? "Checking for updates…"
+          : "Updates";
   return (
     <Panel id="updates">
       <PanelHeader
         eyebrow="Updates"
-        title={status?.available ? `Walkcast ${status.version} is available` : "Walkcast is up to date"}
+        title={title}
         aside={status ? <span className="font-mono text-[11.5px] text-ink-3">installed v{status.current}</span> : null}
       />
       <div className="grid gap-3 px-4 py-4">

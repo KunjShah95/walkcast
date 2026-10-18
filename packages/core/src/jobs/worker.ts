@@ -194,7 +194,7 @@ export class Worker {
   }
 
   private async record(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
-    const input = job.input as { url: string; demo?: boolean; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string };
+    const input = job.input as { url: string; demo?: boolean; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string };
     // Sample-site job: this worker runs its own MiniCRM on loopback and records it, so the demo
     // works wherever the worker runs (desktop in-process, or a separate fleet machine).
     const sample = input.demo ? await startApp({ fault: "none", seed: 1, task: "create-lead", seedLeads: SEED_LEADS }) : null;
@@ -210,6 +210,7 @@ export class Worker {
         maxPages: Number(input.maxPages ?? 8),
         ...(input.voice ? { voice: input.voice } : {}),
         ...(input.ttsProvider ? { ttsProvider: input.ttsProvider } : {}),
+        ...(input.ttsVoice ? { ttsVoice: input.ttsVoice } : {}),
         authorized: true,
         outDir,
         blockPrivate: Boolean(input.blockPrivate),
