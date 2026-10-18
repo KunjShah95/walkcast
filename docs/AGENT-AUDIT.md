@@ -57,9 +57,18 @@ Total: **5 agents** (3 scripted + 2 Stagehand).
 4. **Stagehand agents require `LAB_CHROME_PATH`** — `chromePath()` throws a clear error when missing. Documented in README. (Already in place.)
 5. **LLM agents require provider keys** — `configuredProviders()` reports which are set; `providers` command lists them. (Already in place.)
 
-## Remaining recommendations (not auto-fixed)
+## Recommendations: status (2026-10-18)
 
-- Add an `/api/agents/usage` aggregate (counts per agent id) to the dashboard for production monitoring.
-- Add per-agent rate limits / quotas in the queue worker (currently per-account only).
-- Add a canary check that runs one scripted agent per deploy (CI already runs `npm test`).
-- Document which agents are "safe to expose to end users" vs. lab-only in the API docs.
+| Recommendation | Status |
+|---|---|
+| `/api/agents/usage` aggregate per agent id | **Done.** `GET /api/agents/usage?windowMs=` returns total / succeeded / failed / active per agent, plus its exposure and daily ceiling. Counts only, no inputs or owners (`Store.agentUsage`). |
+| Per-agent rate limits / quotas | **Done.** Model-backed agents get a per-account daily ceiling on live runs (`LAB_LLM_RUNS_PER_DAY`, default 20; per-agent override `LAB_AGENT_RUNS_PER_DAY_<ID>`). Replay and scripted model modes are free and not counted. Enforced with the store's atomic `hit()`, so it holds across instances. |
+| Canary that runs one scripted agent per deploy | **Covered by CI.** The `regression-fixtures` job runs `lab compare fixtures --agents v1 --trials 3` on every push (release gate); a regression in the harness or v1 fails the build before release. |
+| Document which agents are safe to expose | **Done**, table below; also returned as `exposure` in `/api/capabilities` and `/api/agents/usage`. |
+
+## Exposure
+
+| Agent | Exposure | Why |
+|---|---|---|
+| `v0`, `v1`, `v2` | `public` | Deterministic scripts. No model calls, no provider cost; safe on any server. |
+| `sh-p0`, `sh-p1` | `lab` | Drive a real model through the gateway. On a server reachable from other machines, live runs are refused unless `LAB_ALLOW_LIVE_RUNS=1`, and they count against the per-agent daily ceiling. Replays of a recorded fixture cost nothing and are always allowed. |

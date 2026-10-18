@@ -28,19 +28,37 @@ This file is the operating manual: what to turn on, what to read, and what to do
 | `LAB_WARM_BROWSER` | – | `1` | saves 1–2 s per recording |
 | `LAB_LOG` | `json` | `json` | `pretty` for local; `off` in tests |
 | `LAB_PORT` | 4320 | – | |
+| `SUPABASE_DB_READ_URL` | optional | – | read replica for library/metrics/usage reads (SCALING §5.1) |
+| `LAB_QUEUE_ALARM_MS` | 300000 | – | `queue.alarm` warn when the oldest queued job waits longer |
+| `LAB_QUEUE_STATS_MS` | 30000 | – | cadence of the `queue.stats` log line (metric filter source) |
+| `LAB_WEBHOOK_SECRET` | optional | – | HMAC-signs webhook bodies (`X-Walkcast-Signature`) |
+| `LAB_SCHEDULE_MAX_ACTIVE` | 3 | – | active-job ceiling a schedule may add to, per owner |
+| `LAB_DEMO_SITE` | off on shared servers | – | `1` allows sample-site recordings (always on for desktop) |
+| `LAB_PLUGINS` | optional | same value | comma-separated plugin modules (docs/PLUGINS.md); load the same set on web and workers |
+| `LAB_LLM_RUNS_PER_DAY` | 20 | – | per-account daily ceiling for model-backed agents (live runs) |
+| `LAB_AGENT_RUNS_PER_DAY_<ID>` | optional | – | per-agent override, e.g. `LAB_AGENT_RUNS_PER_DAY_SH_P1=5` |
 
 ## 3. Readiness
 
 - `GET /healthz` → process answers, always 200.
 - `GET /readyz` → DB reachable and not draining. **Use this as the load-balancer target**.
-- `GET /api/metrics` → `queue.depth`, `queue.oldestQueuedMs`, per-kind duration p50/p95.
+- `GET /api/metrics` → `queue.depth`, `queue.oldestQueuedMs`, per-kind duration p50/p95, and `alarm.state` (`ok`/`alarm` against `LAB_QUEUE_ALARM_MS`).
+- Logs: `queue.stats` every 30 s (turn it into a CloudWatch metric with a filter on `oldest_queued_ms`) and `queue.alarm` at warn level while the oldest job is older than the threshold.
+- `walkcast doctor` → store reachability, applied/pending migrations, queue depth and every running lease (expired ones flagged).
+- `GET /api/agents/usage?windowMs=` → runs per agent id (total/succeeded/failed/active), with exposure and daily ceiling.
 - Smoke command: `npm run doctor` (Node, env, browsers, ffmpeg+flite, repo dirty state). Exit
   code 0 only on a runnable machine (only fails if Node < 22).
 
 ## 4. Incident ladder
 
+### a0. Webhooks not arriving
+- `GET /api/webhooks/deliveries` (as the owner) shows each delivery's `status`, `attempts`, `lastError`.
+- `failed` after 5 attempts = receiver kept returning non-2xx or timed out (10 s). Private/loopback targets are refused on exposed servers (set `LAB_ALLOW_PRIVATE=1` only on a trusted network).
+- Retries are at-least-once: receivers must de-duplicate on `X-Walkcast-Delivery`.
+
 ### a. Recordings never finish (jobs sit in `queued`)
 - Check `readyz` → worker records `store: postgres`; a `file` store means workers can't share.
+- Run `walkcast doctor` against the same `SUPABASE_DB_URL`: pending migrations block claims; `LEASE EXPIRED` rows are reclaimed on the next claim.
 - Check worker logs for `job.started`. No `job.started` = worker never claimed → check
   `LAB_WORKER=off` on web and worker `driver` logs.
 - If DB is read-only (Supabase pausing): web still serves (read-only friendly), workers abort at
@@ -60,7 +78,7 @@ This file is the operating manual: what to turn on, what to read, and what to do
 
 ### d. "Someone else's run used my key"
 - **Alarm-grade.** The `withCredentials` AsyncLocalStorage scope regressed back to a
-  `process.env` swap. Verify `src/jobs/worker.ts#labRun` uses `withCredentials`, and
+  `process.env` swap. Verify `packages/core/src/jobs/worker.ts#labRun` uses `withCredentials`, and
   `test/credentials.test.ts` still passes. Do not deploy without it.
 
 ### e. Retry storm

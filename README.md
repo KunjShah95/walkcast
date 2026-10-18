@@ -234,6 +234,8 @@ apps/desktop/          The desktop app
   dashboard/           Dashboard and timeline viewer (React)
   src-tauri/           Tauri shell
   cli.ts               Command line (lab runs, record, ui, worker, db migrate)
+apps/mobile/           Native mobile companion (Capacitor shell around the server's mobile view)
+examples/plugins/      Example plugin: a custom fault and agent adapter (docs/PLUGINS.md)
 packages/core/src/     The engine both apps build on
   app/                 MiniCRM test application and fault definitions
   capture/             Recorder (trace on one clock, redaction) and BrowserTools

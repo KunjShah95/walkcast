@@ -90,7 +90,7 @@ Two services from the same image and task family settings:
 
 | | web | worker |
 | --- | --- | --- |
-| Command | default (`lab ui`) | `node --import tsx src/cli.ts worker` |
+| Command | default (`lab ui`) | `node --import tsx apps/desktop/cli.ts worker` |
 | Size | 0.5 vCPU / 1 GB, ≥ 2 tasks | 2 vCPU / 4 GB, 1..N tasks |
 | Load balancer | ALB target group, health check `/readyz` | none |
 | `stopTimeout` | 30 s | 120 s |
@@ -115,18 +115,59 @@ variables, with secrets from Secrets Manager:
 **Networking.** Put workers in private subnets whose only route out is a NAT gateway, with a
 security group that allows outbound 443/80 and Postgres to Supabase and nothing inside the VPC.
 The app blocks private, loopback and link-local addresses for every browser request
-(`src/record/ssrf.ts`, which also covers the ECS metadata endpoint 169.254.170.2), but a hostile
+(`packages/core/src/record/ssrf.ts`, which also covers the ECS metadata endpoint 169.254.170.2), but a hostile
 DNS server can still rebind a name after the check. The network layer is the real boundary.
 
-**Autoscaling workers on queue depth.** Publish the number of queued jobs as a CloudWatch metric
-(for example a scheduled Lambda or EventBridge rule running
-`select count(*) from jobs where status = 'queued'`), and use target tracking with roughly one
-queued job per worker. `GET /api/capabilities` also reports `queue` for a quick look.
+**Autoscaling workers on queue depth.** See §3a.
 
 **Chromium sandbox.** Playwright disables Chromium's sandbox by default. Fargate doesn't allow
 the user namespaces it needs, so on Fargate the container itself (non-root user, no task-role
 permissions beyond storage, private subnet) is the isolation. On EC2-backed ECS with user
 namespaces enabled, set `LAB_CHROMIUM_SANDBOX=1`.
+
+## 3a. Queue metrics, the alarm and worker autoscaling
+
+Every web instance logs the queue every 30 s (`LAB_QUEUE_STATS_MS`):
+
+```json
+{"level":"info","event":"queue.stats","depth":4,"oldest_queued_ms":81234}
+```
+
+and logs `queue.alarm` at warn level while the oldest queued job has waited longer than
+`LAB_QUEUE_ALARM_MS` (default 5 min). No Lambda or cron is needed: turn the log line into
+metrics with a metric filter, then scale on them. Replace the log group and the cluster/service
+names with yours.
+
+```sh
+LOG_GROUP=/ecs/walkcast-web
+for f in depth oldest_queued_ms; do
+  aws logs put-metric-filter --log-group-name "$LOG_GROUP" \
+    --filter-name "walkcast-queue-$f" \
+    --filter-pattern '{ $.event = "queue.stats" }' \
+    --metric-transformations metricName=Queue_$f,metricNamespace=Walkcast,metricValue="\$.$f",unit=None
+done
+
+# Scalable target: 1..10 workers.
+aws application-autoscaling register-scalable-target --service-namespace ecs \
+  --resource-id service/walkcast/walkcast-worker --scalable-dimension ecs:service:DesiredCount \
+  --min-capacity 1 --max-capacity 10
+
+# Step policy: +1 worker per 3 queued jobs, scale in when the queue is empty.
+aws application-autoscaling put-scaling-policy --service-namespace ecs \
+  --resource-id service/walkcast/walkcast-worker --scalable-dimension ecs:service:DesiredCount \
+  --policy-name walkcast-queue-out --policy-type StepScaling \
+  --step-scaling-policy-configuration '{"AdjustmentType":"ChangeInCapacity","Cooldown":120,"MetricAggregationType":"Maximum","StepAdjustments":[{"MetricIntervalLowerBound":0,"MetricIntervalUpperBound":6,"ScalingAdjustment":1},{"MetricIntervalLowerBound":6,"ScalingAdjustment":3}]}'
+# Attach it to an alarm on Walkcast/Queue_depth >= 3 for 2 datapoints of 60 s, and a second
+# policy (ScalingAdjustment -1, Cooldown 600) to an alarm on Queue_depth = 0 for 10 minutes.
+
+# Page a human when work is genuinely stuck (oldest job > 5 min), independent of scaling.
+aws cloudwatch put-metric-alarm --alarm-name walkcast-queue-stuck --namespace Walkcast \
+  --metric-name Queue_oldest_queued_ms --statistic Maximum --period 60 --evaluation-periods 3 \
+  --threshold 300000 --comparison-operator GreaterThanThreshold --alarm-actions "$SNS_TOPIC_ARN"
+```
+
+Scale-in is safe: a worker that receives SIGTERM finishes or hands back its job within
+`stopTimeout` (`Worker.stop(graceMs)`), and a killed one's lease expires in under 60 s.
 
 ## 4. Edge
 
@@ -142,6 +183,22 @@ presigned URLs already support range requests for video seeking.
    take an advisory lock, so two concurrent runs can't both apply one.
 2. Roll the worker service, then the web service. Old and new versions share the queue table;
    a running job on a stopping worker is handed back and picked up by a new one.
+
+## 6. Hosted demo sandbox
+
+To let visitors try Walkcast without pointing it at their own site, turn on sample-site
+recordings on the deployment:
+
+| Variable | Value |
+| --- | --- |
+| `LAB_DEMO_SITE` | `1` (web tier; the Record screen then offers "Try it on a sample site") |
+| `LAB_RECORDINGS_PER_DAY` | keep low for a public demo, e.g. `3` |
+
+A sample-site job carries `demo: true` and no URL. The worker that claims it starts its own
+MiniCRM on its loopback interface, signs in with the sample credentials and records it, then
+shuts it down. Nothing user-supplied is ever loaded, so the SSRF guard has nothing to judge, and
+it works with workers on separate machines. Visitors still need an account (sign-in protects the
+quota). Pair it with the WAF rate rule in §4.
 
 ## Running it locally like production
 

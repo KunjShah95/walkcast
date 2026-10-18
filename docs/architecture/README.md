@@ -15,7 +15,7 @@ excalidraw.com and drag the `.excalidraw` file onto the canvas (or use Menu → 
 ## Keeping them current
 
 The diagrams are generated from `build.py`, which places every box and arrow by hand. Every label
-names real code: modules under `src/`, routes in `src/ui/server.ts`, and tables in
+names real code: modules under `packages/core/src/` (shown relative to it), routes in `apps/desktop/server/server.ts`, and tables in
 `supabase/migrations/`. When that code changes, edit the layout in `build.py` and regenerate
 rather than editing the JSON by hand, so the four files stay consistent:
 

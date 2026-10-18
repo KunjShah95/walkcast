@@ -1,10 +1,10 @@
 # CLI bootstrapper (first principles)
 
-`src/cli.ts` is the real, single dispatch site for every Walkcast command — `list`,
+`apps/desktop/cli.ts` is the real, single dispatch site for every Walkcast command — `list`,
 `run`, `replay`, `record`, `compare`, `ui`, `worker`, `db`, `ui-export`, `diff`,
 `baseline`, `check`, `providers`, `check-model`, `app`, `experiment`. Everything
 npm/wrappers/binaries eventually hand off to this one file. That is deliberate:
-one entry point means one place to register `.env` loading (`src/env.ts`, imported
+one entry point means one place to register `.env` loading (`packages/core/src/env.ts`, imported
 first) and one place to enforce `parseArgs`/usage errors.
 
 ## Why not always `npm run lab -- ...`?
@@ -15,7 +15,7 @@ fails before the lab ever runs. The failure is in npm, not in Walkcast. The univ
 entry point bypasses npm argv re-parsing:
 
 ```sh
-node --import tsx src/cli.ts run --fault stale-owners --agent v0 --screenshots
+node --import tsx apps/desktop/cli.ts run --fault stale-owners --agent v0 --screenshots
 ```
 
 `bin/walkcast.mjs` is the same thing packaged as a convenience executable:
@@ -39,6 +39,6 @@ After `npm install` (or `npm link`) you can just call `walkcast …`.
 ## Cross-references
 - `README.md` — quick start now uses universal entry
 - `docs/onboarding-first-day.md` — first-day path
-- `src/cli.ts` — dispatch site
-- `src/env.ts` — environment loader (runs first)
+- `apps/desktop/cli.ts` — dispatch site
+- `packages/core/src/env.ts` — environment loader (runs first)
 ```

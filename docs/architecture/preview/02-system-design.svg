@@ -58,7 +58,7 @@
 <text x="40" y="53.3" font-size="36" fill="#1e1e1e" text-anchor="start">Walkcast — System design: one recording, end to end</text>
 <text x="40" y="86.8" font-size="16" fill="#495057" text-anchor="start">A record job from submit to playback, then the job state machine and failure handling. Lab runs (/api/run) take the same queue path; only execute() differs.</text>
 <text x="160.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Dashboard SPA</text><text x="160.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">(browser)</text>
-<text x="410.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Web server</text><text x="410.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">ui/server.ts</text>
+<text x="410.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Web server</text><text x="410.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">server/server.ts</text>
 <text x="660.0" y="160.75" font-size="15" fill="#1e1e1e" text-anchor="middle">Postgres</text><text x="660.0" y="179.5" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs · rate_limits</text><text x="660.0" y="198.25" font-size="15" fill="#1e1e1e" text-anchor="middle">recordings</text>
 <text x="910.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Worker</text><text x="910.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">jobs/worker.ts</text>
 <text x="1160.0" y="170.125" font-size="15" fill="#1e1e1e" text-anchor="middle">Chromium →</text><text x="1160.0" y="188.875" font-size="15" fill="#1e1e1e" text-anchor="middle">target site</text>

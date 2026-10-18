@@ -17,15 +17,15 @@ that loses any of them is a regression:
 
 | Decision | Where | Why it holds under load |
 | --- | --- | --- |
-| One `Store` interface, two backends | `src/store/` | `FileStore` for local, `PgStore` for shared. Scaling = flip an env var, not a rewrite. |
-| Postgres as the queue, `FOR UPDATE SKIP LOCKED` claims | `src/store/pg-store.ts` | The classic pattern. Exactly-once claims, zero new infra (no Redis, no SQS divergence), and the same connection carries app state. Postgres queues handle tens of thousands of jobs/day comfortably. |
+| One `Store` interface, two backends | `packages/core/src/store/` | `FileStore` for local, `PgStore` for shared. Scaling = flip an env var, not a rewrite. |
+| Postgres as the queue, `FOR UPDATE SKIP LOCKED` claims | `packages/core/src/store/pg-store.ts` | The classic pattern. Exactly-once claims, zero new infra (no Redis, no SQS divergence), and the same connection carries app state. Postgres queues handle tens of thousands of jobs/day comfortably. |
 | Lease + heartbeat + hard deadline + 2 attempts | `jobs/worker.ts`, `claim()` in `pg-store.ts` | A worker that dies mid-job (OOM on Chromium, node reboot) hands the job back automatically. No babysitting. |
-| Stateless web tier | `src/ui/server.ts`, `src/deploy/vercel-function.ts` | Sessions in Postgres (hashes only), media in object storage. Any number of web instances behind an ALB — the mark of a monolith done right. |
-| Media off the web tier | `src/media/` | Big MP4s go to Supabase Storage/S3; serving happens via 15-minute presigned links. The web tier never ships a video. |
+| Stateless web tier | `apps/desktop/server/server.ts` (Vercel now serves only the static marketing site, `vercel.ts`) | Sessions in Postgres (hashes only), media in object storage. Any number of web instances behind an ALB — the mark of a monolith done right. |
+| Media off the web tier | `packages/core/src/media/` | Big MP4s go to Supabase Storage/S3; serving happens via 15-minute presigned links. The web tier never ships a video. |
 | Per-tenant limits at enqueue time | `/api/record`, `/api/run` | 1 active job, 20 recordings/day, 100 runs/day — enforced atomically server-side. One noisy tenant cannot flood the queue, which is why FIFO claiming stays fair. |
 | Idempotency keys | `jobs.enqueue` | A double-click is one job, not two. Without this, every retry storm doubles your browser bill. |
-| Static marketing as documents | `src/site/prerender.ts` | Public pages are files; the CDN serves them "at scale" for free. No request ever renders a marketing page. |
-| Secrets sealed per job, erased at end | `src/jobs/secret-box.ts` | Tenant credentials never outlive the job. |
+| Static marketing as documents | `apps/web/build.ts` | Public pages are files; the CDN serves them "at scale" for free. No request ever renders a marketing page. |
+| Secrets sealed per job, erased at end | `packages/core/src/jobs/secret-box.ts` | Tenant credentials never outlive the job. |
 
 So the honest summary of "how would you scale this from zero to thousands of jobs a day":
 
@@ -72,12 +72,12 @@ each unit is a fork()** — this is why the architecture was a queue from day on
 
 Two cheap changes landed with this document (§ `docs/SCALING.md` commit):
 
-1. **Adaptive poll with jitter** (`src/jobs/worker.ts`). Before: every idle worker hit
+1. **Adaptive poll with jitter** (`packages/core/src/jobs/worker.ts`). Before: every idle worker hit
    `claim()` every 2 s — a 40-worker fleet was 4,800 claim queries/day even with zero work.
    Now: back off 2s→4s→…→10s cap (`LAB_WORKER_MAX_POLL_MS`), and jitter ±10 % so a wake burst
    doesn't make 40 workers hit `SKIP LOCKED` simultaneously. Supafastinterconnect-friendly.
    A worker that claims a job resets to 2 s immediately, so latency for real work doesn't grow.
-2. **Job-scoped model credentials** (`src/llm/credentials.ts` + wiring). The old worker split the
+2. **Job-scoped model credentials** (`packages/core/src/llm/credentials.ts` + wiring). The old worker split the
    job owner's OpenRouter/ChatGPT token through **`process.env`** — process-global, restored after
    each job. Fine while one worker = one job; a landmine the moment anything runs two lab jobs in
    one process (the pool, a callback, an accidental `2 * worker`). Tenant A's key could charge
@@ -103,17 +103,25 @@ In order of ROI, each one virtual (no rewire):
    share one fleet, a batch of lab runs can starve short video jobs. Options, in cost: sticky
    worker pick (poll `where kind = $1` round-robin first, then the mixed queue) — 1 SQL change;
    or `priority` column. Do the 1-SQL version.
+   *Status: done.* `claim(workerId, leaseMs, kind)` orders the preferred kind first and falls back
+   to the mixed queue; set `LAB_WORKER_KIND=record|lab` per fleet.
 3. **Postgres claims via partial index** on `status = 'queued'`/(expired leases) instead of a
    growing heap scan once `jobs` crosses ~100k retained rows — a meta-index, no application
    change. Also add an `attempts` budget to failed-once jobs to prevent retry storms.
+   *Status: done.* `jobs_queue_idx` / `jobs_lease_idx` are partial indexes (init migration), and
+   `max_attempts` (2) is enforced by the claim's retirement sweep.
 4. **Warm browsers on the recorder.** Playwright's Chromium cold-start is ~1–2 s; the Stagehand
    Chrome-for-Testing cold start is worse. Reuse the `browser()` singleton per worker process for
    record jobs (a fresh context per job is already how run_scripted/lab works) and keep a tiny pool
    of warm CDP targets. Get ~10–15 s off every recording (p95 relevant when makers watch progress).
+   *Status: done* for the worker process (`record/browser.ts`, `LAB_WARM_BROWSER`).
 5. **Autoscale on queue depth, not CPU.** ECS service with a Lambda-on-queue-depth alarm:
    `depth > 3 × fleet` scale up, `depth < 1 × fleet` scale in. The worker is stateless-ish
    (all durable state via queue/lease) so this is genuinely safe — the design decision that makes
    autoscaling boring was the lease, months earlier.
+   *Status: the signal is shipped* (`queue.stats` log line every 30 s, `queue.alarm` past
+   `LAB_QUEUE_ALARM_MS`, `alarm.state` in `/api/metrics`). Wiring it to ECS is deployment config;
+   the commands are in `docs/DEPLOY-AWS.md` §3a.
 
 ## 5. S3 — when Postgres is the bottleneck (not before)
 
@@ -124,6 +132,9 @@ IOPs exceed the Supabase tier's steady budget. In order:
    library are read-heavy and can go stale-free with ordinary replication lag. Writes stay on
    primary. This is the "scale reads before writes" move: it buys months at 1/10th the risk of a
    queue backend change.
+   *Status: supported.* Set `SUPABASE_DB_READ_URL` and `PgStore` sends the lag-tolerant reads
+   (recordings library, metrics, agent usage, delivery log) there. Job status, sessions and the
+   queue stay on the primary, because they must read their own writes.
 2. **Retenant the queue into its own database** (still Postgres, separate instance) — the queue's
    access pattern (hot UPDATE churn) is fundamentally different from account data. Both code paths
    already talk to a `Store` interface; a second instance is env plumbing, not architecture.
@@ -135,7 +146,7 @@ IOPs exceed the Supabase tier's steady budget. In order:
 ## 6. What NOT to do (Piyush pruning list)
 
 - **No microservices.** The monolith has exactly one heavy part (browser workers), and that part
-  is already horizontally separable. Splitting `src/lab/` from `src/record/` from uploads buys
+  is already horizontally separable. Splitting `packages/core/src/lab/` from `packages/core/src/record/` from uploads buys
   nothing — they already only share a `Store` and a `MediaStore` interface.
 - **No Redis for rate limits.** `rate_limits` as an atomic upsert in Postgres is correct and
   shared across instances; a Redis move would mean a second stateful system for latency nobody
@@ -160,6 +171,11 @@ You cannot autoscale what you cannot see. Cheap, in priority order (all existing
    your true capacity number, better than any estimate in §2.
 3. `claim` timeout rate; the leak scenario is a worker claiming at p99 and losing its lease
    (visible already as retries; add an alarm at >1 % of claims).
+
+*Status:* 1 is shipped as the `queue.stats` / `queue.alarm` log lines (`ops/queue-monitor.ts`,
+emitted by each web instance) and `GET /api/metrics`. 2 is `store.metrics()` (p50/p95 per kind,
+in `/api/metrics`). 3 is visible as `job.failed` with `retry: true` and in `walkcast doctor`'s
+lease list; no separate alarm yet.
 
 ---
 

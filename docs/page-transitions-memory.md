@@ -1,5 +1,7 @@
 # Page Transitions & "Zero-Memory" Motion — Walkcast Design Law
 
+> **Path note (2026-10-18):** written before the monorepo split. `src/site/pages.ts` (the server-rendered landing) was replaced by the React site in `apps/web/src/` (`styles.css`, `sections/`, `seo.ts`); line references to it are historical.
+
 > Persona lens: Manu Arora / Aceternity UI — dark-first, motion-dense, premium pixels — but
 > re-skinned to Walkcast's warm paper / theatre motif and the `--rec` record light.  
 > Companion to `docs/design-language-landing.md` (§d motion laws) and
@@ -178,6 +180,6 @@ button?" after one pass, the design failed.
 ### Source files this doc derives from
 - `docs/design-language-landing.md` (§c layout, §d motion)
 - `docs/aceternity-parity-components.md` (idiom map, parity rules)
-- `dashboard/src/styles.css`, `src/site/pages.ts`, `dashboard/src/components/ui.tsx`, `App.tsx`,
+- `apps/desktop/dashboard/src/styles.css`, `src/site/pages.ts`, `apps/desktop/dashboard/src/components/ui.tsx`, `App.tsx`,
   `FlightStrip.tsx`
 No source edited by this doc — spec only.

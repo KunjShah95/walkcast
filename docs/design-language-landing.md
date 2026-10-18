@@ -1,6 +1,8 @@
 # Walkcast Design Language (Landing & Surfaces)
 
-> Source of truth: `dashboard/src/styles.css`, `src/site/pages.ts` (`CSS` constant and `DARK`).  
+> **Path note (2026-10-18):** written before the monorepo split. `src/site/pages.ts` (the server-rendered landing) was replaced by the React site in `apps/web/src/` (`styles.css`, `sections/`, `seo.ts`); line references to it are historical.
+
+> Source of truth: `apps/desktop/dashboard/src/styles.css`, `src/site/pages.ts` (`CSS` constant and `DARK`).  
 > Visual tone: a screening room — warm paper in daylight, a dim theatre at night, film grain,
 > a soft spotlight, Fraunces headlines, Geist body text, Geist Mono for timings. Red is reserved
 > (with one exception) for the record light and for failure.  
@@ -139,7 +141,7 @@ Dashboard (theatre, Tailwind v4 inlined):
 }
 ```
 
-Tailwind v4 wiring (from `dashboard/src/styles.css`):
+Tailwind v4 wiring (from `apps/desktop/dashboard/src/styles.css`):
 
 ```css
 @theme inline {
@@ -160,11 +162,11 @@ Theatre (full-screen video + transcript) hard-coded surfaces: stage `#0d0c0b`, t
 
 ### Source files inspected
 
-- `dashboard/src/styles.css` — full token set, fonts, elevation, grain, spotlight body.
+- `apps/desktop/dashboard/src/styles.css` — full token set, fonts, elevation, grain, spotlight body.
 - `src/site/pages.ts` — `FONTS`, `GRAIN`, `DARK`, `CSS`, `MARK`, hero / urlform / stage / transcript / band rules, `prefers-reduced-motion` guards.
-- `dashboard/src/components/ui.tsx` — `SpotlightCard`, `FindingChip`, `Verdict`, `Panel`, `ThemeToggle`.
-- `dashboard/src/components/FlightStrip.tsx` — timeline visual idioms.
-- `dashboard/src/App.tsx` — sticky header, `Mark` record dot, nav pills.
+- `apps/desktop/dashboard/src/components/ui.tsx` — `SpotlightCard`, `FindingChip`, `Verdict`, `Panel`, `ThemeToggle`.
+- `apps/desktop/dashboard/src/components/FlightStrip.tsx` — timeline visual idioms.
+- `apps/desktop/dashboard/src/App.tsx` — sticky header, `Mark` record dot, nav pills.
 - `docs/screenshots/*.png` — overview, run, simulator, compare, timeline-dark (referenced only, not opened inline).
 
 ## (g) Page transitions & zero-memory motion (summary)

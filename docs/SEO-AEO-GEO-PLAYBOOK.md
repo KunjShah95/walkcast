@@ -1,5 +1,7 @@
 # Walkcast — SEO playbook
 
+> **Path note (2026-10-18):** written before the monorepo split. `src/site/pages.ts` (the server-rendered landing) was replaced by the React site in `apps/web/src/` (`styles.css`, `sections/`, `seo.ts`); line references to it are historical.
+
 > Structured as the standard five-branch model: **On-Page**, **Off-Page**, **Technical**, **Local**,
 > **Tools**. Each item is marked done (in code), to-do, or N/A with a reason.  
 > Last synced from code: 2026-10-16.

@@ -4,7 +4,7 @@ Generates the Walkcast architecture diagrams as Excalidraw files (and SVG previe
     python docs/architecture/build.py
 
 Each diagram is laid out by hand below; every label names real modules, routes and tables
-from src/ and supabase/migrations/. Edit the layout here and re-run rather than hand-editing
+from packages/core/src/ (paths shown relative to it), apps/desktop/ and supabase/migrations/. Edit the layout here and re-run rather than hand-editing
 the .excalidraw JSON, so the four files stay consistent.
 """
 import json
@@ -228,11 +228,11 @@ def overview():
     d.box("cdn", 405, 220, 250, 180, "CDN (static files)\nprerendered public site\n19 pages · fonts\ndemo media\nsite/prerender.ts\ndeploy/vercel-build.ts", "blue", fs=15)
     d.box("lb", 405, 440, 250, 170, "Router / load balancer\nVercel routes or AWS ALB\nhealth check /readyz\n(fails while draining\nso no new requests land)", "blue", fs=15)
 
-    d.zone(740, 160, 760, 480, "Web tier — ui/server.ts · stateless, N instances", "green", key="web")
+    d.zone(740, 160, 760, 480, "Web tier — server/server.ts · stateless, N instances", "green", key="web")
     d.box("pages", 770, 220, 330, 120, "Public site SSR\nsite/pages.ts · guides.ts\nlanding · lab · pricing · compare", "green", fs=15)
     d.box("auth", 1140, 220, 330, 120, "Accounts & sign-in\nscrypt + Google OAuth (site/auth.ts)\nor Supabase Auth; OpenRouter and\nChatGPT connect via PKCE", "green", fs=14)
     d.box("spa", 770, 390, 330, 110, "Dashboard SPA  /app\nVite + React (dashboard/)\nRecord · Library · Runs · Lab", "green", fs=15)
-    d.box("data", 770, 530, 330, 80, "Read index (ui/data.ts)\nruns/ · fixtures/ · results/", "green", fs=14)
+    d.box("data", 770, 530, 330, 80, "Read index (data.ts)\nruns/ · fixtures/ · results/", "green", fs=14)
     d.box("api", 1140, 390, 330, 220, "JSON API\nPOST /api/record · /api/run\nGET /api/jobs/:id  (ETag → 304)\n/api/index · /api/metrics\n/files/recordings/:id/*\ndaily quota · 1 active job\npassword sealed AES-256-GCM\nreturns 202, browser polls", "green", fs=14)
 
     d.zone(1580, 160, 380, 480, "Shared state", "violet")
@@ -245,8 +245,8 @@ def overview():
 
     d.zone(380, 720, 2020, 340, "Worker fleet — `lab worker` (jobs/worker.ts)", "orange", key="wz", right=True)
     d.box("loop", 420, 790, 320, 180, "Job loop\nclaim → heartbeat (lease/3)\n→ execute → publish → finish\nlease margin 80% · deadline 6 min\nidle backoff 2 → 10 s + jitter\nretry once unless RecordError", "orange", fs=14)
-    d.box("rec", 780, 790, 320, 180, "Site recorder  src/record/\nSSRF guard · robots.txt\nsign-in autodetect\nBFS same-origin, ≤ 50 pages\nnarration written from the trace", "orange", fs=14)
-    d.box("lab", 1140, 790, 330, 180, "Walkcast Lab  src/lab/\nMiniCRM app + injected faults\nscripted or Stagehand agent\noracle reads the app's state\ndeterministic diagnosis\nfixture + model cassette", "orange", fs=14)
+    d.box("rec", 780, 790, 320, 180, "Site recorder  record/\nSSRF guard · robots.txt\nsign-in autodetect\nBFS same-origin, ≤ 50 pages\nnarration written from the trace", "orange", fs=14)
+    d.box("lab", 1140, 790, 330, 180, "Walkcast Lab  lab/\nMiniCRM app + injected faults\nscripted or Stagehand agent\noracle reads the app's state\ndeterministic diagnosis\nfixture + model cassette", "orange", fs=14)
     d.box("ffmpeg", 420, 990, 320, 56, "ffmpeg + flite voices\nslt · awb · kal · rms", "grey", fs=14)
     d.box("chrome", 840, 990, 630, 56, "Chromium (Playwright) — one warm instance shared per worker", "grey", fs=14)
     d.box("llm", 1610, 790, 320, 150, "LLM providers  (external)\nAnthropic · OpenAI-compatible\nOpenRouter · ChatGPT plan\nvia llm/gateway.ts", "red", fs=14)
@@ -290,7 +290,7 @@ def system_design():
     d.text("Walkcast — System design: one recording, end to end", 40, 20, 36)
     d.text("A record job from submit to playback, then the job state machine and failure handling. Lab runs (/api/run) take the same queue path; only execute() differs.", 40, 72, 16, MUTED)
 
-    lanes = [("spa", "Dashboard SPA\n(browser)", "green"), ("web", "Web server\nui/server.ts", "green"), ("pg", "Postgres\njobs · rate_limits\nrecordings", "violet"),
+    lanes = [("spa", "Dashboard SPA\n(browser)", "green"), ("web", "Web server\nserver/server.ts", "green"), ("pg", "Postgres\njobs · rate_limits\nrecordings", "violet"),
              ("wk", "Worker\njobs/worker.ts", "orange"), ("site", "Chromium →\ntarget site", "red"), ("ff", "ffmpeg + flite", "grey"), ("s3", "Object storage", "violet")]
     lx = {}
     for i, (k, label, tone) in enumerate(lanes):
@@ -388,16 +388,16 @@ def hld():
     d.zone(20, 120, W, 170, "1 · Clients", "grey")
     d.box("c1", 60, 170, 380, 90, "Visitor browser\npublic pages, no JS needed", "yellow", fs=15)
     d.box("c2", 480, 170, 380, 90, "Signed-in browser\ndashboard SPA (dashboard/src)", "yellow", fs=15)
-    d.box("c3", 900, 170, 380, 90, "CLI · src/cli.ts — record · run · check\nruns layer 3 in-process, no web tier", "yellow", fs=15)
+    d.box("c3", 900, 170, 380, 90, "CLI · cli.ts — record · run · check\nruns layer 3 in-process, no web tier", "yellow", fs=15)
     d.box("c4", 1320, 170, 380, 90, "CI gate\nnpm run lab -- check (fixtures/)", "yellow", fs=15)
     d.box("c5", 1740, 170, 400, 90, "Crawlers & answer engines\nrobots.txt · sitemap · llms.txt", "grey", fs=15)
 
     d.zone(20, 330, W, 250, "2 · Edge & web tier (stateless)", "green", key="webz", right=True)
     d.box("e1", 60, 380, 300, 170, "Static CDN\nsite/prerender.ts\ndeploy/vercel-build.ts\n19 HTML pages + assets", "blue", fs=15)
-    d.box("e2", 400, 380, 300, 170, "HTTP router\nui/server.ts createApp()\nsecurity headers\norigin check · /healthz\n/readyz (drain)", "green", fs=15)
+    d.box("e2", 400, 380, 300, 170, "HTTP router\nserver/server.ts createApp()\nsecurity headers\norigin check · /healthz\n/readyz (drain)", "green", fs=15)
     d.box("e3", 740, 380, 320, 170, "Auth\nsite/auth.ts (scrypt, Google)\nsite/supabase-auth.ts\nsession cookie → sha256\nsign-in throttling", "green", fs=15)
     d.box("e4", 1100, 380, 320, 170, "Job API\n/api/record · /api/run\nvalidate · quota · seal\nenqueueLimited → 202\n/api/jobs/:id (ETag)", "green", fs=15)
-    d.box("e5", 1460, 380, 320, 170, "Read APIs\nui/data.ts: runs · fixtures\nexperiments · audit\n/files/* (owner-scoped)", "green", fs=15)
+    d.box("e5", 1460, 380, 320, 170, "Read APIs\ndata.ts: runs · fixtures\nexperiments · audit\n/files/* (owner-scoped)", "green", fs=15)
     d.box("e6", 1820, 380, 320, 170, "Public site\nsite/pages.ts · guides.ts\nfacts.ts (lab numbers\nfrom results/)", "green", fs=15)
 
     d.zone(20, 620, W, 510, "3 · Domain services (inside a worker process, or in-process locally)", "orange")
@@ -454,6 +454,7 @@ def lld():
     d.box("jobs", 460, 190, 340, 470, "jobs\n──────────\nid  uuid  PK\nkind  record | run\nowner  FK → users\nstatus  queued | running |\n  succeeded | failed | cancelled\ninput  jsonb\nsecret  sealed, cleared at end\nresult jsonb · error · progress\nattempts · max_attempts (2)\nidempotency_key\n  unique(owner, key)\nlocked_by · lease_until\ncreated · started · finished", "white", fs=14)
     d.box("recs", 460, 700, 340, 170, "recordings\n──────────\nid  text  PK  <host>-<ts><rand>\nowner  FK → users\nurl · created_at\nsummary  jsonb (pages,\ncaptions, sign-in, media)", "white", fs=14)
     d.box("idx", 840, 190, 250, 300, "Indexes\n──────────\njobs_queue_idx\n(created_at)\nwhere queued\n\njobs_lease_idx\n(lease_until)\nwhere running\n\njobs_owner_idx\nrecordings_owner_idx", "grey", fs=14)
+    d.box("sched", 840, 715, 250, 165, "schedules · webhooks\nwebhook_deliveries\n──────────\nowner-scoped (FK users)\noutbox rows written in\nfinish()'s transaction\nleased SKIP LOCKED", "white", fs=13)
     d.box("rls", 840, 540, 250, 150, "RLS enabled on all\ntables; anon and\nauthenticated roles\nrevoked: only the\nserver role reads", "grey", fs=14)
     d.arrow("sessions", "users", "user_id", sides=("t", "b"))
     d.arrow("jobs", "users", "owner", sides=("l", "r"), fa=0.15, fb=0.3)
@@ -461,7 +462,7 @@ def lld():
 
     # ---------- interfaces
     d.zone(1160, 120, 1100, 780, "B · Shared interfaces", "green")
-    d.box("store", 1200, 190, 500, 420, "interface Store (store/types.ts)\n──────────\nuserByEmail · userById · userByGoogle · userByAuthId\ninsertUser (DuplicateError) · updateUser\ncreateSession · sessionUser · deleteSession\nhit(key, windowMs) → count\nenqueue(job) · enqueueLimited(job, maxActive)\nclaim(workerId, leaseMs, kind?)\nheartbeat · setProgress · finish (fenced)\nrelease (no attempt counted)\njob · jobByKey · activeJobs\nqueueDepth · queuePosition · queueStats\nmetrics(windowMs) → p50 / p95\nsaveRecording · recordings · recording\nping · close", "white", fs=14)
+    d.box("store", 1200, 190, 500, 440, "interface Store (store/types.ts)\n──────────\nuserByEmail · userById · userByGoogle · userByAuthId\ninsertUser (DuplicateError) · updateUser\ncreateSession · sessionUser · deleteSession\nhit(key, windowMs) → count\nenqueue(job) · enqueueLimited(job, maxActive)\nclaim(workerId, leaseMs, kind?)\nheartbeat · setProgress · finish (fenced)\nrelease (no attempt counted)\njob · jobByKey · activeJobs\nqueueDepth · queuePosition · queueStats\nmetrics(windowMs) → p50 / p95\nsaveRecording · recordings · recording\nschedules · claimDueSchedules (one instance)\nwebhooks · claimDeliveries · completeDelivery\nfinish → job.completed outbox, same txn\nmigrationStatus · leases · agentUsage · ping", "white", fs=13)
     d.box("fstore", 1200, 650, 240, 210, "FileStore\none JSON file\natomic rename\n(retry on EPERM)\nin-process mutex\nsingle process only", "teal", fs=14)
     d.box("pgs", 1460, 650, 240, 210, "PgStore\npostgres.js, 0 prepared\nstatements (pooler)\nSKIP LOCKED claim\nretirement sweep of\nexhausted leases", "teal", fs=14)
     d.box("media", 1740, 190, 480, 200, "interface MediaStore (media/store.ts)\n──────────\npublish(id, localDir, files)\nlocate(id, file) → {path} | {redirect} | null\nLocalMedia — recordings/<id>/\nS3Media — SigV4 PUT, presigned GET 15 min", "white", fs=14)

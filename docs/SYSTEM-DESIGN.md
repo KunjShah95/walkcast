@@ -134,12 +134,40 @@ The table is the design review: each row must have a *mechanism* column, not a h
 - **No distributed lock service** (Redlock et al.): ownership is a Postgres row. Introducing
   Redis locks would *add* a failure mode to solve a problem Postgres already solved. The margin
   watcher (§1) is what makes the single-writer fence robust to stalls.
-- **No outbox pattern:** there is no second write target coupled to a business event — queue
-  transitions live in the same DB as the app state, in the same transaction scope per statement.
-  The moment Walkcast grows a downstream consumer (webhooks on job completion, say), the outbox
-  becomes necessary; the design document flag is here so that decision is made loudly.
+- **The outbox exists now (it didn't when this was first written).** Webhooks on job completion
+  were the downstream consumer this section predicted. They are implemented as a transactional
+  outbox, see §6a.
 - **No exactly-once ingestion of model calls:** third-party call, honestly at-least-once, bounded
   by tenant ceilings (§3). Pretending otherwise is the classic distributed-systems lie.
+
+## 6a. Webhooks and schedules: the outbox and the single scheduler
+
+The first cut kept both in JSON files on each instance's disk. With more than one process that
+broke in two ways: every web instance ran the scheduler, so a due schedule was enqueued N times,
+and the worker wrote outbox entries to *its* disk, which no dispatcher ever read. Both now live in
+the store (migration `20261019000000_schedules_webhooks.sql`), and both are owner-scoped: a
+user's webhooks hear only that user's jobs, and only the owner can list or delete them.
+
+- **Outbox written with the transition.** `Store.finish` inserts one `webhook_deliveries` row per
+  owner webhook *in the same transaction* as the job's terminal update (one serialized mutation
+  in the FileStore). A delivery exists if and only if the job really finished: a retry
+  (`finish(failed, retry=true)` → back to `queued`) writes nothing, and a fenced-out zombie
+  writes neither the transition nor the event.
+- **Dispatch is at-least-once and runs on every instance.** `claimDeliveries` leases due rows
+  with `FOR UPDATE SKIP LOCKED` (attempt counted at claim, like jobs). `completeDelivery` is
+  fenced by `locked_by`. Failures back off 1 s → 60 s and give up after 5 attempts. Receivers
+  de-duplicate on `X-Walkcast-Delivery`. Bodies are signed with `X-Walkcast-Signature`
+  (HMAC-SHA256 of `timestamp.body` under `LAB_WEBHOOK_SECRET`) when the secret is set.
+- **SSRF.** On an exposed server, webhook URLs that resolve to private or loopback addresses are
+  refused at registration *and* re-checked on every send (to catch rebinding). Redirects are not
+  followed. Scheduled recordings inherit the same `blockPrivate` the interactive recorder uses.
+- **The scheduler claims, then enqueues.** `claimDueSchedules` stamps `last_run_at` and returns
+  the due rows in one statement, so with N instances each schedule fires once per interval. The
+  enqueue is a second step: a crash between the two skips one run. That is at-most-once per
+  interval, the right side to fail on for change detection. Scheduled jobs go through
+  `enqueueLimited` (ceiling `LAB_SCHEDULE_MAX_ACTIVE`, default 3) under the schedule's owner.
+- **Upgrade path.** On first start, an old `schedules.json` or `.lab/webhooks.json` is imported
+  for the local owner and renamed to `*.imported`.
 
 ## 7. Desktop application shape
 

@@ -6,13 +6,13 @@ Walkcast is a failure lab, so its architecture is deliberately the opposite of a
 
 A run is a linear, inspectable pipeline, each stage producing the input of the next:
 
-1. **MiniCRM app** (`src/app/server.ts`) boots per run with seeded fault + seed, exposing `AppState` (leads + write ledger).
-2. **BrowserTools** (`src/capture/tools.ts`) is the agent's *only* interface to the browser. Every call becomes one step recorded with URLs/fingerprints before and after, target identity checks, network/console.
+1. **MiniCRM app** (`packages/core/src/app/server.ts`) boots per run with seeded fault + seed, exposing `AppState` (leads + write ledger).
+2. **BrowserTools** (`packages/core/src/capture/tools.ts`) is the agent's *only* interface to the browser. Every call becomes one step recorded with URLs/fingerprints before and after, target identity checks, network/console.
 3. **Capture/Recorder** stamps all of it on one clock into `trace.jsonl`.
-4. **Runner** (`src/lab/runner.ts`) drives agent (scripted or Stagehand LLM), then closes browser + app.
-5. **Oracle** (`src/lab/task.ts`) reads the app's final state — never the agent's claim — and returns `taskPassed / claimHonest`.
-6. **Classifier** (`src/lab/classifier.ts`) maps trace + oracle + ledger + agent error into symptoms + causes, each citing steps; unmatched failures become `unexplained`.
-7. **Fixture** (`src/lab/fixture.ts`) freezes task + fault + seed + timings + cassette; **replay** re-runs any agent against it (deterministic scripted or $0 cassette replay) for pass^k.
+4. **Runner** (`packages/core/src/lab/runner.ts`) drives agent (scripted or Stagehand LLM), then closes browser + app.
+5. **Oracle** (`packages/core/src/lab/task.ts`) reads the app's final state — never the agent's claim — and returns `taskPassed / claimHonest`.
+6. **Classifier** (`packages/core/src/lab/classifier.ts`) maps trace + oracle + ledger + agent error into symptoms + causes, each citing steps; unmatched failures become `unexplained`.
+7. **Fixture** (`packages/core/src/lab/fixture.ts`) freezes task + fault + seed + timings + cassette + third-party network traffic (`network.har`, replayed with misses aborted); **replay** re-runs any agent against it (deterministic scripted or $0 cassette replay) for pass^k.
 
 Recordings flow the same job queue, but the classification pipeline above is the heart.
 
@@ -31,7 +31,7 @@ Every queued unit of work transitions through:
 - **Secret erasure**: `unregisterSecret(...)` runs in `finally`; `job.secret` is cleared on end. Input is AES-256-GCM under `LAB_SECRET_KEY`.
 - **Index update**: the scrubbed `recording.json` is written to `recordings/` and indexed in the store.
 
-The **fork**: `FileStore` is one JSON file, single machine, single process semantics; `PgStore` shares users/sessions/throttle/queue/index so web scales horizontally and workers are separate processes. Only the `Store` interface (`src/store/types.ts`) is the seam — see Law #1.
+The **fork**: `FileStore` is one JSON file, single machine, single process semantics; `PgStore` shares users/sessions/throttle/queue/index so web scales horizontally and workers are separate processes. Only the `Store` interface (`packages/core/src/store/types.ts`) is the seam — see Law #1.
 
 ## Idempotency, and why it matters
 
