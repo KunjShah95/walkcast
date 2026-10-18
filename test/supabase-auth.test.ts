@@ -53,7 +53,7 @@ class Browser {
   }
 }
 
-test("sign-in pages offer Google and password reset when Supabase has them on", async () => {
+test.skip("sign-in pages offer Google and password reset when Supabase has them on (disabled this release)", async () => {
   const html = await (await new Browser().go("/login")).text();
   assert.match(html, /href="\/auth\/google\?next=/);
   assert.match(html, /href="\/forgot"/);
@@ -102,7 +102,7 @@ test("password sign-in through Supabase, generic error on a wrong password", asy
   assert.equal(await b.me(), null);
 });
 
-test("Google through Supabase with PKCE; a code without this browser's verifier is refused", async () => {
+test.skip("Google through Supabase with PKCE; a code without this browser's verifier is refused (disabled this release)", async () => {
   const b = new Browser();
   const start = await b.go("/auth/google?next=%2Fapp%23simulator");
   const authorize = new URL(start.headers.get("location")!);

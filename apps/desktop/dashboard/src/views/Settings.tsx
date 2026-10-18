@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { VoicePicker } from "../components/Studio.tsx";
+import { LengthPicker, VoicePicker, lengthLabel } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
 import { Updates } from "../components/Updates.tsx";
@@ -88,6 +88,11 @@ export function Settings({ me }: { me: Me | null }) {
               className="max-w-md"
             />
           </label>
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">Length · {lengthLabel(prefs.maxSeconds)}</span>
+            <LengthPicker value={prefs.maxSeconds} onChange={(maxSeconds) => setPrefs({ maxSeconds })} />
+            <p className="text-[12.5px] text-ink-3">How long a new walkthrough may run before it stops at the next whole page.</p>
+          </div>
           <label className="flex items-start gap-2 text-[13px] text-ink-2">
             <input type="checkbox" className="mt-0.5" checked={prefs.captions} onChange={(e) => setPrefs({ captions: e.target.checked })} />
             <span>Show captions on the video player by default.</span>
