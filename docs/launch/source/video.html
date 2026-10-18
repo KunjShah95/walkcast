@@ -1,0 +1,435 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{--ink:#1b1a17;--ink2:#4c4841;--muted:#6b665d;--dim:#8a847a;--line:#e7e3db;--panel:#f5f4f1;--panel3:#eae8e3;
+--signal:#9c5700;--signal2:#874b00;--soft:#f4e7d2;--exhibit:#f1dfbd;--exink:#5c3400;--exsoft:#f8efdf;--rec:#c0321c;--fail:#b2261c;--pass:#2c6a3d;
+--night:#12110f;--e:cubic-bezier(.16,1,.3,1);--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
+body{font-family:'Schibsted Grotesk';color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;inset:0;overflow:hidden;transform-origin:50% 50%}
+.scene{position:absolute;inset:0;display:none;overflow:hidden}
+.dark{background:radial-gradient(ellipse 90% 80% at 50% 45%,#1f1d19 0%,var(--night) 70%);color:#f3efe8}
+.light{background:#fff}
+.ochre{background:var(--signal2);color:#fff}
+.grid{position:absolute;inset:-40px;background-image:linear-gradient(rgba(0,0,0,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.055) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,#000,transparent 80%)}
+.dark .grid{background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px)}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.mono{font-family:'JetBrains Mono';font-feature-settings:"tnum"}
+.label{font:600 22px 'JetBrains Mono';letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+.dark .label{color:#9a9286}
+.h-xl{font-size:150px;font-weight:800;letter-spacing:-.055em;line-height:.95}
+.h-l{font-size:112px;font-weight:800;letter-spacing:-.05em;line-height:1}
+.h-m{font-size:76px;font-weight:800;letter-spacing:-.045em;line-height:1.04}
+.dimtxt{color:var(--dim)} .dark .dimtxt{color:#7d766b}
+.serif{font-family:'Instrument Serif';font-weight:400;letter-spacing:-.02em}
+.o{color:#e0962e}.r{color:#e5533b}
+/* motion vocabulary — every animation's delay is absolute video time (set from data-d by JS) */
+.a{animation-duration:.8s;animation-timing-function:var(--e);animation-fill-mode:both;animation-play-state:paused}
+.rise{animation-name:rise}@keyframes rise{from{opacity:0;transform:translateY(60px);filter:blur(10px)}to{opacity:1;transform:none;filter:blur(0)}}
+.fade{animation-name:fade}@keyframes fade{from{opacity:0}to{opacity:1}}
+.pop{animation-name:pop;animation-timing-function:var(--spring);animation-duration:.7s}@keyframes pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+.slam{animation-name:slam;animation-duration:.45s}@keyframes slam{from{opacity:0;transform:scale(1.9);filter:blur(14px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+.left-in{animation-name:leftin}@keyframes leftin{from{opacity:0;transform:translateX(-120px)}to{opacity:1;transform:none}}
+.right-in{animation-name:rightin}@keyframes rightin{from{opacity:0;transform:translateX(120px)}to{opacity:1;transform:none}}
+.wipe{animation-name:wipe;animation-duration:1s}@keyframes wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.wipeup{animation-name:wipeup;animation-duration:.9s}@keyframes wipeup{from{clip-path:inset(100% 0 0 0);transform:translateY(40px)}to{clip-path:inset(-20% 0 -20% 0);transform:none}}
+.stamp{animation-name:stamp;animation-duration:.4s;animation-timing-function:cubic-bezier(.5,0,.2,1.4)}@keyframes stamp{from{opacity:0;transform:rotate(-14deg) scale(2.6)}to{opacity:1;transform:rotate(-9deg) scale(1)}}
+.strike{animation-name:strike;animation-duration:.5s}@keyframes strike{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.grow{animation-name:grow;animation-duration:1.4s}@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.out{animation-name:out;animation-duration:.5s}@keyframes out{from{opacity:1}to{opacity:0;transform:translateY(-30px);filter:blur(8px)}}
+.drift{animation-name:drift;animation-timing-function:linear}@keyframes drift{from{transform:scale(1)}to{transform:scale(1.06)}}
+.pulse{animation-name:pulse;animation-duration:1s;animation-iteration-count:30;animation-timing-function:ease-in-out}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.ring{animation-name:ring;animation-duration:1.2s;animation-iteration-count:12;animation-timing-function:ease-out}@keyframes ring{from{transform:scale(1);opacity:.6}to{transform:scale(2.6);opacity:0}}
+
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;mix-blend-mode:normal}
+#grain{position:absolute;inset:-100px;opacity:.06;pointer-events:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");mix-blend-mode:overlay}
+#vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 85% 80% at 50% 50%,transparent 62%,rgba(0,0,0,.22))}
+#bar{position:absolute;left:0;bottom:0;height:4px;background:var(--signal);transform-origin:0 0}
+
+/* mark (same geometry as the logo SVG) */
+.mark{width:var(--s);height:var(--s);position:relative}
+.mark svg{width:100%;height:100%;overflow:visible}
+
+/* S2 */
+.word{font-size:180px;font-weight:800;letter-spacing:-.06em;line-height:1}
+.num{font:600 28px 'JetBrains Mono';color:#e0962e;letter-spacing:.1em;margin-bottom:28px}
+.timer{position:absolute;right:80px;top:70px;text-align:right}
+.timer .v{font:600 54px 'JetBrains Mono';color:#fff;letter-spacing:-.02em}
+.timer .k{font:600 16px 'JetBrains Mono';letter-spacing:.25em;color:#8a847a}
+/* browser frame */
+.win{border-radius:28px;background:var(--panel);padding:12px;box-shadow:0 60px 120px -40px rgba(40,25,5,.45),inset 0 0 0 1px var(--line)}
+.dark .win{background:#2a2824;box-shadow:0 60px 120px -30px rgba(0,0,0,.8),inset 0 0 0 1px #3a3731}
+.win .in{border-radius:18px;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px var(--line);position:relative}
+.chrome{height:52px;display:flex;align-items:center;gap:9px;padding:0 20px;border-bottom:1px solid var(--line);background:#fff}
+.chrome b{width:13px;height:13px;border-radius:50%;background:var(--panel3)}
+.chrome .url{margin-left:18px;flex:1;height:32px;border-radius:999px;background:var(--panel);font:500 16px 'JetBrains Mono';color:var(--muted);display:flex;align-items:center;padding:0 16px;gap:10px}
+.shot{position:relative;background:#fff center top/cover no-repeat;overflow:hidden}
+.shot img{width:100%;display:block}
+.recchip{position:absolute;top:18px;right:18px;font:600 18px 'JetBrains Mono';color:#fff;background:rgba(27,26,23,.85);padding:9px 15px;border-radius:999px;display:flex;gap:10px;align-items:center}
+.recchip i{width:11px;height:11px;border-radius:50%;background:#e5442b}
+.cap{position:absolute;left:24px;right:24px;bottom:22px;background:rgba(27,26,23,.9);color:#fff;font:500 25px 'Schibsted Grotesk';padding:15px 20px;border-radius:14px;display:flex;align-items:center;gap:12px}
+.cite{font:600 17px 'JetBrains Mono';background:var(--exhibit);color:var(--exink);padding:4px 9px;border-radius:7px}
+/* cards */
+.card{background:#fff;border-radius:22px;box-shadow:0 30px 60px -30px rgba(40,25,5,.35),inset 0 0 0 1px var(--line);padding:34px 38px;text-align:left;color:var(--ink)}
+.kicker{font:600 15px 'JetBrains Mono';letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.tag{display:inline-flex;align-items:center;gap:8px;font:600 16px 'JetBrains Mono';padding:7px 13px;border-radius:999px}
+.tag.fail{background:#fbe6e2;color:var(--fail)} .tag.pass{background:#e3f0e6;color:var(--pass)} .tag.ex{background:var(--exhibit);color:var(--exink)}
+.check{display:flex;gap:16px;align-items:center;font:500 22px 'JetBrains Mono';color:var(--ink2);padding:10px 0;border-top:1px dashed var(--line)}
+.check .k{width:30px;font-weight:700}.check .k.p{color:var(--pass)}.check .k.f{color:var(--fail)}
+mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:6px}
+/* url field */
+.field{width:1460px;height:112px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px var(--line-strong,#cfc9bd),0 30px 70px -30px rgba(40,25,5,.3);display:flex;align-items:center;padding:0 12px 0 44px;gap:22px}
+.field .t{flex:1;font:500 34px 'JetBrains Mono';color:var(--ink);text-align:left;white-space:nowrap;overflow:hidden}
+.field .caret{display:inline-block;width:3px;height:42px;background:var(--signal);vertical-align:-8px;margin-left:3px}
+.btn{height:88px;border-radius:999px;background:var(--signal);color:#fff;font:600 30px 'Schibsted Grotesk';padding:0 40px;display:flex;align-items:center;gap:16px;position:relative;white-space:nowrap}
+.btn i{width:16px;height:16px;border-radius:50%;background:#ff5a3c;box-shadow:0 0 0 4px rgba(255,255,255,.25)}
+.chip{font:500 22px 'JetBrains Mono';padding:13px 22px;border-radius:999px;background:var(--panel);color:var(--ink2);box-shadow:inset 0 0 0 1px var(--line)}
+.dark .chip{background:#24221e;color:#d9d3c8;box-shadow:inset 0 0 0 1px #3a3731}
+.feat{background:var(--panel);color:var(--ink2);font:600 22px 'Schibsted Grotesk';padding:16px 20px;border-radius:16px;display:flex;align-items:center;gap:14px;box-shadow:inset 0 0 0 1px var(--line)}
+.feat .n{font:600 15px 'JetBrains Mono';color:var(--dim)}
+.feat.on{background:var(--ink);color:#fff;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}.feat.on .n{color:#e0962e}
+.callout{position:absolute;background:var(--ink);color:#fff;font:600 27px 'Schibsted Grotesk';padding:18px 26px;border-radius:18px;display:flex;align-items:center;gap:14px;box-shadow:0 30px 60px -20px rgba(0,0,0,.5);white-space:nowrap}
+.callout .n{font:600 17px 'JetBrains Mono';color:#e0962e}
+.tx{display:flex;flex-direction:column;gap:2px;font-size:19px;color:var(--ink2);text-align:left}
+.tx div{display:flex;gap:16px;padding:7px 14px;border-radius:10px}
+.tx t{font:500 17px 'JetBrains Mono';color:var(--dim);width:58px;flex:none;padding-top:3px}
+.tx .now{background:var(--exsoft);color:var(--ink)}.tx .now t{color:var(--signal)}
+.chap{display:flex;gap:6px}.chap span{flex:1;height:8px;border-radius:9px;background:var(--panel3);overflow:hidden}.chap span u{display:block;height:100%;background:var(--signal);width:0}
+.file{width:300px;height:340px;border-radius:24px;background:#fff;box-shadow:0 40px 70px -30px rgba(40,25,5,.4),inset 0 0 0 1px var(--line);display:flex;flex-direction:column;justify-content:space-between;padding:28px;text-align:left}
+.file .ic{width:72px;height:72px;border-radius:18px;display:flex;align-items:center;justify-content:center;font:700 22px 'JetBrains Mono'}
+.file .nm{font:600 24px 'JetBrains Mono';color:var(--ink)}.file .ds{font-size:20px;color:var(--muted);margin-top:6px}
+.marq{white-space:nowrap;font:600 40px 'Schibsted Grotesk';letter-spacing:-.02em;color:var(--ink2)}
+.marq span{margin:0 26px}.marq em{font-style:normal;color:var(--line-strong,#cfc9bd)}
+.node{width:300px;height:180px;border-radius:26px;background:#1f1d1a;box-shadow:inset 0 0 0 1.5px #3a3731;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 30px;text-align:left;position:relative}
+.node .n{font:600 16px 'JetBrains Mono';color:#7d766b;letter-spacing:.15em}
+.node .t{font-size:34px;font-weight:700;letter-spacing:-.03em;color:#f3efe8;margin-top:8px}
+.node.on{background:#2b2316;box-shadow:inset 0 0 0 2px #e0962e,0 0 60px -10px rgba(224,150,46,.45)}
+.node.on .n{color:#e0962e}
+.cause{font:500 26px 'JetBrains Mono';padding:14px 24px;border-radius:999px;background:#24221e;color:#d9d3c8;box-shadow:inset 0 0 0 1px #3a3731}
+.cause.u{background:var(--exhibit);color:var(--exink);box-shadow:0 0 0 6px rgba(241,223,189,.15)}
+.brow{display:grid;grid-template-columns:260px 1fr 190px;align-items:center;gap:34px;margin:20px 0}
+.brow .nm{font:600 30px 'JetBrains Mono';text-align:right}.brow .nm small{display:block;font:500 17px 'Schibsted Grotesk';color:var(--muted);margin-top:4px}
+.track{height:64px;border-radius:16px;background:var(--panel);position:relative;box-shadow:inset 0 0 0 1px var(--line)}
+.fill{position:absolute;left:0;top:0;bottom:0;border-radius:16px;transform-origin:0 50%}
+.ci{position:absolute;top:50%;height:4px;margin-top:-2px;background:var(--ink);opacity:.55}
+.ci:before,.ci:after{content:"";position:absolute;top:-10px;width:4px;height:24px;background:var(--ink)}.ci:before{left:0}.ci:after{right:0}
+.brow .v{font:700 44px 'JetBrains Mono';letter-spacing:-.04em;text-align:left}
+</style></head>
+<body><div id="stage">
+
+<!-- S1 · cold open -->
+<section class="scene dark" data-s="0" data-e="4"><div class="grid"></div>
+  <div class="center drift a" data-d="0" data-dur="4">
+    <div class="label a fade" data-d=".3">A short history of</div>
+    <div class="h-l a rise" data-d=".7" style="margin-top:30px">the product walkthrough<span class="o">.</span></div>
+    <div class="a fade" data-d="1.8" style="margin-top:46px;font-size:30px;color:#9a9286">Every launch needs one. Nobody enjoys making it.</div>
+  </div>
+</section>
+
+<!-- S2 · the old way: one power cut per beat -->
+<section class="scene dark" data-s="4" data-e="10"><div class="grid"></div>
+  <div class="timer"><div class="k">TIME SPENT</div><div class="v" id="timer">00:00:00</div></div>
+  <div class="center sub" data-s="4" data-e="6"><div class="num">01</div><div class="word a slam" data-d="4">Write the script.</div><div class="a fade" data-d="4.6" style="margin-top:34px;font:500 30px 'JetBrains Mono';color:#7d766b">scene 1 … scene 14 … “click here, then here”</div></div>
+  <div class="center sub" data-s="6" data-e="7"><div class="num">02</div><div class="word a slam" data-d="6">Record the screen.</div></div>
+  <div class="center sub" data-s="7" data-e="8"><div class="num">03</div><div class="word a slam" data-d="7">Retake.</div><div class="word a slam dimtxt" data-d="7.5">Retake.</div></div>
+  <div class="center sub" data-s="8" data-e="9"><div class="num">04</div><div class="word a slam" data-d="8">Record the voice-over.</div></div>
+  <div class="center sub" data-s="9" data-e="10"><div class="num">05</div><div class="word a slam" data-d="9">Sync the captions.</div></div>
+</section>
+
+<!-- S3 · stale -->
+<section class="scene dark" data-s="10" data-e="14"><div class="grid"></div>
+  <div class="center">
+    <div class="win a rise drift2" data-d="10" style="width:1180px;position:relative">
+      <div class="in"><div class="chrome"><b></b><b></b><b></b><div class="url">walkthrough-v1.4-final-FINAL.mp4</div></div>
+      <div class="shot" style="height:560px;background-image:url(frames/b/060.jpg);filter:saturate(.75)" id="stale"></div></div>
+      <div class="a right-in" data-d="11.4" style="position:absolute;right:-80px;top:110px;background:#fff;border-radius:18px;padding:20px 26px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6);display:flex;gap:16px;align-items:center;text-align:left;color:var(--ink)">
+        <div style="width:46px;height:46px;border-radius:12px;background:var(--pass);color:#fff;display:flex;align-items:center;justify-content:center;font:700 24px 'JetBrains Mono'">↑</div>
+        <div><div style="font:700 24px 'Schibsted Grotesk'">Deployed v1.5</div><div style="font:500 18px 'JetBrains Mono';color:var(--muted)">new nav · new pricing · 12 changes</div></div></div>
+      <div class="a stamp" data-d="12.2" style="position:absolute;left:50%;top:50%;translate:-50% -50%;white-space:nowrap;text-align:center;padding:6px 40px!important;font:800 104px 'Schibsted Grotesk';letter-spacing:-.03em;color:#e5533b;border:10px solid #e5533b;border-radius:26px;padding:6px 0;background:rgba(18,17,15,.55)">OUT OF DATE</div>
+    </div>
+    <div class="h-m a rise" data-d="12.6" style="margin-top:56px;font-size:60px">Ship once. <span class="dimtxt">It’s stale by Friday.</span></div>
+  </div>
+</section>
+
+<!-- S4 · the agent problem -->
+<section class="scene dark" data-s="14" data-e="18"><div class="grid"></div>
+  <div class="center">
+    <div class="label a fade" data-d="14.1">Meanwhile, your browser agent reports</div>
+    <div style="display:flex;gap:48px;margin-top:56px;align-items:stretch">
+      <div class="card a left-in" data-d="14.4" style="width:640px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><div class="kicker">What the agent reported</div><div class="tag fail a pop" data-d="16.2">contradicted by records</div></div>
+        <div class="serif" style="font-size:150px;line-height:1;margin:18px 0 10px">“Done.”</div>
+        <div style="font-size:25px;color:var(--ink2);border-left:4px solid var(--rec);padding-left:18px">Lead 1001 created for Acme Corp, owner Priya Shah.</div>
+      </div>
+      <div class="card a right-in" data-d="15.6" style="width:640px">
+        <div class="kicker">What the application recorded</div>
+        <div style="font-size:44px;font-weight:800;letter-spacing:-.03em;margin:8px 0 22px">Ground truth</div>
+        <div class="check"><span class="k p">✓</span>exactly-one-lead&nbsp;&nbsp;1</div>
+        <div class="check a fade" data-d="16.0"><span class="k f">✗</span>owner-correct&nbsp;&nbsp;<mark>"Alex Kim"</mark></div>
+        <div class="check"><span class="k p">✓</span>contact-correct&nbsp;&nbsp;"Jane Roe"</div>
+        <div style="font:500 18px 'JetBrains Mono';color:var(--dim);margin-top:12px">expected owner: "Priya Shah"</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S5 · scale of the problem -->
+<section class="scene dark" data-s="18" data-e="21.75"><div class="grid"></div>
+  <div class="center">
+    <div style="display:flex;align-items:baseline;gap:30px"><div class="mono a pop" data-d="18" id="c76" style="font-size:300px;font-weight:700;letter-spacing:-.07em;color:#e0962e;line-height:1">0</div>
+    <div style="text-align:left"><div class="h-m a rise" data-d="18.3">runs said “success”.</div><div class="h-m a rise r" data-d="18.9">The app disagreed.</div></div></div>
+    <div class="a fade mono" data-d="19.4" style="margin-top:30px;font-size:24px;color:#7d766b">162 of 378 runs failed · 76 claimed success anyway · walkcast lab, overview</div>
+    <div style="display:flex;gap:18px;margin-top:60px">
+      <div class="chip a pop" data-d="20.2">no repro</div><div class="chip a pop" data-d="20.45">no cause</div><div class="chip a pop" data-d="20.7">no test</div><div class="chip a pop" data-d="20.95" style="color:#e5533b">just “flaky”</div></div>
+  </div>
+</section>
+<section class="scene" data-s="21.75" data-e="22" style="background:#000"></section>
+
+<!-- S6 · drop: logo reveal -->
+<section class="scene light" data-s="22" data-e="30"><div class="grid"></div>
+  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-200px;background:radial-gradient(closest-side,#f4e7d2,transparent);opacity:.9"></div>
+  <div class="center drift a" data-d="22" data-dur="8">
+    <div style="display:flex;align-items:center;gap:44px">
+      <div class="mark a pop" data-d="22" style="--s:210px" id="logoMark"></div>
+      <div class="a wipe" data-d="22.6" style="display:flex"><img src="../../brand/svg/walkcast-wordmark.svg" style="height:190px"></div>
+    </div>
+    <div class="h-m a rise" data-d="24.2" style="margin-top:80px;font-size:84px">Paste a link.</div>
+    <div class="h-m a rise dimtxt" data-d="24.8" style="font-size:84px">Get a narrated walkthrough.</div>
+    <div class="a fade" data-d="26.6" style="display:flex;gap:16px;margin-top:56px">
+      <div class="chip">MP4</div><div class="chip">voice-over</div><div class="chip">captions</div><div class="chip">transcript</div><div class="chip" style="background:var(--exhibit);color:var(--exink);box-shadow:none">+ Walkcast Lab</div></div>
+  </div>
+</section>
+
+<!-- S7 · paste a link -->
+<section class="scene light" data-s="30" data-e="36"><div class="grid"></div>
+  <div class="center">
+    <div class="label a fade" data-d="30.1">Step 1 of 1</div>
+    <div class="h-m a rise" data-d="30.2" style="margin:24px 0 70px">One URL. <span class="dimtxt">That’s the whole brief.</span></div>
+    <div class="field a rise" data-d="30.3" id="field" style="position:relative">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#8a847a" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+      <div class="t"><span id="typed"></span><span class="caret" id="caret"></span></div>
+      <div class="btn" id="go"><i></i><span id="golabel">Make my walkthrough</span></div>
+    </div>
+    <div class="a fade" data-d="32.8" style="margin-top:44px;display:flex;align-items:center;gap:16px;font-size:26px;color:var(--ink2)">
+      <span id="tick" style="width:34px;height:34px;border-radius:9px;box-shadow:inset 0 0 0 2px #cfc9bd;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px"></span>
+      I own this site, or I’m authorized to test it.</div>
+    <svg id="cursor" width="44" height="44" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.3))"><path d="M4 2l16 10-7 1.6L9.6 21z" fill="#1b1a17" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  </div>
+</section>
+
+<!-- S8 · the recording -->
+<section class="scene light" data-s="36" data-e="48"><div class="grid"></div>
+  <div style="position:absolute;left:90px;top:84px;width:1740px;display:flex;gap:40px">
+    <div class="win a rise" data-d="36" style="width:1220px">
+      <div class="in"><div class="chrome"><b></b><b></b><b></b><div class="url"><span style="width:10px;height:10px;border-radius:50%;background:var(--pass)"></span><span id="u">agentic-crm-henna.vercel.app</span></div></div>
+        <div class="shot" style="height:762px"><img id="demo" src="frames/a/001.jpg">
+          <div class="recchip"><i class="a pulse" data-d="36"></i><span id="rect">REC 0:00</span></div>
+          <div class="cap"><span class="cite" id="ex">EX-2</span><span id="captxt"></span></div></div></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-top:6px">
+      <div class="a right-in" data-d="36.5"><div class="kicker">Chapters</div><div class="chap" id="chap"><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span></div></div>
+      <div class="a right-in" data-d="36.8"><div class="kicker" style="margin-top:12px">Transcript</div>
+        <div class="tx" id="tx">
+          <div><t>00:00</t>Opening agentic-crm-henna.vercel.app.</div>
+          <div><t>00:10</t>Scrolling through “Real Estate CRM for Indian Sales Teams”.</div>
+          <div><t>00:16</t>Opening the product page.</div>
+          <div><t>00:21</t>Scrolling through “Product — Inventory, Bookings, Site Visits”.</div>
+          <div><t>00:28</t>Opening the pricing page.</div>
+          <div><t>00:33</t>Scrolling through “Pricing — Plans from ₹1,499/month”.</div>
+          <div><t>00:39</t>Opening the contact page.</div>
+        </div></div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
+        <div class="feat a left-in" data-d="37.0" data-on="37.0"><span class="n">01</span>Drives a real Chromium</div>
+        <div class="feat a left-in" data-d="40.2" data-on="40.2"><span class="n">02</span>Narration written only from what happened</div>
+        <div class="feat a left-in" data-d="43.2" data-on="43.2"><span class="n">03</span>Captions, chapters, transcript</div>
+        <div class="feat a left-in" data-d="45.4" data-on="45.4"><span class="n">04</span>Never bypasses CAPTCHA or 2FA</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- S9 · what you get -->
+<section class="scene light" data-s="48" data-e="54"><div class="grid"></div>
+  <div class="center" style="justify-content:flex-start;padding-top:110px">
+    <div class="h-m a rise" data-d="48.1">One URL in. <span class="dimtxt">A finished video out.</span></div>
+    <div style="display:flex;gap:30px;margin-top:80px">
+      <div class="file a pop" data-d="48.6"><div class="ic" style="background:var(--signal);color:#fff">▶</div><div><div class="nm">recording.mp4</div><div class="ds">H.264 + AAC voice-over</div></div></div>
+      <div class="file a pop" data-d="48.8"><div class="ic" style="background:var(--exhibit);color:var(--exink)">CC</div><div><div class="nm">captions.vtt</div><div class="ds">Timed to every line</div></div></div>
+      <div class="file a pop" data-d="49.0"><div class="ic" style="background:var(--panel);color:var(--ink)">♪</div><div><div class="nm">narration.wav</div><div class="ds">Your voice, or theirs</div></div></div>
+      <div class="file a pop" data-d="49.2"><div class="ic" style="background:var(--ink);color:#fff">¶</div><div><div class="nm">transcript</div><div class="ds">Clickable, per-page chapters</div></div></div>
+      <div class="file a pop" data-d="49.4"><div class="ic" style="background:#e3f0e6;color:var(--pass)">{ }</div><div><div class="nm">trace.jsonl</div><div class="ds">Every action, one clock</div></div></div>
+    </div>
+    <div class="label a fade" data-d="50.4" style="margin-top:84px">Pick the voice</div>
+    <div style="width:1920px;overflow:hidden;margin-top:26px;mask-image:linear-gradient(90deg,transparent,#000 15%,#000 85%,transparent)" class="a fade" data-d="50.6">
+      <div class="marq" id="marq"><span>flite · slt</span><em>●</em><span>ElevenLabs</span><em>●</em><span>OpenAI</span><em>●</em><span>Google Cloud</span><em>●</em><span>Azure</span><em>●</em><span>AWS Polly</span><em>●</em><span>Sarvam</span><em>●</em><span>Bhashini</span><em>●</em><span>Murf</span><em>●</em><span>Reverie</span><em>●</em><span>your own mic</span><em>●</em><span>flite · slt</span><em>●</em><span>ElevenLabs</span><em>●</em><span>OpenAI</span><em>●</em><span>Google Cloud</span><em>●</em><span>Azure</span></div></div>
+  </div>
+</section>
+
+<!-- S10 · breakdown: second job -->
+<section class="scene dark" data-s="54" data-e="60"><div class="grid"></div>
+  <div class="center">
+    <div class="h-l a rise" data-d="54.2">Same recorder.</div>
+    <div class="h-l a rise o" data-d="55.4">Second job.</div>
+    <div class="a fade" data-d="56.8" style="display:flex;align-items:center;gap:22px;margin-top:80px">
+      <div class="mark" style="--s:72px" id="labMark"></div><div style="font-size:54px;font-weight:800;letter-spacing:-.04em">Walkcast Lab</div></div>
+    <div class="a rise" data-d="57.3" style="margin-top:26px;font-size:34px;color:#b5ada1">Turn a failed browser-agent run into a regression test that holds.</div>
+  </div>
+</section>
+
+<!-- S11 · the pipeline -->
+<section class="scene dark" data-s="60" data-e="68"><div class="grid"></div>
+  <div class="center" style="justify-content:flex-start;padding-top:120px">
+    <div class="label a fade" data-d="60.1">Failure → fixture → replay → pass^k</div>
+    <div style="position:relative;display:flex;gap:80px;margin-top:60px">
+      <div style="position:absolute;left:150px;right:150px;top:89px;height:3px;background:#3a3731"></div>
+      <div class="a grow" data-d="60.4" style="animation-duration:3.4s;animation-timing-function:linear;position:absolute;left:150px;right:150px;top:89px;height:3px;background:#e0962e;transform-origin:0 0"></div>
+      <div class="node a pop" data-d="60.3" data-on="60.5"><div class="n">01 · CAPTURE</div><div class="t">Failed run</div></div>
+      <div class="node a pop" data-d="60.5" data-on="61.6"><div class="n">02 · CLASSIFY</div><div class="t">Cause + evidence</div></div>
+      <div class="node a pop" data-d="60.7" data-on="62.7"><div class="n">03 · FREEZE</div><div class="t">Fixture</div></div>
+      <div class="node a pop" data-d="60.9" data-on="63.8"><div class="n">04 · GATE</div><div class="t">Replay × k</div></div>
+    </div>
+    <div class="a rise" data-d="64.4" style="margin-top:90px;font-size:44px;font-weight:700;letter-spacing:-.03em">Causes come from the app’s real state. <span class="dimtxt">Not an LLM judge.</span></div>
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:16px;width:1500px;margin-top:46px">
+      <div class="cause a pop" data-d="65.0">stale-observation</div><div class="cause a pop" data-d="65.12">unsafe-retry</div><div class="cause a pop" data-d="65.24">auth-lost</div><div class="cause a pop" data-d="65.36">locator-not-found</div><div class="cause a pop" data-d="65.48">app-dropped-field</div><div class="cause a pop" data-d="65.6">navigation-timeout</div><div class="cause a pop" data-d="65.72">action-failed</div><div class="cause a pop" data-d="65.84">app-error</div>
+      <div class="cause u a pop" data-d="66.3">unexplained <span style="opacity:.7">→ stays unexplained</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- S12 · results -->
+<section class="scene light" data-s="68" data-e="74"><div class="grid"></div>
+  <div class="center" style="padding:0 200px">
+    <div class="h-m a rise" data-d="68.1" style="font-size:66px">Did the next version fix it, <span class="dimtxt">or break something else?</span></div>
+    <div style="width:1400px;margin-top:70px">
+      <div class="brow a rise" data-d="68.5"><div class="nm">v0<small>naive baseline</small></div><div class="track"><div class="ci" style="left:0;width:43%"></div></div><div class="v" style="color:var(--fail)"><span id="v0">0</span>/5</div></div>
+      <div class="brow a rise" data-d="68.7"><div class="nm">v1<small>the fix</small></div><div class="track"><div class="fill a grow" data-d="69.2" style="width:100%;background:var(--pass)"></div><div class="ci" style="left:57%;width:43%;background:#fff"></div></div><div class="v" style="color:var(--pass)"><span id="v1">0</span>/5</div></div>
+      <div class="brow a rise" data-d="68.9"><div class="nm">v2<small>fix minus read-back</small></div><div class="track"><div class="fill a grow" data-d="69.6" style="width:80%;background:var(--signal)"></div><div class="ci" style="left:38%;width:58%;background:#fff"></div></div><div class="v" style="color:var(--signal)"><span id="v2">0</span>/5</div></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:40px;align-items:center">
+      <div class="tag pass a pop" data-d="70.8" style="font-size:20px;padding:10px 18px">5/5 original causes reproduced</div>
+      <div class="tag fail a pop" data-d="71.3" style="font-size:20px;padding:10px 18px">● regression caught in v2</div></div>
+    <div class="mono a fade" data-d="71.8" style="margin-top:36px;font-size:19px;color:var(--dim)">fixture pass rates with 95% Wilson intervals · scripted agents, so this validates the harness · results/summary.md</div>
+  </div>
+</section>
+
+<!-- S13 · power cuts -->
+<section class="scene dark" data-s="74" data-e="76"><div class="center"><div class="word a slam" data-d="74" style="font-size:210px">Real browser.</div></div></section>
+<section class="scene ochre" data-s="76" data-e="78"><div class="center"><div class="word a slam" data-d="76" style="font-size:210px">Real state.</div></div></section>
+<section class="scene light" data-s="78" data-e="80"><div class="center"><div class="word a slam" data-d="78" style="font-size:210px">Real evidence<span style="color:var(--rec)">.</span></div></div></section>
+
+<!-- S14 · end card -->
+<section class="scene light" data-s="80" data-e="88"><div class="grid"></div>
+  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-160px;background:radial-gradient(closest-side,#f4e7d2,transparent)"></div>
+  <div class="center drift a" data-d="80" data-dur="8">
+    <div style="display:flex;align-items:center;gap:36px">
+      <div class="mark a pop" data-d="80" style="--s:150px" id="endMark"></div>
+      <div class="a wipe" data-d="80.3"><img src="../../brand/svg/walkcast-wordmark.svg" style="height:136px;display:block"></div></div>
+    <div class="h-m a rise" data-d="81.2" style="margin-top:64px;font-size:64px">Show what actually happened.</div>
+    <div class="a fade" data-d="82.2" style="display:flex;gap:16px;margin-top:46px">
+      <div class="chip">MIT licensed</div><div class="chip" style="background:var(--exhibit);color:var(--exink);box-shadow:none">The price is zero.</div><div class="chip">Windows · macOS · Linux</div></div>
+    <div class="mono a rise" data-d="83" style="margin-top:56px;font-size:34px;color:var(--ink);background:var(--panel);padding:20px 34px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line)"><span style="color:var(--dim)">$</span> git clone github.com/KunjShah95/browser-user</div>
+  </div>
+</section>
+
+</div>
+<div id="vig"></div><div id="grain"></div><div id="flash"></div><div id="bar"></div>
+
+<script>
+const MARK=id=>`<svg viewBox="0 0 64 64"><defs><linearGradient id="G${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c5700"/><stop offset="1" stop-color="#7a4100"/></linearGradient></defs>
+<rect width="64" height="64" rx="16" fill="url(#G${id})"/>
+<path class="trail" d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/>
+<path class="play" d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/>
+<circle class="halo" cx="48" cy="16" r="7.4" fill="#fff"/><circle class="dot" cx="48" cy="16" r="5" fill="#c0321c"/></svg>`;
+for (const id of ['logoMark','labMark','endMark']) document.getElementById(id).innerHTML=MARK(id);
+
+// absolute delays
+document.querySelectorAll('.a').forEach(el=>{
+  el.style.animationDelay=(+el.dataset.d||0)+'s';
+  if(el.dataset.dur) el.style.animationDuration=el.dataset.dur+'s';
+});
+const scenes=[...document.querySelectorAll('.scene,.sub')];
+const CUTS=[4,6,7,7.5,8,9,10,14,18,22,30,36,40,44,48,54,60,68,74,76,78,80];
+const BIG=new Set([22,54,74,76,78,80]);
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>1-Math.pow(1-x,3);
+const lerp=(a,b,x)=>a+(b-a)*x;
+const $=id=>document.getElementById(id);
+const pad=n=>String(Math.floor(n)).padStart(2,'0');
+
+const SEG=[{s:36,e:40,dir:'a',url:'agentic-crm-henna.vercel.app',cap:'Scrolling through “Real Estate CRM for Indian Sales Teams — Estate360”.',ex:'EX-2',line:1,demo0:10.5},
+           {s:40,e:44,dir:'b',url:'agentic-crm-henna.vercel.app/product',cap:'Scrolling through “Product — Inventory, Bookings, Site Visits, WhatsApp”.',ex:'EX-4',line:3,demo0:21.3},
+           {s:44,e:48,dir:'c',url:'agentic-crm-henna.vercel.app/pricing',cap:'Scrolling through “Pricing — Plans from ₹1,499/month”.',ex:'EX-6',line:5,demo0:33.0}];
+const URL_T='https://agentic-crm-henna.vercel.app';
+
+async function render(t){
+  for(const s of scenes){ s.style.display=(t>=+s.dataset.s && t<+s.dataset.e)?(s.classList.contains('sub')?'flex':'block'):'none'; }
+  for(const a of document.getAnimations()){ a.currentTime=t*1000; }
+
+  // power cuts: white flash + punch-in + micro shake
+  let flash=0,punch=0,shake=0;
+  for(const c of CUTS){ const d=t-c; if(d>=0&&d<.35){ const big=BIG.has(c);
+      flash=Math.max(flash,(big?.85:.35)*(1-d/(big?.3:.12)));
+      punch=Math.max(punch,(big?.06:.03)*(1-ease(d/.35)));
+      shake=Math.max(shake,(big?14:6)*(1-d/.2)); } }
+  $('flash').style.opacity=clamp(flash);
+  const vis=scenes.find(s=>s.classList.contains('scene')&&s.style.display!=='none'); $('vig').style.opacity=vis&&vis.classList.contains('light')?.12:1;
+  const sx=shake>0?Math.sin(t*173)*shake:0, sy=shake>0?Math.cos(t*131)*shake*.6:0;
+  $('stage').style.transform=`translate(${sx}px,${sy}px) scale(${1+punch})`;
+  $('grain').style.transform=`translate(${(t*997%100)-50}px,${(t*613%100)-50}px)`;
+  $('bar').style.transform=`scaleX(${t/88})`;
+
+  // S2 timer: hours of work flying by
+  if(t>=4&&t<10){ const secs=ease(clamp((t-4)/6))*(4*3600+12*60+37); $('timer').textContent=`${pad(secs/3600)}:${pad(secs/60%60)}:${pad(secs%60)}`; }
+  // S3 glitch on the stale frame
+  if(t>=12.2&&t<14){ const g=Math.max(0,1-(t-12.2)/.6); $('stale').style.filter=`saturate(.4) contrast(${1+g*.4}) hue-rotate(${g*40}deg)`; $('stale').style.transform=`translateX(${Math.sin(t*90)*g*18}px)`; }
+  // S5 counter
+  if(t>=18&&t<22) $('c76').textContent=Math.round(76*ease(clamp((t-18.1)/1.3)));
+  // logo marks: trail draws, play slides in, record light blinks
+  for(const [id,t0] of [['logoMark',22],['endMark',80],['labMark',56.8]]){
+    const m=$(id); const k=clamp((t-t0-.25)/.6);
+    m.querySelector('.trail').style.strokeDashoffset=1-ease(k);
+    m.querySelector('.play').style.transform=`translateX(${(1-ease(clamp((t-t0-.1)/.5)))*-14}px)`;
+    const dk=clamp((t-t0-.55)/.35); m.querySelector('.dot').style.opacity=t<t0+.55?0:(.65+.35*Math.cos((t-t0)*Math.PI*1.6));
+    m.querySelector('.halo').style.transform=`scale(${ease(dk)})`; m.querySelector('.halo').style.transformOrigin='48px 16px';
+  }
+  // S7 typing, cursor, click
+  if(t>=30&&t<36){
+    const n=Math.floor(clamp((t-30.7)/1.8)*URL_T.length); $('typed').textContent=URL_T.slice(0,n);
+    $('caret').style.opacity=(n<URL_T.length||Math.floor(t*2.5)%2)?1:0;
+    const tickOn=t>=33.35; const tk=$('tick'); tk.style.background=tickOn?'#9c5700':'transparent'; tk.style.boxShadow=tickOn?'none':'inset 0 0 0 2px #cfc9bd'; tk.textContent=tickOn?'✓':'';
+    // cursor path: start bottom right → checkbox → button
+    const cur=$('cursor'); const tb=$('tick').getBoundingClientRect(), gb=$('go').getBoundingClientRect();
+    const P=[[1500,1000,32.4],[tb.x+12,tb.y+10,33.25],[tb.x+12,tb.y+10,33.6],[gb.x+gb.width*.45,gb.y+gb.height*.5,34.25]];
+    let x=P[0][0],y=P[0][1];
+    for(let i=1;i<P.length;i++){ if(t>=P[i-1][2]){ const k=ease(clamp((t-P[i-1][2])/(P[i][2]-P[i-1][2]))); x=lerp(P[i-1][0],P[i][0],k); y=lerp(P[i-1][1],P[i][1],k);} }
+    cur.style.transform=`translate(${x}px,${y}px) scale(${t>34.25&&t<34.45?.85:1})`; cur.style.opacity=t<32.4?0:1;
+    const go=$('go'); const press=t>=34.25&&t<34.45; go.style.transform=`scale(${press?.95:1})`;
+    go.style.background=t>=34.45?'#874b00':'#9c5700';
+    $('golabel').textContent=t>=34.45?`Recording… ${Math.min(6,Math.floor((t-34.45)*2.4)+1)}/6 pages`:'Make my walkthrough';
+  }
+  // S8 demo playback + captions + transcript + chapters
+  if(t>=36&&t<48){
+    const seg=SEG.find(s=>t>=s.s&&t<s.e); const lt=t-seg.s;
+    const f=Math.min(126,Math.floor(lt*30*1.04)+1); const src=`frames/${seg.dir}/${String(f).padStart(3,'0')}.jpg`;
+    const img=$('demo'); if(!img.src.endsWith(src)){ img.src=src; await img.decode().catch(()=>{}); }
+    $('u').textContent=seg.url; $('ex').textContent=seg.ex;
+    const words=seg.cap.split(' '); const wn=Math.ceil(clamp((lt-.2)/1.4)*words.length); $('captxt').textContent=words.slice(0,wn).join(' ');
+    const rt=seg.demo0+lt*1.04; $('rect').textContent=`REC ${Math.floor(rt/60)}:${pad(rt%60)}`;
+    [...$('tx').children].forEach((d,i)=>{ d.className=i===seg.line?'now':''; d.style.opacity=i>seg.line+1?.35:1; });
+    const chapIdx=SEG.indexOf(seg); [...$('chap').children].forEach((c,i)=>{ const u=c.firstChild; u.style.width=(i<chapIdx*2+1?100:i===chapIdx*2+1?clamp(lt/4)*100:0)+'%'; });
+  }
+  // S9 marquee
+  if(t>=48&&t<54) $('marq').style.transform=`translateX(${-(t-48)*160}px)`;
+  // S11 nodes light up
+  { const fs=[...document.querySelectorAll('.feat')]; let last=-1; fs.forEach((f,i)=>{ if(t>=+f.dataset.on) last=i; }); fs.forEach((f,i)=>f.classList.toggle('on',i===last)); }
+  document.querySelectorAll('.node').forEach(n=>n.classList.toggle('on',t>=+n.dataset.on));
+  // S12 counters
+  if(t>=68&&t<74){ $('v1').textContent=Math.round(5*ease(clamp((t-69.2)/1.4))); $('v2').textContent=Math.round(4*ease(clamp((t-69.6)/1.4))); }
+  // final fade to white then black
+  if(t>=86.6){ $('flash').style.background='#000'; $('flash').style.opacity=clamp((t-86.6)/1.4); } else $('flash').style.background='#fff';
+}
+window.render=render;
+</script>
+</body></html>

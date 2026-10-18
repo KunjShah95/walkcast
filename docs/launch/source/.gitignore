@@ -1,0 +1,4 @@
+frames/
+node_modules/
+*.wav
+silent.mp4

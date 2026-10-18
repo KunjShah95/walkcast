@@ -346,7 +346,7 @@ ol.howto strong{color:var(--ink);font-weight:600}
 @media (max-width:760px){.nav-main{display:none}.hide-sm{display:none}}
 @media (max-width:620px){.compare thead{display:none}.compare tr{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;padding:18px;border-top:1px solid var(--line)}.compare tbody tr:first-child{border-top:0}.compare tbody th,.compare td{padding:0;border:0;width:auto}.compare tbody th{grid-column:1/-1;padding-bottom:4px}.compare td::before{content:attr(data-label);display:block;margin-bottom:4px;font-size:12.5px;font-weight:600;color:var(--muted)}.compare td:nth-child(2)::before{color:var(--signal)}.urlform{flex-direction:column;align-items:stretch;border-radius:22px;padding:8px}.urlform>.ic{display:none}.urlform input{padding:12px 12px}.urlform .pill{width:100%}.specs,.guide-list,.feats{grid-template-columns:1fr!important}.win-bar .win-title{display:none}.faq details p{padding:0 20px 20px}.faq summary{gap:12px;padding:16px}.auth-story,.auth-card{padding:26px 22px}.belt{gap:10px 22px}.belt li{font-size:14px}}`;
 
-export const MARK = `<svg width="28" height="28" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="7.5" fill="#874b00"/><path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff"/><circle cx="20.4" cy="5.6" r="2.6" fill="#c0321c" stroke="#ffffff" stroke-width="1.2"/></svg>`;
+export const MARK = `<svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#874b00"/><path d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5"/><path d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/><circle cx="48" cy="16" r="7.4" fill="#fff"/><circle cx="48" cy="16" r="5" fill="#c0321c"/></svg>`;
 
 /** Drawn icons: one 24px grid, one stroke. */
 export const ICONS: Record<string, string> = {
@@ -382,7 +382,7 @@ export function icon(name: string, size = 20): string {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
 }
 
-export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26"><rect x=".5" y=".5" width="25" height="25" rx="7" fill="#874b00"/><path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff"/><circle cx="20.4" cy="5.6" r="2.6" fill="#c0321c" stroke="#ffffff" stroke-width="1.2"/></svg>`;
+export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#874b00"/><path d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5"/><path d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/><circle cx="48" cy="16" r="7.4" fill="#fff"/><circle cx="48" cy="16" r="5" fill="#c0321c"/></svg>`;
 
 /** The two self-hosted fonts, served at /assets/fonts/<file>. */
 const FONT_FILES: Record<string, string> = {
