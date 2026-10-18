@@ -29,8 +29,8 @@ jobs:
       TEST_DATABASE_URL: postgres://walkcast:walkcast@127.0.0.1:5432/walkcast_test
       LAB_LOG: "off"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t walkcast:ci .
       - name: Smoke test
         run: |
@@ -74,8 +74,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -88,7 +88,7 @@ jobs:
         run: npm run ui:build && npm run lab -- ui-export --out walkcast.html --max-runs 40 --screenshot-runs 10
       - name: Upload dashboard and run reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: walkcast
           path: |
