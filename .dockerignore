@@ -8,3 +8,5 @@ results/*/runs
 .git
 *.html
 docs/screenshots
+**/node_modules
+apps/mobile
