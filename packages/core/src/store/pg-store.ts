@@ -1,5 +1,7 @@
 import postgres from "postgres";
-import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Store, type StoreMetrics, type User } from "./types.ts";
+import { migrationFiles } from "./migrations.ts";
+import { jobCompletedPayload } from "./payload.ts";
+import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
 
 type Row = Record<string, unknown>;
 
@@ -12,19 +14,28 @@ export class PgStore implements Store {
   readonly kind = "postgres" as const;
   readonly sql: postgres.Sql;
 
+  /**
+   * Read replica for the read-heavy, lag-tolerant queries (recordings library, metrics, usage).
+   * Same pool as `sql` when no replica is configured. Anything that must read its own writes
+   * (job status after submit, sessions, the queue itself) always goes to the primary.
+   */
+  readonly read: postgres.Sql;
+
   /** `schema` isolates one database between several apps or test runs (sets search_path). */
-  constructor(url: string, options: { max?: number; schema?: string } = {}) {
-    this.sql = postgres(url, {
+  constructor(url: string, options: { max?: number; schema?: string; readUrl?: string } = {}) {
+    const connect = (u: string) => postgres(u, {
       max: options.max ?? 5,
       prepare: false, // required behind PgBouncer / Supavisor in transaction mode
       idle_timeout: 30,
       connect_timeout: 10,
       onnotice: () => undefined,
       // Supabase requires TLS; local Postgres usually has none.
-      ssl: /localhost|127\.0\.0\.1|sslmode=disable/.test(url) ? false : "require",
+      ssl: /localhost|127\.0\.0\.1|sslmode=disable/.test(u) ? false : "require",
       types: { bigint: postgres.BigInt },
       ...(options.schema ? { connection: { search_path: options.schema } } : {}),
     });
+    this.sql = connect(url);
+    this.read = options.readUrl && options.readUrl !== url ? connect(options.readUrl) : this.sql;
   }
 
   // ---------------------------------------------------------------- accounts
@@ -169,18 +180,28 @@ export class PgStore implements Store {
   }
 
   async finish(jobId: string, workerId: string, outcome: Parameters<Store["finish"]>[2]) {
-    if (outcome.status === "succeeded") {
-      await this.sql`update jobs set status = 'succeeded', result = ${this.sql.json(outcome.result as postgres.JSONValue)}, secret = null, finished_at = now(), locked_by = null, lease_until = null
-        where id = ${jobId} and locked_by = ${workerId}`;
-      return;
-    }
-    await this.sql`
-      update jobs set
-        status = case when ${outcome.retry} and attempts < max_attempts then 'queued' else 'failed' end,
-        secret = case when ${outcome.retry} and attempts < max_attempts then secret else null end,
-        finished_at = case when ${outcome.retry} and attempts < max_attempts then null else now() end,
-        error = ${outcome.error}, locked_by = null, lease_until = null
-      where id = ${jobId} and locked_by = ${workerId}`;
+    // The transition and its outbox rows commit together: a delivery exists if and only if the
+    // job really reached a terminal state (a fenced-out zombie writes neither).
+    await this.sql.begin(async (tx) => {
+      const [r] = outcome.status === "succeeded"
+        ? await tx`update jobs set status = 'succeeded', result = ${tx.json(outcome.result as postgres.JSONValue)}, secret = null, finished_at = now(), locked_by = null, lease_until = null
+            where id = ${jobId} and locked_by = ${workerId}
+            returning *`
+        : await tx`
+            update jobs set
+              status = case when ${outcome.retry} and attempts < max_attempts then 'queued' else 'failed' end,
+              secret = case when ${outcome.retry} and attempts < max_attempts then secret else null end,
+              finished_at = case when ${outcome.retry} and attempts < max_attempts then null else now() end,
+              error = ${outcome.error}, locked_by = null, lease_until = null
+            where id = ${jobId} and locked_by = ${workerId}
+            returning *`;
+      if (!r || (r.status !== "succeeded" && r.status !== "failed")) return;
+      const payload = jobCompletedPayload(toJob(r));
+      await tx`
+        insert into webhook_deliveries (webhook_id, owner, url, event, payload)
+        select id, owner, url, 'job.completed', ${tx.json(payload as postgres.JSONValue)}
+        from webhooks where owner is not distinct from ${(r.owner as string | null) ?? null}`;
+    });
   }
 
   async release(jobId: string, workerId: string) {
@@ -215,7 +236,7 @@ export class PgStore implements Store {
 
   async metrics(windowMs = 86_400_000) {
     const qs = await this.queueStats();
-    const rows = await this.sql`
+    const rows = await this.read`
       select kind,
         count(*)::int as n,
         coalesce(percentile_cont(0.5) within group (order by extract(epoch from (finished_at - started_at)) * 1000), 0) as p50,
@@ -254,8 +275,8 @@ export class PgStore implements Store {
   }
   async recordings(owner: string | null, limit: number) {
     const rows = owner === null
-      ? await this.sql`select * from recordings order by created_at desc limit ${limit}`
-      : await this.sql`select * from recordings where owner = ${owner} order by created_at desc limit ${limit}`;
+      ? await this.read`select * from recordings order by created_at desc limit ${limit}`
+      : await this.read`select * from recordings where owner = ${owner} order by created_at desc limit ${limit}`;
     return rows.map(toRecording);
   }
   async recording(id: string) {
@@ -263,14 +284,127 @@ export class PgStore implements Store {
     return r ? toRecording(r) : null;
   }
 
+  // ---------------------------------------------------------------- schedules
+
+  async schedules(owner: string | null) {
+    const rows = await this.sql`select * from schedules where owner is not distinct from ${owner} order by created_at`;
+    return rows.map(toSchedule);
+  }
+  async addSchedule(sch: Schedule) {
+    await this.sql`insert into schedules (id, owner, url, spec, interval_ms, authorized, created_at, last_run_at)
+      values (${sch.id}, ${sch.owner}, ${sch.url}, ${sch.interval}, ${sch.intervalMs}, ${sch.authorized}, ${sch.createdAt}, ${sch.lastRunAt})`;
+  }
+  async removeSchedule(id: string, owner: string | null) {
+    if (!UUID.test(id)) return false;
+    const rows = await this.sql`delete from schedules where id = ${id} and owner is not distinct from ${owner} returning id`;
+    return rows.length > 0;
+  }
+  async claimDueSchedules(limit: number) {
+    // One statement: the row lock taken by the inner select makes a concurrent claimer skip the
+    // row, so every due schedule is stamped (and therefore enqueued) by exactly one instance.
+    const rows = await this.sql`
+      update schedules set last_run_at = now()
+      where id in (
+        select id from schedules
+        where authorized and (last_run_at is null or last_run_at <= now() - (interval_ms * interval '1 millisecond'))
+        order by last_run_at nulls first
+        for update skip locked
+        limit ${limit}
+      )
+      returning *`;
+    return rows.map(toSchedule);
+  }
+
+  // ---------------------------------------------------------------- webhooks + outbox
+
+  async webhooks(owner: string | null) {
+    const rows = await this.sql`select * from webhooks where owner is not distinct from ${owner} order by created_at`;
+    return rows.map(toWebhook);
+  }
+  async addWebhook(owner: string | null, url: string) {
+    const [inserted] = await this.sql`insert into webhooks (owner, url) values (${owner}, ${url})
+      on conflict (owner, url) do nothing returning *`;
+    if (inserted) return toWebhook(inserted);
+    const [existing] = await this.sql`select * from webhooks where owner is not distinct from ${owner} and url = ${url}`;
+    return toWebhook(existing!);
+  }
+  async removeWebhook(owner: string | null, idOrUrl: string) {
+    const rows = UUID.test(idOrUrl)
+      ? await this.sql`delete from webhooks where owner is not distinct from ${owner} and (id = ${idOrUrl} or url = ${idOrUrl}) returning id`
+      : await this.sql`delete from webhooks where owner is not distinct from ${owner} and url = ${idOrUrl} returning id`;
+    return rows.length > 0;
+  }
+  async claimDeliveries(workerId: string, leaseMs: number, limit: number) {
+    const rows = await this.sql`
+      update webhook_deliveries set locked_by = ${workerId}, attempts = attempts + 1,
+        lease_until = now() + (${leaseMs} * interval '1 millisecond')
+      where id in (
+        select id from webhook_deliveries
+        where status = 'pending' and next_at <= now() and (lease_until is null or lease_until < now())
+        order by next_at
+        for update skip locked
+        limit ${limit}
+      )
+      returning *`;
+    if (Math.random() < 0.02) {
+      await this.sql`delete from webhook_deliveries where status in ('done', 'failed') and finished_at < now() - interval '30 days'`.catch(() => undefined);
+    }
+    return rows.map(toDelivery);
+  }
+  async completeDelivery(id: string, workerId: string, outcome: Parameters<Store["completeDelivery"]>[2]) {
+    if (outcome.ok) {
+      await this.sql`update webhook_deliveries set status = 'done', finished_at = now(), locked_by = null, lease_until = null, last_error = null
+        where id = ${id} and locked_by = ${workerId}`;
+      return;
+    }
+    const retryAt = outcome.retryAt;
+    await this.sql`update webhook_deliveries set
+        status = ${retryAt ? "pending" : "failed"},
+        next_at = ${retryAt ?? new Date()},
+        finished_at = ${retryAt ? null : new Date()},
+        last_error = ${outcome.error}, locked_by = null, lease_until = null
+      where id = ${id} and locked_by = ${workerId}`;
+  }
+  async deliveries(owner: string | null, limit: number) {
+    const rows = await this.read`select * from webhook_deliveries where owner is not distinct from ${owner} order by created_at desc limit ${limit}`;
+    return rows.map(toDelivery);
+  }
+
+  // ---------------------------------------------------------------- ops
+
+  async migrationStatus() {
+    const [t] = await this.sql`select to_regclass('walkcast_migrations')::text as t`;
+    const applied = t?.t ? (await this.sql`select name from walkcast_migrations order by name`).map((r) => String(r.name)) : [];
+    const done = new Set(applied);
+    return { applied, pending: migrationFiles().filter((f) => !done.has(f)) };
+  }
+  async leases() {
+    const rows = await this.sql`select id, kind, locked_by, lease_until, attempts from jobs where status = 'running' order by lease_until`;
+    return rows.map((r) => ({ jobId: String(r.id), kind: r.kind as JobKind, workerId: String(r.locked_by ?? ""), leaseUntil: iso(r.lease_until) ?? "", attempts: Number(r.attempts) }));
+  }
+  async agentUsage(windowMs: number) {
+    const rows = await this.read`
+      select input->>'agent' as agent,
+        count(*)::int as total,
+        count(*) filter (where status = 'succeeded')::int as succeeded,
+        count(*) filter (where status = 'failed')::int as failed,
+        count(*) filter (where status in ('queued', 'running'))::int as active
+      from jobs
+      where kind = 'run' and input ? 'agent' and created_at > now() - (${windowMs} * interval '1 millisecond')
+      group by 1 order by 2 desc`;
+    return rows.map((r) => ({ agent: String(r.agent), total: Number(r.total), succeeded: Number(r.succeeded), failed: Number(r.failed), active: Number(r.active) }));
+  }
+
   async ping() {
     await this.sql`select 1`;
   }
   async close() {
+    if (this.read !== this.sql) await this.read.end({ timeout: 5 });
     await this.sql.end({ timeout: 5 });
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v == null ? null : String(v));
 
 function toUser(r: Row): User {
@@ -303,6 +437,39 @@ function toJob(r: Row): Job {
     createdAt: iso(r.created_at)!,
     startedAt: iso(r.started_at),
     finishedAt: iso(r.finished_at),
+  };
+}
+
+function toSchedule(r: Row): Schedule {
+  return {
+    id: String(r.id),
+    owner: (r.owner as string | null) ?? null,
+    url: String(r.url),
+    interval: String(r.spec),
+    intervalMs: Number(r.interval_ms),
+    authorized: Boolean(r.authorized),
+    createdAt: iso(r.created_at)!,
+    lastRunAt: iso(r.last_run_at),
+  };
+}
+
+function toWebhook(r: Row): Webhook {
+  return { id: String(r.id), owner: (r.owner as string | null) ?? null, url: String(r.url), createdAt: iso(r.created_at)! };
+}
+
+function toDelivery(r: Row): WebhookDelivery {
+  return {
+    id: String(r.id),
+    webhookId: r.webhook_id == null ? null : String(r.webhook_id),
+    owner: (r.owner as string | null) ?? null,
+    url: String(r.url),
+    event: String(r.event),
+    payload: r.payload as Record<string, unknown>,
+    status: r.status as WebhookDelivery["status"],
+    attempts: Number(r.attempts),
+    nextAt: iso(r.next_at)!,
+    lastError: (r.last_error as string | null) ?? null,
+    createdAt: iso(r.created_at)!,
   };
 }
 

@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
-import { DuplicateError, FileStore, PgStore, migrate, type Store } from "../packages/core/src/store/index.ts";
+import { DuplicateError, FileStore, type Store } from "../packages/core/src/store/index.ts";
+import { newSchedule } from "../packages/core/src/schedules.ts";
 import { freshSchema } from "./pg-helper.ts";
 
 /**
@@ -238,7 +239,7 @@ for (const [name, open] of backends) {
     test("jobs: metrics() reports a finished job's duration percentile", async () => {
       const s = await open();
       try {
-        const j = await s.enqueue({ kind: "record", owner: null, input: {} });
+        await s.enqueue({ kind: "record", owner: null, input: {} });
         const job = await s.claim("w4", 60_000, "record");
         await new Promise((r) => setTimeout(r, 20));
         await s.finish(job!.id, "w4", { status: "succeeded", result: { dir: "x" } });
@@ -248,6 +249,92 @@ for (const [name, open] of backends) {
         assert.equal(rec!.count, 1);
         assert.ok(rec!.p95Ms >= 0);
         assert.equal(m.queue.depth, 0);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("schedules: owner-scoped, and each due schedule is claimed by exactly one of many schedulers", async () => {
+      const s = await open();
+      try {
+        await s.insertUser(user("u1", "a@example.com"));
+        await s.insertUser(user("u2", "b@example.com"));
+        const a = newSchedule("u1", { url: "https://a.example", interval: "1h", authorized: true });
+        const b = newSchedule("u2", { url: "https://b.example", interval: "1h", authorized: true });
+        const off = newSchedule("u1", { url: "https://c.example", interval: "1h", authorized: false });
+        for (const x of [a, b, off]) await s.addSchedule(x);
+        assert.deepEqual((await s.schedules("u1")).map((x) => x.url).sort(), ["https://a.example/", "https://c.example/"]);
+        assert.equal(await s.removeSchedule(a.id, "u2"), false, "someone else's schedule");
+        // Six schedulers tick at once: both authorized schedules fire once, the unauthorized never.
+        const claimed = (await Promise.all(Array.from({ length: 6 }, () => s.claimDueSchedules(10)))).flat();
+        assert.deepEqual(claimed.map((x) => x.id).sort(), [a.id, b.id].sort());
+        assert.equal((await s.claimDueSchedules(10)).length, 0, "not due again within the interval");
+        assert.ok((await s.schedules("u1")).find((x) => x.id === a.id)?.lastRunAt);
+        assert.equal(await s.removeSchedule(a.id, "u1"), true);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("webhooks: finish writes the owner's outbox atomically; retries and zombies write nothing", async () => {
+      const s = await open();
+      try {
+        await s.insertUser(user("u1", "a@example.com"));
+        await s.insertUser(user("u2", "b@example.com"));
+        const w = await s.addWebhook("u1", "https://hooks.example/a");
+        assert.equal((await s.addWebhook("u1", "https://hooks.example/a")).id, w.id, "idempotent per owner+url");
+        await s.addWebhook("u2", "https://hooks.example/b");
+
+        // Retry path: first failure re-queues (no event), second is terminal (one event).
+        await s.enqueue({ kind: "record", owner: "u1", input: { url: "x" } });
+        let j = await s.claim("w1", 60_000);
+        await s.finish(j!.id, "w1", { status: "failed", error: "crash", retry: true });
+        assert.equal((await s.claimDeliveries("d", 60_000, 10)).length, 0, "a retry is not a completion");
+        j = await s.claim("w2", 60_000);
+        await s.finish(j!.id, "w1", { status: "succeeded", result: {} }); // zombie: fenced out
+        assert.equal((await s.claimDeliveries("d", 60_000, 10)).length, 0, "fenced-out finish writes no event");
+        await s.finish(j!.id, "w2", { status: "succeeded", result: { dir: "recordings/r" } });
+
+        const [d, ...rest] = await s.claimDeliveries("d1", 60_000, 10);
+        assert.equal(rest.length, 0, "only u1's webhook hears u1's job");
+        assert.equal(d!.url, "https://hooks.example/a");
+        assert.equal(d!.event, "job.completed");
+        assert.equal((d!.payload.job as { status: string }).status, "succeeded");
+        assert.equal(d!.attempts, 1);
+        assert.equal((await s.claimDeliveries("d2", 60_000, 10)).length, 0, "leased: no double send");
+
+        await s.completeDelivery(d!.id, "d1", { ok: false, error: "HTTP 500", retryAt: new Date(Date.now() - 1) });
+        const [again] = await s.claimDeliveries("d2", 60_000, 10);
+        assert.equal(again?.attempts, 2);
+        await s.completeDelivery(again!.id, "d1", { ok: true }); // stale owner: fenced
+        await s.completeDelivery(again!.id, "d2", { ok: true });
+        const [log] = await s.deliveries("u1", 10);
+        assert.equal(log?.status, "done");
+        assert.deepEqual(await s.deliveries("u2", 10), []);
+        assert.equal(await s.removeWebhook("u1", "https://hooks.example/a"), true);
+        assert.deepEqual(await s.webhooks("u1"), []);
+      } finally {
+        await s.close();
+      }
+    });
+
+    test("ops: leases, agent usage", async () => {
+      const s = await open();
+      try {
+        await s.enqueue({ kind: "run", owner: null, input: { agent: "v1", fault: "none" } });
+        await s.enqueue({ kind: "run", owner: null, input: { agent: "v1", fault: "none" } });
+        await s.enqueue({ kind: "run", owner: null, input: { agent: "v0", fault: "none" } });
+        const j = await s.claim("w1", 60_000);
+        const [lease] = await s.leases();
+        assert.equal(lease?.jobId, j!.id);
+        assert.equal(lease?.workerId, "w1");
+        await s.finish(j!.id, "w1", { status: "succeeded", result: {} });
+        const usage = await s.agentUsage(86_400_000);
+        assert.deepEqual(usage.find((u) => u.agent === "v1"), { agent: "v1", total: 2, succeeded: 1, failed: 0, active: 1 });
+        assert.equal(usage.find((u) => u.agent === "v0")?.active, 1);
+        const m = await s.migrationStatus();
+        if (s.kind === "postgres") assert.deepEqual(m?.pending, []);
+        else assert.equal(m, null);
       } finally {
         await s.close();
       }

@@ -1,89 +1,34 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { Store } from "./store/index.ts";
+import { log } from "./ops/log.ts";
+import type { Schedule, Store } from "./store/index.ts";
 
-export interface Schedule {
-  id: string;
-  url: string;
-  interval: string;
-  intervalMs: number;
-  authorized: boolean;
-  createdAt: string;
-  lastRunAt: string | null;
-}
+export type { Schedule };
 
-function labDir(root: string): string {
-  const d = join(root, ".lab");
-  if (!existsSync(d)) mkdirSync(d, { recursive: true });
-  return d;
-}
+/**
+ * Recurring recordings. Schedules live in the store, and `claimDueSchedules` hands each due one
+ * to exactly one instance, so running the scheduler on every web instance is safe: a schedule
+ * fires once per interval no matter how many processes are ticking.
+ */
 
-export function schedulesPath(root: string): string {
-  // Prefer the explicitly named file at the project root.
-  return join(root, "schedules.json");
-}
-
-function readRaw(root: string): unknown {
-  const p = schedulesPath(root);
-  if (!existsSync(p)) return [];
-  try { return JSON.parse(readFileSync(p, "utf8")); } catch { return []; }
-}
-
-export function loadSchedules(root: string): Schedule[] {
-  const v = readRaw(root);
-  let arr: unknown[] = [];
-  if (Array.isArray(v)) arr = v;
-  else if (v && typeof v === "object" && Array.isArray((v as any).schedules)) arr = (v as any).schedules;
-  const out: Schedule[] = [];
-  for (const x of arr) {
-    if (!x || typeof x !== "object") continue;
-    const o = x as Record<string, unknown>;
-    const url = typeof o.url === "string" ? o.url : "";
-    if (!url) continue;
-    const intervalMs = typeof o.intervalMs === "number" && Number.isFinite(o.intervalMs) && o.intervalMs > 0 ? Math.trunc(o.intervalMs) : parseInterval(o.interval ?? o.cron ?? o.every);
-    out.push({
-      id: typeof o.id === "string" ? o.id : randomUUID(),
-      url,
-      interval: typeof o.interval === "string" ? o.interval : (typeof o.cron === "string" ? o.cron : `${intervalMs}ms`),
-      intervalMs,
-      authorized: o.authorized === true,
-      createdAt: typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString(),
-      lastRunAt: typeof o.lastRunAt === "string" ? o.lastRunAt : null,
-    });
-  }
-  return out;
-}
-
-export function saveSchedules(root: string, schedules: Schedule[]): void {
-  writeFileSync(schedulesPath(root), JSON.stringify(schedules, null, 2), { mode: 0o600 });
-}
-
-export function addSchedule(root: string, input: { url: string; interval?: unknown; intervalMs?: unknown; authorized?: boolean }): Schedule {
-  const url = String(input.url ?? "").trim();
+/** Build a schedule from user input; throws on an unusable URL. */
+export function newSchedule(owner: string | null, input: { url?: unknown; interval?: unknown; intervalMs?: unknown; authorized?: unknown }): Schedule {
+  const raw = String(input.url ?? "").trim();
   let u: URL;
-  try { u = new URL(url); } catch { throw new Error("invalid url"); }
+  try { u = new URL(raw); } catch { throw new Error("invalid url"); }
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("invalid url");
   const intervalMs = input.intervalMs !== undefined ? parseInterval(input.intervalMs) : parseInterval(input.interval);
-  const sched: Schedule = {
+  return {
     id: randomUUID(),
+    owner,
     url: u.toString(),
-    interval: typeof input.interval === "string" ? input.interval : `${intervalMs}ms`,
+    interval: typeof input.interval === "string" && input.interval.trim() ? input.interval.trim() : `${intervalMs}ms`,
     intervalMs,
     authorized: input.authorized === true,
     createdAt: new Date().toISOString(),
     lastRunAt: null,
   };
-  const list = loadSchedules(root);
-  list.push(sched);
-  saveSchedules(root, list);
-  return sched;
-}
-
-export function removeSchedule(root: string, id: string): Schedule[] {
-  const list = loadSchedules(root).filter((s) => s.id !== id);
-  saveSchedules(root, list);
-  return list;
 }
 
 export function parseInterval(input: unknown): number {
@@ -119,30 +64,72 @@ export function parseInterval(input: unknown): number {
   return 3600000;
 }
 
-export function startScheduler(root: string, store: Store, opts: { tickMs?: number } = {}): { stop: () => void } {
+export interface SchedulerOptions {
+  tickMs?: number;
+  /** Block private addresses in the scheduled recording (true whenever the server is exposed). */
+  blockPrivate?: boolean;
+  /** Ceiling on queued+running jobs per owner that a schedule may add to. */
+  maxActive?: number;
+  /** Called after a scheduled job is enqueued (e.g. to poke an in-process worker). */
+  onEnqueued?: () => void;
+}
+
+export function startScheduler(store: Store, opts: SchedulerOptions = {}): { stop: () => void } {
   const tickMs = opts.tickMs ?? Number(process.env.LAB_SCHEDULER_INTERVAL_MS ?? 5000);
+  const maxActive = opts.maxActive ?? Number(process.env.LAB_SCHEDULE_MAX_ACTIVE ?? 3);
   let stopped = false;
+  let running = false;
   const runDue = async () => {
-    if (stopped) return;
-    const schedules = loadSchedules(root);
-    const now = Date.now();
-    let changed = false;
-    for (const sch of schedules) {
-      if (!sch.authorized) continue;
-      const last = sch.lastRunAt ? Date.parse(sch.lastRunAt) : 0;
-      if (Number.isFinite(last) && now - last < sch.intervalMs) continue;
-      try {
-        await store.enqueueLimited({ kind: "record", owner: null, input: { url: sch.url, maxPages: 8, authorized: true, blockPrivate: false }, secret: null }, 100);
-        sch.lastRunAt = new Date().toISOString();
-        changed = true;
-      } catch {
-        // ignore
+    if (stopped || running) return;
+    running = true;
+    try {
+      // At-most-once per interval: the schedule is stamped before its job is enqueued, so a crash
+      // in between skips one run rather than doubling it. Right trade for change detection.
+      const due = await store.claimDueSchedules(20);
+      for (const sch of due) {
+        const job = await store.enqueueLimited(
+          { kind: "record", owner: sch.owner, input: { url: sch.url, maxPages: 8, authorized: true, blockPrivate: opts.blockPrivate ?? false, schedule: sch.id } },
+          maxActive,
+        ).catch((e: unknown) => { log.warn("schedule.enqueue_failed", { schedule: sch.id, error: String(e) }); return null; });
+        if (job) {
+          log.info("schedule.enqueued", { schedule: sch.id, job: job.id });
+          opts.onEnqueued?.();
+        } else log.warn("schedule.skipped", { schedule: sch.id, reason: "owner at active-job limit" });
       }
+    } catch (e) {
+      log.warn("schedule.tick_failed", { error: String(e) });
+    } finally {
+      running = false;
     }
-    if (changed) saveSchedules(root, schedules);
   };
   const timer = setInterval(() => { void runDue(); }, tickMs);
   timer.unref?.();
   void runDue();
   return { stop() { stopped = true; clearInterval(timer); } };
+}
+
+/**
+ * One-time import of the pre-store `schedules.json` (project root) into the store, owned by
+ * `owner` (the local user on desktop). The file is renamed so the import never repeats.
+ */
+export async function importLegacySchedules(root: string, store: Store, owner: string | null = null): Promise<number> {
+  const p = join(root, "schedules.json");
+  if (!existsSync(p)) return 0;
+  let arr: unknown[] = [];
+  try {
+    const v = JSON.parse(readFileSync(p, "utf8")) as unknown;
+    arr = Array.isArray(v) ? v : Array.isArray((v as { schedules?: unknown[] })?.schedules) ? (v as { schedules: unknown[] }).schedules : [];
+  } catch { /* unreadable: rename below so it doesn't block every start */ }
+  let n = 0;
+  for (const x of arr) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    try {
+      const s = newSchedule(owner, { url: o.url, interval: o.interval ?? o.cron ?? o.every, intervalMs: o.intervalMs, authorized: o.authorized });
+      if (typeof o.lastRunAt === "string") s.lastRunAt = o.lastRunAt;
+      await store.addSchedule(s);
+      n++;
+    } catch { /* skip invalid rows */ }
+  }
+  try { renameSync(p, `${p}.imported`); } catch { /* best effort */ }
+  return n;
 }

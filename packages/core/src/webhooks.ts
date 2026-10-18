@@ -1,145 +1,126 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHmac, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { log } from "./ops/log.ts";
+import { blockedHost } from "./record/ssrf.ts";
+import type { Store, WebhookDelivery } from "./store/index.ts";
 
-export interface OutboxEntry {
-  id: string;
-  url: string;
-  event: string;
-  payload: unknown;
-  attempts: number;
-  nextAt: string;
-  status: "pending" | "done" | "failed";
-  lastError?: string;
-  createdAt: string;
+/**
+ * Webhook delivery from the transactional outbox. `Store.finish` writes one delivery row per
+ * owner webhook in the same atomic step as the job's terminal transition; this dispatcher leases
+ * due rows (SKIP LOCKED in Postgres) and POSTs them, so any number of instances can run it and
+ * each event is delivered at least once. Receivers should de-duplicate on `X-Walkcast-Delivery`.
+ */
+
+export const MAX_ATTEMPTS = 5;
+
+/** Why `raw` can't be a webhook URL, or null. Private targets are refused when `blockPrivate`. */
+export async function webhookUrlProblem(raw: string, blockPrivate: boolean): Promise<string | null> {
+  let u: URL;
+  try { u = new URL(raw); } catch { return "invalid url"; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return "webhook url must be http(s)";
+  if (u.username || u.password) return "webhook url must not contain credentials";
+  if (blockPrivate) return blockedHost(u.hostname);
+  return null;
 }
 
-function labDir(root: string): string {
-  const d = join(root, ".lab");
-  if (!existsSync(d)) mkdirSync(d, { recursive: true });
-  return d;
+/** HMAC-SHA256 of `${timestamp}.${body}` under LAB_WEBHOOK_SECRET, or null when unset. */
+export function signature(body: string, timestamp: string, secret = process.env.LAB_WEBHOOK_SECRET): string | null {
+  if (!secret) return null;
+  return `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
 }
 
-export function webhooksPath(root: string): string {
-  return join(labDir(root), "webhooks.json");
+/** Retry delay after the n-th failed attempt: 1 s, 2 s, 4 s … capped at 60 s. */
+export function backoffMs(attempts: number): number {
+  return Math.min(60_000, 1000 * 2 ** Math.max(0, attempts - 1));
 }
 
-export function outboxPath(root: string): string {
-  return join(labDir(root), "webhook-outbox.json");
+export interface DispatcherOptions {
+  intervalMs?: number;
+  /** Refuse to deliver to private/loopback addresses (re-checked on every send against rebinding). */
+  blockPrivate?: boolean;
+  timeoutMs?: number;
+  fetch?: typeof fetch;
 }
 
-export function loadWebhooks(root: string): string[] {
-  const p = webhooksPath(root);
-  if (!existsSync(p)) return [];
-  try {
-    const v = JSON.parse(readFileSync(p, "utf8"));
-    if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
-    if (v && Array.isArray(v.webhooks)) return v.webhooks.filter((x: unknown) => typeof x === "string");
-    if (v && Array.isArray(v.urls)) return v.urls.filter((x: unknown) => typeof x === "string");
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveWebhooks(root: string, urls: string[]): void {
-  writeFileSync(webhooksPath(root), JSON.stringify(urls, null, 2), { mode: 0o600 });
-}
-
-export function addWebhook(root: string, url: string): string[] {
-  const urls = loadWebhooks(root);
-  if (!urls.includes(url)) urls.push(url);
-  saveWebhooks(root, urls);
-  return urls;
-}
-
-export function removeWebhook(root: string, url: string): string[] {
-  const urls = loadWebhooks(root).filter((u) => u !== url);
-  saveWebhooks(root, urls);
-  return urls;
-}
-
-export function readOutbox(root: string): OutboxEntry[] {
-  const p = outboxPath(root);
-  if (!existsSync(p)) return [];
-  try {
-    const v = JSON.parse(readFileSync(p, "utf8"));
-    return Array.isArray(v) ? (v as OutboxEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeOutbox(root: string, entries: OutboxEntry[]): void {
-  writeFileSync(outboxPath(root), JSON.stringify(entries, null, 2), { mode: 0o600 });
-}
-
-export function enqueueWebhook(root: string, event: string, payload: unknown, urls?: string[]): void {
-  const targets = urls ?? loadWebhooks(root);
-  if (targets.length === 0) return;
-  const entries = readOutbox(root);
-  const now = new Date().toISOString();
-  for (const url of targets) {
-    entries.push({
-      id: randomUUID(),
-      url,
-      event,
-      payload,
-      attempts: 0,
-      nextAt: now,
-      status: "pending",
-      createdAt: now,
-    });
-  }
-  writeOutbox(root, entries);
-}
-
-export function startWebhookDispatcher(root: string, intervalMs = 5000): { stop: () => void } {
-  let stopped = false;
-  const timer = setInterval(() => {
-    if (stopped) return;
-    void processOutbox(root).catch(() => undefined);
-  }, intervalMs);
-  // best-effort immediate
-  void processOutbox(root).catch(() => undefined);
-  return {
-    stop() {
-      stopped = true;
-      clearInterval(timer);
+export async function deliver(d: WebhookDelivery, opts: DispatcherOptions = {}): Promise<void> {
+  const problem = await webhookUrlProblem(d.url, opts.blockPrivate ?? false);
+  if (problem) throw new Error(problem);
+  const body = JSON.stringify({ event: d.event, delivery: d.id, ...d.payload });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const sig = signature(body, timestamp);
+  const res = await (opts.fetch ?? fetch)(d.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Walkcast-Webhook/1",
+      "X-Walkcast-Event": d.event,
+      "X-Walkcast-Delivery": d.id,
+      "X-Walkcast-Timestamp": timestamp,
+      ...(sig ? { "X-Walkcast-Signature": sig } : {}),
     },
-  };
+    body,
+    // A redirect could point the server at an internal address after the check above.
+    redirect: "manual",
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
+  });
+  await res.arrayBuffer().catch(() => undefined);
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
 }
 
-export async function processOutbox(root: string): Promise<void> {
-  const entries = readOutbox(root);
-  const now = Date.now();
-  let changed = false;
-  for (const e of entries) {
-    if (e.status !== "pending") continue;
-    if (new Date(e.nextAt).getTime() > now) continue;
-    e.attempts += 1;
+/** Lease and send one batch of due deliveries. Returns how many were attempted. */
+export async function processOutbox(store: Store, workerId: string, opts: DispatcherOptions = {}): Promise<number> {
+  const batch = await store.claimDeliveries(workerId, 60_000, 20);
+  for (const d of batch) {
     try {
-      const res = await fetch(e.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: e.event, ...((e.payload && typeof e.payload === "object") ? e.payload : { payload: e.payload }) }),
-      });
-      if (res.ok) {
-        e.status = "done";
-        changed = true;
-        continue;
-      }
-      throw new Error(`HTTP ${res.status}`);
-    } catch (err) {
-      e.lastError = err instanceof Error ? err.message : String(err);
-      if (e.attempts >= 5) {
-        e.status = "failed";
-      } else {
-        const backoff = Math.min(60_000, 1000 * 2 ** (e.attempts - 1));
-        e.nextAt = new Date(Date.now() + backoff).toISOString();
-      }
-      changed = true;
+      await deliver(d, opts);
+      await store.completeDelivery(d.id, workerId, { ok: true });
+      log.info("webhook.delivered", { delivery: d.id, type: d.event, attempts: d.attempts });
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      const retryAt = d.attempts >= MAX_ATTEMPTS ? null : new Date(Date.now() + backoffMs(d.attempts));
+      await store.completeDelivery(d.id, workerId, { ok: false, error, retryAt }).catch(() => undefined);
+      log.warn("webhook.failed", { delivery: d.id, type: d.event, attempts: d.attempts, error, final: retryAt === null });
     }
   }
-  if (changed) writeOutbox(root, entries);
+  return batch.length;
+}
+
+export function startWebhookDispatcher(store: Store, opts: DispatcherOptions = {}): { stop: () => void } {
+  const id = `${hostname()}-${process.pid}-wh-${randomUUID().slice(0, 8)}`;
+  const intervalMs = opts.intervalMs ?? Number(process.env.LAB_WEBHOOK_INTERVAL_MS ?? 5000);
+  let stopped = false;
+  let running = false;
+  const tick = async () => {
+    if (stopped || running) return;
+    running = true;
+    try {
+      // Drain while there is work, then wait for the next tick.
+      while (!stopped && (await processOutbox(store, id, opts)) > 0);
+    } catch (e) {
+      log.warn("webhook.tick_failed", { error: String(e) });
+    } finally {
+      running = false;
+    }
+  };
+  const timer = setInterval(() => { void tick(); }, intervalMs);
+  timer.unref?.();
+  void tick();
+  return { stop() { stopped = true; clearInterval(timer); } };
+}
+
+/** One-time import of the pre-store `.lab/webhooks.json` into the store, owned by `owner`. */
+export async function importLegacyWebhooks(root: string, store: Store, owner: string | null = null): Promise<number> {
+  const p = join(root, ".lab", "webhooks.json");
+  if (!existsSync(p)) return 0;
+  let urls: string[] = [];
+  try {
+    const v = JSON.parse(readFileSync(p, "utf8")) as unknown;
+    const arr = Array.isArray(v) ? v : ((v as { webhooks?: unknown[]; urls?: unknown[] })?.webhooks ?? (v as { urls?: unknown[] })?.urls ?? []);
+    urls = (arr as unknown[]).filter((x): x is string => typeof x === "string");
+  } catch { /* unreadable */ }
+  for (const u of urls) await store.addWebhook(owner, u);
+  try { renameSync(p, `${p}.imported`); } catch { /* best effort */ }
+  return urls.length;
 }

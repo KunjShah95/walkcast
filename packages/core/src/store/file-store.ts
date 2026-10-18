@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Store, type StoreMetrics, type User } from "./types.ts";
+import { jobCompletedPayload } from "./payload.ts";
+import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
 
 interface Data {
   users: User[];
@@ -9,6 +10,9 @@ interface Data {
   limits: Record<string, { start: number; count: number }>;
   jobs: (Job & { idempotencyKey: string | null; lockedBy: string | null; leaseUntil: number | null })[];
   recordings: RecordingRow[];
+  schedules: Schedule[];
+  webhooks: Webhook[];
+  deliveries: (WebhookDelivery & { lockedBy: string | null; leaseUntil: number | null; finishedAt: string | null })[];
 }
 
 /**
@@ -65,7 +69,7 @@ export class FileStore implements Store {
         loaded = {};
       }
     }
-    this.data = { users: [], sessions: [], limits: {}, jobs: [], recordings: [], ...loaded };
+    this.data = { users: [], sessions: [], limits: {}, jobs: [], recordings: [], schedules: [], webhooks: [], deliveries: [], ...loaded };
     // Jobs that were running when the process stopped go back to the queue.
     for (const j of this.data.jobs) if (j.status === "running") Object.assign(j, { status: "queued", lockedBy: null, leaseUntil: null });
   }
@@ -260,6 +264,14 @@ export class FileStore implements Store {
       if (outcome.status === "succeeded") Object.assign(job, { status: "succeeded", result: outcome.result, secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
       else if (outcome.retry && job.attempts < job.maxAttempts) Object.assign(job, { status: "queued", error: outcome.error, lockedBy: null, leaseUntil: null });
       else Object.assign(job, { status: "failed", error: outcome.error, secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
+      // Outbox rows in the same serialized mutation as the transition (PgStore: same transaction).
+      if (job.status !== "succeeded" && job.status !== "failed") return;
+      const payload = jobCompletedPayload(strip(job));
+      const now = new Date().toISOString();
+      for (const w of this.data.webhooks) {
+        if (w.owner !== job.owner) continue;
+        this.data.deliveries.push({ id: randomUUID(), webhookId: w.id, owner: w.owner, url: w.url, event: "job.completed", payload, status: "pending", attempts: 0, nextAt: now, lastError: null, createdAt: now, lockedBy: null, leaseUntil: null, finishedAt: null });
+      }
     });
   }
   release(jobId: string, workerId: string) {
@@ -344,6 +356,111 @@ export class FileStore implements Store {
     return this.data.recordings.find((r) => r.id === id) ?? null;
   }
 
+  async schedules(owner: string | null) {
+    return this.data.schedules.filter((x) => x.owner === owner).map((x) => ({ ...x }));
+  }
+  addSchedule(schedule: Schedule) {
+    return this.write(() => { this.data.schedules.push({ ...schedule }); });
+  }
+  removeSchedule(id: string, owner: string | null) {
+    return this.write(() => {
+      const before = this.data.schedules.length;
+      this.data.schedules = this.data.schedules.filter((x) => !(x.id === id && x.owner === owner));
+      return this.data.schedules.length < before;
+    });
+  }
+  claimDueSchedules(limit: number) {
+    return this.write(() => {
+      const now = Date.now();
+      const due = this.data.schedules
+        .filter((x) => x.authorized && (!x.lastRunAt || now - Date.parse(x.lastRunAt) >= x.intervalMs))
+        .sort((a, b) => (a.lastRunAt ?? "").localeCompare(b.lastRunAt ?? ""))
+        .slice(0, limit);
+      const stamp = new Date(now).toISOString();
+      for (const x of due) x.lastRunAt = stamp;
+      return due.map((x) => ({ ...x }));
+    });
+  }
+
+  async webhooks(owner: string | null) {
+    return this.data.webhooks.filter((w) => w.owner === owner).map((w) => ({ ...w }));
+  }
+  addWebhook(owner: string | null, url: string) {
+    return this.write(() => {
+      const existing = this.data.webhooks.find((w) => w.owner === owner && w.url === url);
+      if (existing) return { ...existing };
+      const row: Webhook = { id: randomUUID(), owner, url, createdAt: new Date().toISOString() };
+      this.data.webhooks.push(row);
+      return { ...row };
+    });
+  }
+  removeWebhook(owner: string | null, idOrUrl: string) {
+    return this.write(() => {
+      const gone = new Set(this.data.webhooks.filter((w) => w.owner === owner && (w.id === idOrUrl || w.url === idOrUrl)).map((w) => w.id));
+      if (!gone.size) return false;
+      this.data.webhooks = this.data.webhooks.filter((w) => !gone.has(w.id));
+      // Matches the Postgres cascade: pending deliveries for a removed webhook go with it.
+      this.data.deliveries = this.data.deliveries.filter((d) => !d.webhookId || !gone.has(d.webhookId));
+      return true;
+    });
+  }
+  claimDeliveries(workerId: string, leaseMs: number, limit: number) {
+    return this.write(() => {
+      const now = Date.now();
+      if (Math.random() < 0.02) {
+        const cutoff = now - 30 * 86_400_000;
+        this.data.deliveries = this.data.deliveries.filter((d) => d.status === "pending" || !d.finishedAt || Date.parse(d.finishedAt) > cutoff);
+      }
+      const due = this.data.deliveries
+        .filter((d) => d.status === "pending" && Date.parse(d.nextAt) <= now && (d.leaseUntil ?? 0) < now)
+        .sort((a, b) => a.nextAt.localeCompare(b.nextAt))
+        .slice(0, limit);
+      for (const d of due) Object.assign(d, { lockedBy: workerId, leaseUntil: now + leaseMs, attempts: d.attempts + 1 });
+      return due.map(stripDelivery);
+    });
+  }
+  completeDelivery(id: string, workerId: string, outcome: Parameters<Store["completeDelivery"]>[2]) {
+    return this.write(() => {
+      const d = this.data.deliveries.find((x) => x.id === id && x.lockedBy === workerId);
+      if (!d) return;
+      const now = new Date().toISOString();
+      if (outcome.ok) Object.assign(d, { status: "done", finishedAt: now, lockedBy: null, leaseUntil: null, lastError: null });
+      else if (outcome.retryAt) Object.assign(d, { status: "pending", nextAt: outcome.retryAt.toISOString(), lastError: outcome.error, lockedBy: null, leaseUntil: null });
+      else Object.assign(d, { status: "failed", finishedAt: now, lastError: outcome.error, lockedBy: null, leaseUntil: null });
+    });
+  }
+  async deliveries(owner: string | null, limit: number) {
+    return this.data.deliveries
+      .filter((d) => d.owner === owner)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map(stripDelivery);
+  }
+
+  async migrationStatus() {
+    return null;
+  }
+  async leases() {
+    return this.data.jobs
+      .filter((j) => j.status === "running")
+      .map((j) => ({ jobId: j.id, kind: j.kind, workerId: j.lockedBy ?? "", leaseUntil: j.leaseUntil ? new Date(j.leaseUntil).toISOString() : "", attempts: j.attempts }));
+  }
+  async agentUsage(windowMs: number) {
+    const cutoff = Date.now() - windowMs;
+    const by = new Map<string, { agent: string; total: number; succeeded: number; failed: number; active: number }>();
+    for (const j of this.data.jobs) {
+      const agent = j.input?.agent;
+      if (j.kind !== "run" || typeof agent !== "string" || Date.parse(j.createdAt) <= cutoff) continue;
+      const row = by.get(agent) ?? { agent, total: 0, succeeded: 0, failed: 0, active: 0 };
+      row.total++;
+      if (j.status === "succeeded") row.succeeded++;
+      else if (j.status === "failed") row.failed++;
+      else if (j.status === "queued" || j.status === "running") row.active++;
+      by.set(agent, row);
+    }
+    return [...by.values()].sort((a, b) => b.total - a.total);
+  }
+
   async ping() {}
   async close() {
     if (this.closed) return;
@@ -363,6 +480,11 @@ export class FileStore implements Store {
 function strip(j: Data["jobs"][number]): Job {
   const { idempotencyKey: _k, lockedBy: _l, leaseUntil: _u, ...job } = j;
   return { ...job };
+}
+
+function stripDelivery(d: Data["deliveries"][number]): WebhookDelivery {
+  const { lockedBy: _l, leaseUntil: _u, finishedAt: _f, ...rest } = d;
+  return { ...rest };
 }
 
 function newJobRow(job: NewJob): Data["jobs"][number] {

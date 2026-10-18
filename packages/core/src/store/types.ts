@@ -90,6 +90,45 @@ export interface QueuePosition {
   oldestQueuedMs: number;
 }
 
+/** A recurring recording (change detection). Lives in the store so every instance sees one list. */
+export interface Schedule {
+  id: string;
+  owner: string | null;
+  url: string;
+  /** The interval as the user wrote it ("60m", "@daily", "*\/15 * * * *"). */
+  interval: string;
+  intervalMs: number;
+  authorized: boolean;
+  createdAt: string;
+  lastRunAt: string | null;
+}
+
+/** An owner's endpoint for job events. Events are delivered only to the job owner's webhooks. */
+export interface Webhook {
+  id: string;
+  owner: string | null;
+  url: string;
+  createdAt: string;
+}
+
+/**
+ * One event for one webhook: the transactional outbox row. Written in the same atomic step as the
+ * job transition that caused it (`finish`), delivered at-least-once by any instance's dispatcher.
+ */
+export interface WebhookDelivery {
+  id: string;
+  webhookId: string | null;
+  owner: string | null;
+  url: string;
+  event: string;
+  payload: Record<string, unknown>;
+  status: "pending" | "done" | "failed";
+  attempts: number;
+  nextAt: string;
+  lastError: string | null;
+  createdAt: string;
+}
+
 export interface Store {
   readonly kind: "file" | "postgres";
 
@@ -138,6 +177,11 @@ export interface Store {
    * poll sees movement instead of a stale label.
    */
   setProgress(jobId: string, workerId: string, progress: string): Promise<void>;
+  /**
+   * Fenced terminal (or retry) transition. When the job reaches a terminal state, a
+   * `job.completed` delivery is written for each of the owner's webhooks in the same atomic step
+   * (transactional outbox), so an event is never lost and never sent for a job that didn't finish.
+   */
   finish(jobId: string, workerId: string, outcome: { status: "succeeded"; result: Record<string, unknown> } | { status: "failed"; error: string; retry: boolean }): Promise<void>;
   /** Hand a job back to the queue (graceful shutdown) without counting an attempt. */
   release(jobId: string, workerId: string): Promise<void>;
@@ -163,6 +207,36 @@ export interface Store {
   saveRecording(row: RecordingRow): Promise<void>;
   recordings(owner: string | null, limit: number): Promise<RecordingRow[]>;
   recording(id: string): Promise<RecordingRow | null>;
+
+  // schedules
+  schedules(owner: string | null): Promise<Schedule[]>;
+  addSchedule(schedule: Schedule): Promise<void>;
+  /** False when no schedule with that id belongs to `owner`. */
+  removeSchedule(id: string, owner: string | null): Promise<boolean>;
+  /**
+   * Mark up to `limit` due schedules as run now and return them, atomically: with several
+   * instances running the scheduler, each due schedule is handed to exactly one of them.
+   */
+  claimDueSchedules(limit: number): Promise<Schedule[]>;
+
+  // webhooks + outbox
+  webhooks(owner: string | null): Promise<Webhook[]>;
+  /** Idempotent per (owner, url): returns the existing row on a repeat. */
+  addWebhook(owner: string | null, url: string): Promise<Webhook>;
+  /** Remove by id or url. False when nothing of `owner`'s matched. */
+  removeWebhook(owner: string | null, idOrUrl: string): Promise<boolean>;
+  /** Lease up to `limit` due deliveries to `workerId` (SKIP LOCKED); attempts are counted here. */
+  claimDeliveries(workerId: string, leaseMs: number, limit: number): Promise<WebhookDelivery[]>;
+  /** Fenced: `retryAt` null means give up (status failed); a date re-queues for that time. */
+  completeDelivery(id: string, workerId: string, outcome: { ok: true } | { ok: false; error: string; retryAt: Date | null }): Promise<void>;
+  deliveries(owner: string | null, limit: number): Promise<WebhookDelivery[]>;
+
+  /** Applied and pending schema migrations (Postgres only; the file store has no schema). */
+  migrationStatus(): Promise<{ applied: string[]; pending: string[] } | null>;
+  /** Jobs currently held by a worker, for `doctor` and ops. */
+  leases(): Promise<{ jobId: string; kind: JobKind; workerId: string; leaseUntil: string; attempts: number }[]>;
+  /** Jobs per agent id over a window (lab runs only), for `/api/agents/usage`. */
+  agentUsage(windowMs: number): Promise<{ agent: string; total: number; succeeded: number; failed: number; active: number }[]>;
 
   /** Cheap round trip for readiness checks. */
   ping(): Promise<void>;
