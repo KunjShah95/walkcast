@@ -43,13 +43,13 @@ export function Settings({ me }: { me: Me | null }) {
             A small native window for the signed-in app only. It uses your system's built-in webview, so there is no bundled browser and the installer stays a couple of megabytes.
           </p>
           <div className="flex flex-wrap gap-2">
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Windows (.exe / MSI)
             </a>
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               macOS (.dmg / app)
             </a>
-            <a href="https://github.com/KunjShah95/browser-user/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
+            <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Linux (.AppImage / .deb)
             </a>
           </div>

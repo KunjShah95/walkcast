@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Walkcast: one-box bootstrap for a cheap VPS (Hetzner CX11 / Lightsail / DigitalOcean).
 # Run as root on a fresh Ubuntu 22.04+ instance:
-#   curl -fsSL https://raw.githubusercontent.com/KunjShah95/browser-user/main/scripts/bootstrap-vps.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/KunjShah95/walkcast/main/scripts/bootstrap-vps.sh | bash
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-}"
@@ -18,7 +18,7 @@ apt-get install -y git curl ca-certificates openssl docker.io docker-compose-plu
 systemctl enable --now docker
 
 if [ ! -d /opt/walkcast ]; then
-  git clone https://github.com/KunjShah95/browser-user.git /opt/walkcast
+  git clone https://github.com/KunjShah95/walkcast.git /opt/walkcast
 fi
 cd /opt/walkcast
 

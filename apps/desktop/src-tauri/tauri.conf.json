@@ -41,7 +41,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFQjM1Q0ZDRUJCQTZDMDcKUldRSGJMcnIvRnl6bmpYbXJrcjJpUUVSdFloL01GcHZqNEJQYy9UY3RlYy9LU3c3bTB6WDhjaEsK",
       "endpoints": [
-        "https://github.com/KunjShah95/browser-user/releases/latest/download/latest.json"
+        "https://github.com/KunjShah95/walkcast/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

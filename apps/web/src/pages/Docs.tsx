@@ -315,7 +315,7 @@ export function PrivacyPage() {
 
       <h2>Source</h2>
       <p>
-        Every claim here can be checked: Walkcast is open source under the MIT license at <a href={REPO_URL}>github.com/KunjShah95/browser-user</a>.
+        Every claim here can be checked: Walkcast is open source under the MIT license at <a href={REPO_URL}>github.com/KunjShah95/walkcast</a>.
       </p>
     </Doc>
   );

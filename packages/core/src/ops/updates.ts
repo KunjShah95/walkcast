@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
  * checkout). The desktop app installs updates itself through the Tauri updater; this answers the
  * same question from GitHub's latest release so the dashboard can show it everywhere.
  */
-export const RELEASES_API = "https://api.github.com/repos/KunjShah95/browser-user/releases/latest";
+export const RELEASES_API = "https://api.github.com/repos/KunjShah95/walkcast/releases/latest";
 
 export interface UpdateCheck {
   current: string;
