@@ -371,7 +371,7 @@ export function safeNext(next: string | null | undefined): string {
   const fallback = "/app#record";
   // Browsers strip tabs/newlines and treat "\\" as "/" in URLs, so any of them could turn a
   // path into "//evil.example". Reject them outright, then require a same-origin result.
-  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback;
+  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback; // eslint-disable-line no-control-regex -- refusing control characters is the point
   try {
     const base = "http://same.invalid";
     const url = new URL(next, base);

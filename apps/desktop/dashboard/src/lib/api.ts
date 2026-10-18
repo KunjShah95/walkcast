@@ -47,6 +47,8 @@ export type Voice = "slt" | "awb" | "kal" | "rms";
 
 export interface Capabilities {
   live: boolean;
+  /** Sample-site recordings allowed (always on desktop; LAB_DEMO_SITE=1 on a shared server). */
+  demoSite?: boolean;
   running?: string | null;
   queue?: number | null;
   stagehand?: boolean;
@@ -123,7 +125,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);

@@ -25,6 +25,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [voice, setVoice] = useState(prefs.voice);
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
   const [authorized, setAuthorized] = useState(false);
+  const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [needsAccount, setNeedsAccount] = useState(false);
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -41,7 +42,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     if (initialUrl) setUrl(initialUrl);
   }, [initialUrl]);
 
-  const target = normalizeUrl(url);
+  const target = demo ? "sample:minicrm" : normalizeUrl(url);
   const limitHit = caps?.limits && caps.usage ? caps.usage.recordingsToday >= caps.limits.recordingsPerDay : false;
   const blocked = isSnapshot ? "This is a snapshot: it plays recordings but can't make new ones." : (caps?.jobsUnavailable ?? (limitHit ? "You've reached today's recording limit. It resets 24 hours after your oldest recording today." : null));
   const ready = Boolean(target) && authorized && !blocked && !busy;
@@ -53,7 +54,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording({ url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider }, (s) => setJob(s));
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -87,12 +88,34 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 inputMode="url"
                 spellCheck={false}
                 placeholder="app.example.com/login"
-                value={url}
+                value={demo ? "Sample CRM (started by the recorder)" : url}
                 onChange={(e) => setUrl(e.target.value)}
-                disabled={busy || isSnapshot}
+                disabled={busy || isSnapshot || demo}
                 className={cn(fieldClass, "h-12 font-mono text-[15px]")}
               />
               {url && !target && <p className="text-[12.5px] text-fail">That doesn't look like a web address.</p>}
+              {!url && !demo && !isSnapshot && caps?.demoSite !== false && (
+                <button
+                  type="button"
+                  className="justify-self-start text-[12.5px] text-ink-2 underline underline-offset-2 hover:text-ink"
+                  disabled={busy}
+                  onClick={() => {
+                    setDemo(true);
+                    setAuthorized(true);
+                    setSignIn(false);
+                  }}
+                >
+                  First time? Try it on a sample site
+                </button>
+              )}
+              {demo && (
+                <p className="text-[12.5px] text-ink-2">
+                  Recording a small sample CRM that the recorder starts for this job, sign-in included.{" "}
+                  <button type="button" className="underline underline-offset-2" disabled={busy} onClick={() => setDemo(false)}>
+                    Use my own site
+                  </button>
+                </p>
+              )}
             </div>
 
             <div className="grid gap-3 rounded-xl border border-line p-4">

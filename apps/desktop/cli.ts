@@ -4,7 +4,7 @@ import { diagnose } from "../../packages/core/src/lab/classifier.ts";
 import { writeRunReport } from "../../packages/core/src/lab/report.ts";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { FAULTS, TASK_FAULTS, TASK_IDS, allScenarios, isTaskId, normalizeScenario } from "../../packages/core/src/app/faults.ts";
+import { FAULTS, TASK_FAULTS, TASK_IDS, allScenarios, isTaskId, normalizeScenario, pluginFaults } from "../../packages/core/src/app/faults.ts";
 import { startApp } from "../../packages/core/src/app/server.ts";
 import { allAgents } from "../../packages/core/src/agents/registry.ts";
 import type { GatewayMode } from "../../packages/core/src/llm/gateway.ts";
@@ -12,6 +12,7 @@ import { backendFor, defaultSelection, type ModelSelection } from "../../package
 import { PROVIDERS, apiKey, baseURL } from "../../packages/core/src/llm/providers.ts";
 import { causes, symptoms } from "../../packages/core/src/lab/classifier.ts";
 import { runExperiment } from "../../packages/core/src/lab/experiment.ts";
+import { loadPlugins } from "../../packages/core/src/plugins.ts";
 import { loadFixture, replayFixture, writeFixture } from "../../packages/core/src/lab/fixture.ts";
 import { closeBrowser, runOnce } from "../../packages/core/src/lab/runner.ts";
 import { exportDashboard, serveDashboard } from "./server/server.ts";
@@ -141,10 +142,12 @@ async function main(): Promise<number> {
     console.log(HELP);
     return 0;
   }
+  await loadPlugins(process.cwd());
   switch (command) {
     case "list": {
       console.log("Faults (combine with +, e.g. --fault stale-owners+session-expiry):");
       for (const [id, f] of Object.entries(FAULTS)) console.log(`  ${id.padEnd(18)} ${f.description}`);
+      for (const f of pluginFaults()) console.log(`  ${f.id.padEnd(18)} [plugin] ${f.description}`);
       console.log("\nTasks (--task):");
       for (const id of TASK_IDS) console.log(`  ${id.padEnd(14)} ${taskById(id).goal}  [faults: ${TASK_FAULTS[id].join(", ")}; ${allScenarios("pairs", id).length} scenarios]`);
       console.log(`\nBenchmark grid: ${TASK_IDS.reduce((n, id) => n + allScenarios("pairs", id).length, 0)} scenarios across ${TASK_IDS.length} tasks (control, single faults, every pair).`);
@@ -245,7 +248,6 @@ async function main(): Promise<number> {
       const playwrightCache = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "ms-playwright") : undefined;
       console.log(`  Playwright cache: ${playwrightCache && existsSync(playwrightCache) ? "present" : "missing — run npx playwright install chromium"}`);
       const ffmpegBin = process.env.LAB_FFMPEG || "ffmpeg";
-      const ffprobe = process.env.LAB_FFPROBE || "ffprobe";
       const filterProbe = spawnSync(ffmpegBin, ["-hide_banner","-filters"], { encoding: "utf8" });
       const { canEncode, hasFlite, canNarrate } = await import("../../packages/core/src/record/media.ts");
       const { sapiAvailable } = await import("../../packages/core/src/record/voice.ts");
@@ -253,13 +255,34 @@ async function main(): Promise<number> {
       console.log(`  voice: ${hasFlite() ? "flite" : sapiAvailable() ? "Windows speech" : "none"}; narration ${canNarrate() ? "OK" : "MISSING (captions only)"}`);
       const gitInfo = spawnSync("git", ["status","--porcelain"], { cwd: process.cwd(), encoding: "utf8" });
       const dirty = gitInfo.status === 0 ? gitInfo.stdout.split(/\r?\n/).filter(Boolean).length : 0;
-      const _store = (await import("../../packages/core/src/store/index.ts")).createStore(process.cwd());
-      console.log(`  store: ${_store.kind} (${_store.kind === "file" ? "single-process" : "shared"})`);
-
-      console.log(`  worker leases: tracked by the store (queueDepth=${await _store.queueDepth().catch(() => "?")})`);
-      await _store.close().catch(() => undefined);
+      let storeOk = true;
+      let _store: Awaited<ReturnType<typeof import("../../packages/core/src/store/index.ts")["createStore"]>> | null = null;
+      try {
+        _store = (await import("../../packages/core/src/store/index.ts")).createStore(process.cwd());
+        await _store.ping();
+        console.log(`  store: ${_store.kind} (${_store.kind === "file" ? "single-process" : "shared"}) — reachable`);
+        const mig = await _store.migrationStatus();
+        if (mig) {
+          if (mig.pending.length) storeOk = false;
+          console.log(`  migrations: ${mig.applied.length} applied, ${mig.pending.length} pending${mig.pending.length ? ` — run \`walkcast db migrate\` (${mig.pending.join(", ")})` : ""}`);
+        } else console.log("  migrations: n/a (file store)");
+        if (mig?.pending.length) throw new Error("schema not up to date; queue checks skipped");
+        const q = await _store.queueStats();
+        console.log(`  queue: depth=${q.depth}, oldest queued ${Math.round(q.oldestQueuedMs / 1000)} s`);
+        const leases = await _store.leases();
+        console.log(`  worker leases: ${leases.length} running job(s)`);
+        for (const l of leases) {
+          const left = Date.parse(l.leaseUntil) - Date.now();
+          console.log(`    ${l.jobId} ${l.kind.padEnd(6)} worker=${l.workerId} attempt=${l.attempts} ${left >= 0 ? `lease ${Math.round(left / 1000)} s left` : `LEASE EXPIRED ${Math.round(-left / 1000)} s ago (reclaimed on next claim)`}`);
+        }
+      } catch (e) {
+        storeOk = false;
+        console.log(`  store: FAIL (${e instanceof Error ? e.message : String(e)})`);
+      } finally {
+        await _store?.close().catch(() => undefined);
+      }
       console.log(`  repo dirty files: ${dirty} (WIP is expected; not an error)`);
-      if (major < 22) return 1;
+      if (major < 22 || !storeOk) return 1;
       return 0;
     }
     case "providers": {

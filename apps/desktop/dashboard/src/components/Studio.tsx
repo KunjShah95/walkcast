@@ -437,7 +437,7 @@ function VoiceRecorder({
       stopAll();
       if (take) URL.revokeObjectURL(take.url);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Unmount-only cleanup: runs once, on purpose.
     [],
   );
 

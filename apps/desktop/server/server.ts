@@ -1,11 +1,11 @@
 import { randomUUID, createHash } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
+import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
-import { allAgents } from "../../../packages/core/src/agents/registry.ts";
+import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
 import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker } from "../../../packages/core/src/jobs/worker.ts";
 import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
@@ -20,8 +20,12 @@ import { openExternal } from "./open-external.ts";
 import { authPage, continueInBrowserPage, messagePage, notFoundPage } from "./pages.ts";
 import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
-import { loadWebhooks, addWebhook, removeWebhook, startWebhookDispatcher } from "../../../packages/core/src/webhooks.ts";
-import { loadSchedules, addSchedule, removeSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
+import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from "../../../packages/core/src/webhooks.ts";
+import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
+import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
+import { loadPlugins } from "../../../packages/core/src/plugins.ts";
+import { alarmState, queueAlarmMs, startQueueMonitor } from "../../../packages/core/src/ops/queue-monitor.ts";
+import { importLegacySchedules, newSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dashboard", "dist", "index.html");
 const TYPES: Record<string, string> = {
@@ -163,6 +167,7 @@ function saveCredential(root: string, env: string, value: string): void {
 
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
   const o = typeof options === "string" ? { root: options } : options;
+  await loadPlugins(o.root ?? process.cwd());
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const app = createApp({ ...o, host, siteUrl: o.siteUrl ?? process.env.LAB_SITE_URL ?? `http://127.0.0.1:${port}` });
   const { store, media, worker } = app;
@@ -219,8 +224,14 @@ export function createApp(o: ServeOptions = {}): App {
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
   const worker = (o.worker ?? process.env.LAB_WORKER !== "off") ? new Worker({ store, media, root }).start() : null;
-    const webhookDispatcher = startWebhookDispatcher(root);
-  const scheduler = startScheduler(root, store);
+  // Both run on every instance: the store hands each due schedule and each delivery to exactly
+  // one of them. Private targets are refused whenever the server is reachable from elsewhere.
+  const blockPrivate = exposed && process.env.LAB_ALLOW_PRIVATE !== "1";
+  void Promise.all([importLegacySchedules(root, store), importLegacyWebhooks(root, store)]).catch((e: unknown) => log.warn("legacy.import_failed", { error: String(e) }));
+  const webhookDispatcher = startWebhookDispatcher(store, { blockPrivate });
+  const scheduler = startScheduler(store, { blockPrivate, onEnqueued: () => worker?.poke() });
+  const queueMonitor = startQueueMonitor(store);
+
   let draining = false;
 
   const handler = (req: IncomingMessage, res: ServerResponse) => {
@@ -279,7 +290,12 @@ export function createApp(o: ServeOptions = {}): App {
 
     // ---------------------------------------------------------------- health
     // Liveness: the process answers. Readiness: it can reach its database and isn't shutting down.
-    if (url.pathname === "/healthz") return json(200, { ok: true });
+    if (url.pathname === "/healthz") {
+      // Public liveness, readable cross-origin so the mobile companion can check an address
+      // before opening it. Carries nothing but { ok: true }.
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return json(200, { ok: true });
+    }
     if (url.pathname === "/readyz") {
       if (draining) return json(503, { ok: false, reason: "shutting down" });
       try {
@@ -487,7 +503,9 @@ export function createApp(o: ServeOptions = {}): App {
         stagehand: Boolean(process.env.LAB_CHROME_PATH && existsSync(process.env.LAB_CHROME_PATH)),
         liveModels: allowLiveRuns,
         providers: configuredProviders().map((p) => p.id),
-        agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description })),
+        sttProviders: configuredSttProviders(),
+        demoSite: demoSiteEnabled(exposed),
+        agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description, exposure: agentExposure(a), dailyLimit: agentDailyLimit(a) })),
         scenarios: allScenarios("pairs"),
         limits: LIMITS,
         usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
@@ -644,7 +662,7 @@ try {
         else return json(400, { error: "No audio available for this recording." });
       }
       try {
-        const captions = await generateCaptionsFromAudio(join(dir, audioFile), language);
+        const captions = await generateCaptionsFromAudio(join(dir, audioFile), language, typeof (b as any)?.provider === "string" ? (b as any).provider : null);
         summary.captions = captions;
         const { toWebVtt } = await import("../../../packages/core/src/record/narration.ts");
         writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions as any));
@@ -678,6 +696,15 @@ try {
       const perDay = kind === "record" ? LIMITS.recordingsPerDay : LIMITS.runsPerDay;
       if ((await store.hit(`quota:${kind}:${owner ?? "local"}`, 86_400_000)) > perDay) {
         throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
+      }
+      if (kind === "run") {
+        // Model-backed agents spend provider tokens on a live run: they get their own ceiling.
+        const spec = resolveAgent(String(input.agent));
+        const perAgent = agentDailyLimit(spec);
+        const free = input.modelMode === "replay" || input.modelMode === "scripted";
+        if (perAgent !== null && !free && (await store.hit(`quota:agent:${spec.id}:${owner ?? "local"}`, 86_400_000)) > perAgent) {
+          throw new AuthError(429, `Daily limit reached for agent ${spec.id} (${perAgent} runs). Try again tomorrow, or replay a fixture instead (no model cost).`);
+        }
       }
       let secret: string | null = null;
       if (kind === "record" && typeof b.password === "string" && b.password) {
@@ -721,6 +748,25 @@ try {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
       return void res.end(body);
     }
+    if (url.pathname === "/api/agents/usage" && req.method === "GET") {
+      let windowMs = 86_400_000;
+      const q = url.searchParams.get("windowMs");
+      if (q) {
+        const n = Number(q);
+        if (!Number.isFinite(n) || n <= 0 || n > 31 * 86_400_000) return json(400, { error: "windowMs must be 1ms..31 days" });
+        windowMs = n;
+      }
+      // Aggregate counts per agent id across every account: no inputs, owners or results.
+      const usage = await store.agentUsage(windowMs);
+      const known = new Map(allAgents().map((a) => [a.id, a]));
+      return json(200, {
+        windowMs,
+        agents: usage.map((u) => {
+          const spec = known.get(u.agent);
+          return { ...u, kind: spec?.kind ?? "unknown", exposure: spec ? agentExposure(spec) : "unknown", dailyLimit: spec ? agentDailyLimit(spec) : null };
+        }),
+      });
+    }
     if (url.pathname === "/api/metrics") {
       let windowMs = 86_400_000;
       const q = url.searchParams.get("windowMs");
@@ -730,50 +776,65 @@ try {
         windowMs = n;
       }
       const snap = await store.metrics(windowMs);
+      const alarmMs = queueAlarmMs();
       // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
-      return json(200, snap);
+      return json(200, { ...snap, alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs } });
     }
+    // ---------------------------------------------------------------- webhooks (owner-scoped)
     if (url.pathname === "/api/webhooks" && req.method === "GET") {
-      return json(200, { webhooks: loadWebhooks(root) });
+      const items = await store.webhooks(owner);
+      return json(200, { webhooks: items.map((w) => w.url), items });
     }
     if (url.pathname === "/api/webhooks" && req.method === "POST") {
       const b = await readJson(req);
       const u = String((b as any)?.url ?? "").trim();
-      try { new URL(u); } catch { return json(400, { error: "invalid url" }); }
       if (!u) return json(400, { error: "url required" });
-      return json(201, { webhooks: addWebhook(root, u) });
+      const problem = await webhookUrlProblem(u, blockPrivate);
+      if (problem) return json(400, { error: problem });
+      if ((await store.webhooks(owner)).length >= 10) return json(400, { error: "At most 10 webhooks per account." });
+      const webhook = await store.addWebhook(owner, u);
+      const items = await store.webhooks(owner);
+      return json(201, { webhook, webhooks: items.map((w) => w.url), items });
     }
-    if (url.pathname === "/api/webhooks" && req.method === "DELETE") {
-      const b = await readJson(req).catch(() => ({}));
-      const u = String((b as any)?.url ?? "").trim();
-      return json(200, { webhooks: removeWebhook(root, u) });
+    if (url.pathname === "/api/webhooks/deliveries" && req.method === "GET") {
+      return json(200, { deliveries: await store.deliveries(owner, clampInt(url.searchParams.get("limit"), 1, 200, 50)) });
     }
-    const webhookDeleteMatch = /^\/api\/webhooks\/(.+)$/.exec(url.pathname);
+    const webhookDeleteMatch = /^\/api\/webhooks(?:\/(.+))?$/.exec(url.pathname);
     if (webhookDeleteMatch && req.method === "DELETE") {
-      return json(200, { webhooks: removeWebhook(root, decodeURIComponent(webhookDeleteMatch[1]!)) });
+      const target = webhookDeleteMatch[1] ? decodeURIComponent(webhookDeleteMatch[1]) : String(((await readJson(req).catch(() => ({}))) as any)?.url ?? "").trim();
+      if (!target) return json(400, { error: "url or id required" });
+      const removed = await store.removeWebhook(owner, target);
+      const items = await store.webhooks(owner);
+      return json(removed ? 200 : 404, { webhooks: items.map((w) => w.url), items, ...(removed ? {} : { error: "webhook not found" }) });
     }
-    // ---------------------------------------------------------------- schedules
+    // ---------------------------------------------------------------- schedules (owner-scoped)
     if (url.pathname === "/api/schedules" && req.method === "GET") {
-      return json(200, { schedules: loadSchedules(root) });
+      return json(200, { schedules: await store.schedules(owner) });
     }
     if (url.pathname === "/api/schedules" && req.method === "POST") {
-      const b = await readJson(req).catch(() => ({}));
+      const b = (await readJson(req).catch(() => ({}))) as any;
+      let sched;
       try {
-        const sched = addSchedule(root, { url: (b as any)?.url, interval: (b as any)?.interval ?? (b as any)?.cron ?? (b as any)?.every, intervalMs: (b as any)?.intervalMs, authorized: (b as any)?.authorized === true });
-        return json(201, { schedule: sched, schedules: loadSchedules(root) });
+        sched = newSchedule(owner, { url: b?.url, interval: b?.interval ?? b?.cron ?? b?.every, intervalMs: b?.intervalMs, authorized: b?.authorized === true });
       } catch (e) {
         return json(400, { error: e instanceof Error ? e.message : String(e) });
       }
+      if (blockPrivate) {
+        const blocked = await blockedHost(new URL(sched.url).hostname);
+        if (blocked) return json(400, { error: blocked });
+      }
+      // Exposed servers: a schedule must not recur faster than every 15 minutes or exceed 20 per account.
+      if (exposed && sched.intervalMs < 15 * 60_000) return json(400, { error: "Schedules on a shared server run at most every 15 minutes." });
+      if ((await store.schedules(owner)).length >= 20) return json(400, { error: "At most 20 schedules per account." });
+      await store.addSchedule(sched);
+      return json(201, { schedule: sched, schedules: await store.schedules(owner) });
     }
-    if (url.pathname === "/api/schedules" && req.method === "DELETE") {
-      const b = await readJson(req).catch(() => ({}));
-      const id = String((b as any)?.id ?? url.searchParams.get("id") ?? "");
-      if (!id) return json(400, { error: "id required" });
-      return json(200, { schedules: removeSchedule(root, id) });
-    }
-    const scheduleDeleteMatch = /^\/api\/schedules\/(.+)$/.exec(url.pathname);
+    const scheduleDeleteMatch = /^\/api\/schedules(?:\/(.+))?$/.exec(url.pathname);
     if (scheduleDeleteMatch && req.method === "DELETE") {
-      return json(200, { schedules: removeSchedule(root, decodeURIComponent(scheduleDeleteMatch[1]!)) });
+      const id = scheduleDeleteMatch[1] ? decodeURIComponent(scheduleDeleteMatch[1]) : String(((await readJson(req).catch(() => ({}))) as any)?.id ?? url.searchParams.get("id") ?? "");
+      if (!id) return json(400, { error: "id required" });
+      const removed = await store.removeSchedule(id, owner);
+      return json(removed ? 200 : 404, { schedules: await store.schedules(owner), ...(removed ? {} : { error: "schedule not found" }) });
     }
     if (url.pathname === "/api/run") {
       const detail = data.run(url.searchParams.get("dir") ?? "");
@@ -795,12 +856,6 @@ try {
       const caps = summary.captions ?? [];
       const format = (url.searchParams.get("format") ?? "json").toLowerCase();
       if (format === "json") return json(200, { captions: caps });
-      const toTime = (s: number) => {
-        const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60;
-        const pad = (n: number, w = 2) => String(Math.floor(n)).padStart(w, "0");
-        return `${pad(h)}:${pad(m)}:${pad(sec, 2)}.${String(Math.round((sec - Math.floor(sec)) * 1000)).padStart(3, "0")}`.replace(/\.\d{3}$/, (x) => x);
-      };
-      // simpler robust time formatting
       const fmt = (s: number) => {
         const totalMs = Math.round(s * 1000);
         const h = Math.floor(totalMs / 3600000);
@@ -888,6 +943,7 @@ try {
       draining = true;
       webhookDispatcher.stop();
       scheduler.stop();
+      queueMonitor.stop();
     },
   };
 }
@@ -947,7 +1003,25 @@ function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean): Record
   return { agent, fault, task, seed, ...(modelMode ? { modelMode } : {}) };
 }
 
+/** Sample-site recordings: always on the desktop, opt-in (LAB_DEMO_SITE=1) on a shared server. */
+export function demoSiteEnabled(exposed: boolean): boolean {
+  return !exposed || process.env.LAB_DEMO_SITE === "1";
+}
+
 function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<string, unknown> {
+  const pagesIn = Number(b.maxPages);
+  if (b.demo === true) {
+    // The worker starts its own sample CRM and records that: no user-supplied URL, nothing the
+    // SSRF guard needs to judge, and it works when the worker is a separate machine.
+    if (!demoSiteEnabled(exposed)) throw new AuthError(403, "The sample site is turned off on this server.");
+    return {
+      demo: true,
+      url: "sample:minicrm",
+      maxPages: Number.isFinite(pagesIn) ? Math.max(1, Math.min(10, Math.trunc(pagesIn))) : 5,
+      ...(isVoice(b.voice) ? { voice: b.voice } : {}),
+      blockPrivate: false,
+    };
+  }
   if (b.authorized !== true) throw new AuthError(400, "Confirm that you own this site or are authorized to test it.");
   if (typeof b.url !== "string" || !b.url.trim()) throw new AuthError(400, "Paste the site's URL.");
   let url: URL;
@@ -970,7 +1044,7 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
   };
 }
 
-async function readBodyToTemp(req: IncomingMessage, limit: number, prefix: string): Promise<string> {
+async function readBodyToTemp(req: IncomingMessage, limit: number, _prefix: string): Promise<string> {
   const fs = await import("node:fs");
   const os = await import("node:os");
   const path = await import("node:path");

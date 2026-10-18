@@ -94,7 +94,7 @@ export function Simulator({ index, go, refresh }: { index: LabIndex; go: (r: Rou
       autoplay.current = false;
       player.restart(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-runs only when captions change, on purpose.
   }, [captions]);
   const done = player.t >= player.duration;
 
