@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     # Postgres for the store/queue tests (the same SQL Supabase runs).
     services:
@@ -55,7 +55,7 @@ jobs:
 
   # The production image builds and its health check answers.
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
@@ -71,7 +71,7 @@ jobs:
 
   # Release gate: every committed regression fixture must pass with the current agent.
   regression-fixtures:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
