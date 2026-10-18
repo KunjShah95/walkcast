@@ -29,9 +29,19 @@ live app, with the LLM gateway serving recorded responses instead of hitting pro
   remapping. It has no Walkcast imports; secret handling is injected (`redact` / `restore`
   hooks). `gateway.ts` now uses it, so the in-repo Stagehand replay tests exercise exactly the
   code to be ported. Unit tests: `test/cassette.test.ts`.
-- [ ] Step 2 — generalise `FixtureManifest` state snapshots beyond MiniCRM leads.
-- [ ] Step 3 — tests against Stagehand's example app (in their repo).
-- [ ] Step 4 — open the PR on `browserbase/stagehand` referencing #2841. Not opened: submitting
-  to an external repository is the maintainer's call, not something done from here.
+- [x] **Re-scoped after reading upstream (2026-10-18).** #3106 had already shipped the static
+  observation tier for #2841, and its README left *network response recording* as future work.
+  That, not LLM-call replay, is the piece the issue discussion asked for, so the upstream work
+  became a network tier modelled on Walkcast's HAR replay (record in the same session, misses
+  fail rather than reach the network).
+- [x] **PR 1 — [browserbase/stagehand#3230](https://github.com/browserbase/stagehand/pull/3230):**
+  `packages/evals/tasks/network.ts` (CDP Fetch record/replay, body-hash keys, cache-buster
+  normalisation, SW/cache bypass) and `task:record --network`, with real-Chromium tests.
+- [x] **PR 2 — [browserbase/stagehand#3231](https://github.com/browserbase/stagehand/pull/3231)**
+  (stacked on #3230): a real `stagehand.act()` replayed offline from a network task with a
+  deterministic model, plus a diverging run that surfaces as a miss.
+- [ ] Maintainer review. External PRs are mirrored by a maintainer before full CI runs; tests
+  passed locally on Windows, Linux CI is pending.
 
-Port `cassette.ts` first; it is the piece the issue asks for.
+`llm/cassette.ts` stays a standalone module in this repo; it would only be proposed upstream if
+maintainers ask for recorded-model replay.

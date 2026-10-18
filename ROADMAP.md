@@ -32,7 +32,7 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 
 ## Longer term (v0.5+) — lab & research
 - [x] Run the live-LLM arm of the §7 experiment and publish raw results (`results/llm-arm-2026-10-18/`; sh-p0 vs sh-p1, Sonnet 5 agent + Haiku 4.5 Stagehand via OpenRouter). One seed per scenario: a first look, not a benchmark.
-- [ ] Upstream the dynamic fixture tier to Stagehand #2841. Step 1 done: the cassette/replay core is a standalone module (`llm/cassette.ts`). The PR itself is not opened yet (docs/UPSTREAM-STAGEHAND.md).
+- [x] Upstream to Stagehand #2841: network tier PRs opened, [#3230](https://github.com/browserbase/stagehand/pull/3230) (record/replay + `task:record --network`) and [#3231](https://github.com/browserbase/stagehand/pull/3231) (real `act()` replay). Awaiting maintainer review (docs/UPSTREAM-STAGEHAND.md).
 - [x] Voice cloning / custom voice upload for narration.
 - [x] STT-driven caption generation (auto-captions from recorded audio): Sarvam, OpenAI, Groq, ElevenLabs Scribe, or any OpenAI-compatible endpoint (`record/stt.ts`), with real timestamps where the provider returns them.
 - [x] Mobile companion (view recordings, trigger runs): responsive dashboard (drawer nav under `lg`), Mobile view, installable PWA.
