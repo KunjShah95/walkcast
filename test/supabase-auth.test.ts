@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { FileStore } from "../packages/core/src/store/index.ts";
 import { serveDashboard, type Running } from "../apps/desktop/server/server.ts";
+import { pkce } from "../apps/desktop/server/supabase-auth.ts";
 import { GoTrueMock } from "./gotrue-mock.ts";
 
 process.env.LAB_LOG = "off";
@@ -95,7 +96,9 @@ test("password sign-in through Supabase, generic error on a wrong password", asy
   assert.equal(ok.status, 200);
   assert.equal(((await ok.json()) as { next: string }).next, "/app#runs");
   assert.equal((await b.me())?.email, "eve@example.com");
-  await b.go("/auth/logout");
+  // Sign-out is POST-only (a GET could be triggered from another site) and redirects afterwards.
+  const out = await b.post("/auth/logout", {});
+  assert.equal(out.status, 302);
   assert.equal(await b.me(), null);
 });
 
@@ -177,4 +180,68 @@ test("with email confirmation off in Supabase, an old account is not linked by e
     await srv2.close(100);
     rmSync(root2, { recursive: true, force: true });
   }
+});
+
+/** GoTrue itself, the way a client calls it (anon key in apikey, like supabase-js). */
+const gotrueApi = (path: string, init: RequestInit = {}) =>
+  fetch(`${gotrue.url}/auth/v1${path}`, { ...init, headers: { apikey: gotrue.anonKey, "Content-Type": "application/json", ...(init.headers as Record<string, string> | undefined) } });
+
+test("redeeming a recovery link does not confirm the address; only the confirmation link does", async () => {
+  const email = "unconfirmed@example.com";
+  const signup = pkce();
+  assert.equal(
+    (
+      await gotrueApi("/signup?redirect_to=http%3A%2F%2F127.0.0.1%2Fconfirm", {
+        method: "POST",
+        body: JSON.stringify({ email, password: "a-long-password", code_challenge: signup.challenge, code_challenge_method: "s256" }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal(gotrue.users.find((u) => u.email === email)!.confirmed, false);
+
+  // A password reset for an account nobody has confirmed yet.
+  const recovery = pkce();
+  assert.equal(
+    (
+      await gotrueApi("/recover?redirect_to=http%3A%2F%2F127.0.0.1%2Frecover", {
+        method: "POST",
+        body: JSON.stringify({ email, code_challenge: recovery.challenge, code_challenge_method: "s256" }),
+      })
+    ).status,
+    200,
+  );
+  const resetLink = new URL(gotrue.mail.findLast((m) => m.to === email && m.kind === "recovery")!.link);
+  const redeemed = await gotrueApi("/token?grant_type=pkce", { method: "POST", body: JSON.stringify({ auth_code: resetLink.searchParams.get("code"), code_verifier: recovery.verifier }) });
+  assert.equal(redeemed.status, 200, "the reset link does hand back a session");
+  const session = (await redeemed.json()) as { user: { email_confirmed_at: string | null } };
+  assert.equal(session.user.email_confirmed_at, null, "but proving you hold the mailbox is not confirming the address");
+  assert.equal(gotrue.users.find((u) => u.email === email)!.confirmed, false);
+  const password = await gotrueApi("/token?grant_type=password", { method: "POST", body: JSON.stringify({ email, password: "a-long-password" }) });
+  assert.equal(password.status, 400, "so a password sign-in is still refused");
+  assert.equal(((await password.json()) as { error_code: string }).error_code, "email_not_confirmed");
+
+  // The confirmation link is the one that confirms.
+  const confirmLink = new URL(gotrue.mail.find((m) => m.to === email && m.kind === "confirm")!.link);
+  const confirmed = await gotrueApi("/token?grant_type=pkce", { method: "POST", body: JSON.stringify({ auth_code: confirmLink.searchParams.get("code"), code_verifier: signup.verifier }) });
+  assert.equal(confirmed.status, 200);
+  assert.equal(((await confirmed.json()) as { user: { email_confirmed_at: string | null } }).user.email_confirmed_at !== null, true);
+  assert.equal(gotrue.users.find((u) => u.email === email)!.confirmed, true);
+});
+
+test("an expired Supabase token stops working: a reset link dies with its token", async () => {
+  const b = new Browser();
+  await b.post("/auth/signup", { email: "expiry@example.com", password: "a-long-password" });
+  await b.go(gotrue.mail.find((m) => m.to === "expiry@example.com" && m.kind === "confirm")!.link);
+  assert.equal((await b.me())?.email, "expiry@example.com");
+  assert.equal((await b.post("/auth/forgot", { email: "expiry@example.com" })).status, 200);
+  const link = gotrue.mail.findLast((m) => m.to === "expiry@example.com" && m.kind === "recovery")!.link;
+  assert.equal((await b.go(link)).headers.get("location"), "/reset");
+  assert.ok(b.jar.has("lab_recovery"), "the short-lived Supabase token is held until the password is set");
+
+  gotrue.expireAllTokens(); // as if the hour had passed
+  const reset = await b.post("/auth/reset", { password: "brand-new-password" });
+  assert.equal(reset.status, 400, "the reset link is dead with the token");
+  assert.equal((await b.me())?.email, "expiry@example.com", "and the old password still signs in, so nothing was half-changed");
+  assert.equal((await new Browser().post("/auth/login", { email: "expiry@example.com", password: "a-long-password" })).status, 200);
 });

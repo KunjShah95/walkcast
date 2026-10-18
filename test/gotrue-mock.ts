@@ -4,8 +4,10 @@ import { type IncomingMessage, type Server, createServer } from "node:http";
 /**
  * A stand-in for Supabase Auth (GoTrue) implementing the endpoints Walkcast calls, with the
  * request/response shapes of the real API: /settings, /signup, /token (password, pkce),
- * /authorize, /recover, /user (GET/PUT), /logout. PKCE is checked for real (S256). "Emails" are
- * captured in `mail` as the links GoTrue would redirect to after /verify.
+ * /authorize, /recover, /user (GET/PUT), /logout. PKCE is checked for real (S256), an access
+ * token carries an expiry (`tokenLifetime`, default an hour) and expires, and only a *signin* code
+ * confirms an email: redeeming a recovery link does not, as in GoTrue. "Emails" are captured in
+ * `mail` as the links GoTrue would redirect to after /verify.
  */
 export interface MockUser {
   id: string;
@@ -25,8 +27,10 @@ export class GoTrueMock {
   settings = { googleEnabled: true, autoconfirm: false };
   /** The Google identity /authorize will "consent" as. */
   googleIdentity = { email: "gina@example.com", name: "Gina" };
+  /** Lifetime in seconds of every access token handed out; lower it to test expiry. */
+  tokenLifetime = 3600;
   private codes = new Map<string, { userId: string; challenge: string; purpose: "signin" | "recovery" }>();
-  private tokens = new Map<string, string>(); // access token -> user id
+  private tokens = new Map<string, { userId: string; expiresAt: number }>(); // access token -> session
   private server: Server | undefined;
   url = "";
 
@@ -52,10 +56,28 @@ export class GoTrueMock {
     this.server?.close();
   }
 
+  /** Forget every issued access token, as if they had all run out: bearer calls start failing. */
+  expireAllTokens(): void {
+    this.tokens.clear();
+  }
+
+  /** Expire exactly one access token. */
+  expireToken(accessToken: string): void {
+    this.tokens.delete(accessToken);
+  }
+
   private session(user: MockUser) {
     const access = `at-${randomBytes(12).toString("hex")}`;
-    this.tokens.set(access, user.id);
-    return { access_token: access, token_type: "bearer", expires_in: 3600, refresh_token: `rt-${randomBytes(8).toString("hex")}`, user: this.publicUser(user) };
+    const expiresAt = Math.floor(Date.now() / 1000) + this.tokenLifetime;
+    this.tokens.set(access, { userId: user.id, expiresAt });
+    return {
+      access_token: access,
+      token_type: "bearer",
+      expires_in: this.tokenLifetime,
+      expires_at: expiresAt,
+      refresh_token: `rt-${randomBytes(8).toString("hex")}`,
+      user: this.publicUser(user),
+    };
   }
 
   private publicUser(u: MockUser) {
@@ -87,8 +109,10 @@ export class GoTrueMock {
     const bearerUser = () => {
       const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
       if (this.loggedOut.has(token)) return null;
-      const id = this.tokens.get(token);
-      return this.users.find((u) => u.id === id) ?? null;
+      const entry = this.tokens.get(token);
+      // Real tokens carry an expiry and GoTrue refuses them once it passes.
+      if (!entry || entry.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+      return this.users.find((u) => u.id === entry.userId) ?? null;
     };
 
     if (path === "/settings" && req.method === "GET") {
@@ -121,7 +145,9 @@ export class GoTrueMock {
         if (challenge !== entry.challenge) return err(400, "bad_code_verifier", "code challenge does not match previously saved code verifier");
         this.codes.delete(body.auth_code!);
         const user = this.users.find((u) => u.id === entry.userId)!;
-        user.confirmed = true;
+        // Redeeming a *recovery* link proves the mailbox, not that this address belongs to the
+        // account owner: GoTrue never confirms the email on that exchange.
+        if (entry.purpose === "signin") user.confirmed = true;
         return { status: 200, body: this.session(user) };
       }
       return err(400, "unsupported_grant_type", "unsupported grant type");

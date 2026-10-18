@@ -85,22 +85,71 @@ export type TraceEvent = StepEvent | NetworkEvent | ConsoleEvent | ModelCallEven
 /** Values never written to disk. Applied to request bodies and tool arguments. */
 const REDACTED_KEYS = /pass(word)?|secret|token|authorization|cookie|otp/i;
 
-export function redact<T extends Record<string, unknown>>(record: T): T {
+const REDACTED = "[REDACTED]";
+
+/**
+ * How far into nested objects/arrays redaction descends. Bounded so a cyclic or
+ * pathologically deep payload terminates instead of blowing the stack.
+ */
+const MAX_REDACT_DEPTH = 6;
+
+/** Only plain objects are walked; class instances (Date, Map, ...) are left untouched. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * One level only: redact matching keys here, pass the rest through untouched. Used at the depth
+ * cap so the control fails *closed* on the boundary instead of handing the whole subtree over
+ * verbatim — passing an unvisited object straight through would let any secret nested deeper than
+ * the cap reach the trace file.
+ */
+function shallowRedact(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => (isPlainObject(item) || Array.isArray(item) ? shallowRedact(item) : item));
+  if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(record)) out[k] = REDACTED_KEYS.test(k) ? "[REDACTED]" : v;
-  return out as T;
+  for (const [k, v] of Object.entries(value)) out[k] = REDACTED_KEYS.test(k) ? REDACTED : v;
+  return out;
+}
+
+/**
+ * Redacts by key through nested plain objects and arrays. Every level's keys are tested, so a
+ * secret nested under an innocuous parent (e.g. `{ credentials: { password } }`) is still caught.
+ * At the depth cap this level's keys are redacted and its children get one shallow pass.
+ */
+function redactValue(value: unknown, depth: number): unknown {
+  if (Array.isArray(value)) {
+    if (depth >= MAX_REDACT_DEPTH) return shallowRedact(value);
+    return value.map((item) => redactValue(item, depth + 1));
+  }
+  if (!isPlainObject(value)) return value;
+  const out: Record<string, unknown> = {};
+  const descend = depth < MAX_REDACT_DEPTH;
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = REDACTED_KEYS.test(k) ? REDACTED : descend ? redactValue(v, depth + 1) : shallowRedact(v);
+  }
+  return out;
+}
+
+export function redact<T extends Record<string, unknown>>(record: T): T {
+  return redactValue(record, 0) as T;
 }
 
 /**
  * Form fields of a request body. JSON bodies are parsed as JSON (top-level fields; nested values
  * stringified) so that key-based redaction still applies; anything else is read as a form.
+ * Nested values are redacted before stringification, so a stringified object cannot carry a live
+ * secret past the key check.
  */
 export function parseBody(body: string, contentType: string): Record<string, string> {
   if (/json/i.test(contentType) || /^\s*[{[]/.test(body)) {
     try {
       const value = JSON.parse(body) as unknown;
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]));
+        const safe = redactValue(value, 0) as Record<string, unknown>;
+        return Object.fromEntries(Object.entries(safe).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]));
       }
       return { _body: "[non-form JSON body omitted]" };
     } catch {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, before, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { serveDashboard, type Running } from "../apps/desktop/server/server.ts";
 import { GoTrueMock } from "./gotrue-mock.ts";
 
@@ -101,4 +101,75 @@ test("desktop pages: no password-reset link, and email links explain themselves 
   const confirm = await fetch(`${srv.url}/auth/callback?code=whatever`, { redirect: "manual" });
   assert.equal(confirm.status, 400);
   assert.match(await confirm.text(), /Walkcast app/);
+});
+
+/**
+ * The same app, in the build that ships with an account required. The desktop app can run either
+ * way, so the wall has to hold in that mode too instead of being the web deployment's job.
+ */
+describe("the desktop app with an account required", () => {
+  const lockedRoot = mkdtempSync(join(tmpdir(), "lab-desktop-wall-"));
+  const lockedOpened: string[] = [];
+  let locked: Running;
+
+  before(async () => {
+    gotrue.settings.autoconfirm = true;
+    locked = await serveDashboard(6200 + Math.floor(Math.random() * 300), {
+      root: lockedRoot,
+      unref: true,
+      worker: false,
+      requireAuth: true,
+      desktop: true,
+      openExternal: (url) => lockedOpened.push(url),
+    });
+  });
+
+  after(async () => {
+    await locked.close(100);
+    rmSync(lockedRoot, { recursive: true, force: true });
+  });
+
+  test("signed out, the app window has no way in", async () => {
+    const app = await fetch(`${locked.url}/app`, { redirect: "manual" });
+    assert.equal(app.status, 302, "not even the dashboard shell");
+    assert.equal(app.headers.get("location"), `/login?next=${encodeURIComponent("/app")}`);
+    assert.ok(!(await (await fetch(`${locked.url}/login`)).text()).includes("without an account"), "no way to skip the account in this build");
+
+    for (const [method, path] of [["GET", "/api/index"], ["GET", "/api/credentials"], ["GET", "/api/jobs/anything"], ["POST", "/api/run"], ["POST", "/api/record"], ["GET", "/files/anything"]] as const) {
+      const res = await fetch(`${locked.url}${path}`, { method, body: method === "POST" ? JSON.stringify({ url: "https://site.example", agent: "sh-p0" }) : undefined });
+      assert.equal(res.status, 401, `${method} ${path} is refused without an account`);
+    }
+    const me = (await (await fetch(`${locked.url}/api/me`)).json()) as { user: unknown; authRequired: boolean };
+    assert.equal(me.user, null);
+    assert.equal(me.authRequired, true);
+  });
+
+  test("Google through the system browser gets the app window in, and only that session is let through", async () => {
+    const start = await fetch(`${locked.url}/auth/google?next=${encodeURIComponent("/app#library")}`);
+    assert.equal(start.status, 200, "the waiting page is served: it is not behind the wall");
+    const authorize = new URL(lockedOpened.at(-1)!);
+    const redirectTo = new URL(authorize.searchParams.get("redirect_to")!);
+    const state = /^\/auth\/desktop\/callback\/([\w-]+)$/.exec(redirectTo.pathname)?.[1];
+    assert.ok(state, `redirect_to carries the flow's state: ${redirectTo}`);
+
+    // Google consents in the system browser, which shares no cookies with the app window.
+    const back = await fetch(authorize, { redirect: "manual", headers: { apikey: gotrue.anonKey } });
+    const landing = await fetch(back.headers.get("location")!, { redirect: "manual" });
+    assert.equal(landing.status, 200);
+    assert.match(await landing.text(), /You.re signed in/);
+    assert.equal(landing.headers.get("set-cookie"), null, "the browser tab gets no session");
+
+    const claimed = await fetch(`${locked.url}/auth/desktop/poll/${state}`, { method: "POST" });
+    assert.equal(claimed.status, 200);
+    assert.deepEqual(await claimed.json(), { next: "/app#library" });
+    const cookie = claimed.headers.get("set-cookie")!.split(";")[0]!;
+
+    // The wall is down for this session.
+    const authed = (path: string, init: RequestInit = {}) => fetch(`${locked.url}${path}`, { ...init, headers: { cookie, ...(init.headers as Record<string, string> | undefined) } });
+    assert.equal((await authed("/app", { redirect: "manual" })).status, 200);
+    assert.equal((await authed("/api/index")).status, 200);
+    assert.equal((await authed("/api/credentials")).status, 200);
+    assert.equal((await authed("/api/record", { method: "POST", body: JSON.stringify({ url: "not-a-url" }) })).status, 400, "past the wall, into input validation");
+    assert.equal((await fetch(`${locked.url}/app`, { redirect: "manual" })).status, 302, "a second, anonymous window is still locked");
+  });
 });
