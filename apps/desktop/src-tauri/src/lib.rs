@@ -271,14 +271,20 @@ fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
   const bar = document.createElement("div");
   bar.id = "walkcast-update";
   bar.setAttribute("role", "status");
-  bar.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;gap:12px;align-items:center;padding:10px 14px;border-radius:12px;background:#1b1a17;color:#fff;font:14px system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)";
+  bar.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--paper,#ffffff);color:var(--ink,#1b1a17);font:13.5px 'Schibsted Grotesk Variable',ui-sans-serif,system-ui,sans-serif;box-shadow:inset 0 0 0 1px var(--line,#e7e3db),0 12px 28px -20px rgb(27 26 23 / .35)";
   const text = document.createElement("span");
   text.textContent = {label};
   const go = document.createElement("button");
   go.textContent = "Restart now";
-  go.style.cssText = "border:0;border-radius:999px;padding:6px 12px;background:#9c5700;color:#fff;font-weight:600;cursor:pointer";
+  go.style.cssText = "border:0;border-radius:999px;padding:6px 12px;background:var(--signal,#9c5700);color:var(--on-signal,#ffffff);font-weight:600;cursor:pointer";
   go.onclick = () => {{ go.disabled = true; go.textContent = "Updating…"; window.__TAURI__.core.invoke("install_update").catch((e) => {{ go.textContent = "Update failed"; text.textContent = String(e); }}); }};
-  bar.append(text, go);
+  // Dismissable: an update is never forced, and a stuck banner over a dark recording is annoying.
+  const close = document.createElement("button");
+  close.textContent = "×";
+  close.setAttribute("aria-label", "Dismiss");
+  close.style.cssText = "border:0;background:transparent;color:#8a847a;font:16px system-ui,sans-serif;cursor:pointer;padding:0 4px;line-height:1";
+  close.onclick = () => bar.remove();
+  bar.append(text, go, close);
   document.body.append(bar);
 }})();"#
       ));
