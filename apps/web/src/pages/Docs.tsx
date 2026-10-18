@@ -53,7 +53,7 @@ export function GuidePage() {
 
       <h2>What you need</h2>
       <ul>
-        <li>A Windows 10 or 11 PC (64-bit). macOS and Linux can run Walkcast from source.</li>
+        <li>A Windows 10/11 PC (x64), a Mac (macOS 12+, Apple Silicon), or an x86_64 Linux machine. Or run Walkcast from source on any platform.</li>
         <li>The address of the site, and permission to test it (your own site, or a client's that asked you to).</li>
         <li>For pages behind a login: a username and password for a test account. Two-step email-then-password forms work.</li>
       </ul>

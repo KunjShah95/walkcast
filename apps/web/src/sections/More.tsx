@@ -23,8 +23,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ISSUES_URL, LICENSE_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { BrandMark, DownloadButton, Eyebrow, GithubIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
+import { ISSUES_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { AppleIcon, BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
 import { FAQ, HOWTO } from "../content.ts";
 
 /* ------------------------------------------------------------------ bento */
@@ -469,11 +469,29 @@ const INSTALLERS = [
     text: "Installs for every user on the PC. Use it for managed rollouts like Intune or Group Policy.",
     dark: false,
   },
+  {
+    name: "macOS disk image",
+    file: `walkcast_${VERSION}_aarch64.dmg`,
+    href: MACOS_DMG_URL,
+    size: "about 40 MB",
+    badge: "Apple Silicon",
+    text: "Drag Walkcast into Applications. Runs on macOS 12 or later, Apple Silicon.",
+    dark: false,
+  },
+  {
+    name: "Linux AppImage",
+    file: `walkcast_${VERSION}_amd64.AppImage`,
+    href: LINUX_APPIMAGE_URL,
+    size: "about 45 MB",
+    badge: "Any distro",
+    text: "Make it executable and run it. No install step; works on most x86_64 Linux distributions.",
+    dark: false,
+  },
 ] as const;
 
 const STEPS = HOWTO;
 
-/** Windows is the only packaged build; other systems are pointed at the source. */
+/** Packaged installers ship for Windows, macOS and Linux. */
 function useNotWindows() {
   const [other, setOther] = useState<string | null>(null);
   useEffect(() => {
@@ -494,14 +512,14 @@ export function DownloadSection() {
         <Reveal className="sec-head center">
           <Eyebrow n={5}>Download</Eyebrow>
           <h2>
-            Get Walkcast for <Tile icon={AppWindow} tone="blue" tilt={-6} /> Windows.
+            Get Walkcast for <Tile icon={AppWindow} tone="blue" tilt={-6} /> Windows, macOS, or Linux.
             <br />
-            <span className="dim">Free, <Tile icon={Gift} tone="green" tilt={5} /> two ways.</span>
+            <span className="dim">Free, <Tile icon={Gift} tone="green" tilt={5} /> one click.</span>
           </h2>
-          <p className="lede">Version {VERSION} for Windows 10 and 11, 64-bit. Both installers contain the same app.</p>
+          <p className="lede">Version {VERSION}. Windows 10/11 (x64), macOS 12+ (Apple Silicon), and most x86_64 Linux distributions.</p>
           {other && (
             <p className="dl-other">
-              You seem to be on {other}. The packaged app is Windows only for now. Download it for a Windows PC, or{" "}
+              You seem to be on {other}. Pick the matching installer above, or{" "}
               <a href={`${REPO_URL}#quick-start`}>run Walkcast from source</a>.
             </p>
           )}
@@ -510,7 +528,7 @@ export function DownloadSection() {
           {INSTALLERS.map((d, i) => (
             <Reveal key={d.file} className={`dl-card ${d.dark ? "dark" : ""}`} delay={i * 0.08}>
               <div className="dl-top">
-                <span className="dl-ic"><WindowsIcon width={26} height={26} /></span>
+                <span className="dl-ic">{d.name.startsWith("macOS") ? <AppleIcon width={26} height={26} /> : d.name.startsWith("Linux") ? <LinuxIcon width={26} height={26} /> : <WindowsIcon width={26} height={26} />}</span>
                 <span className="dl-badge">{d.badge}</span>
               </div>
               <h3>{d.name}</h3>
@@ -658,6 +676,9 @@ export function Footer() {
             <ul>
               <li><a href={WINDOWS_EXE_URL}><WindowsIcon width={14} height={14} />Windows .exe</a></li>
               <li><a href={WINDOWS_MSI_URL}><WindowsIcon width={14} height={14} />Windows .msi</a></li>
+              <li><a href={MACOS_DMG_URL}><AppleIcon width={14} height={14} />macOS .dmg</a></li>
+              <li><a href={LINUX_APPIMAGE_URL}><LinuxIcon width={14} height={14} />Linux .AppImage</a></li>
+              <li><a href={LINUX_DEB_URL}><LinuxIcon width={14} height={14} />Linux .deb</a></li>
               <li><a href={RELEASES_URL}><Rocket size={14} />All releases</a></li>
             </ul>
           </div>

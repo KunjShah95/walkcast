@@ -86,6 +86,22 @@ export function WindowsIcon(props: ComponentProps<"svg">) {
   );
 }
 
+export function AppleIcon(props: ComponentProps<"svg">) {
+  return (
+    <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M17.5 13.2c0 3.3 2.9 4.4 2.9 4.4s-2 5.7-4.6 5.7c-1.2 0-2.1-.8-3.5-.8-1.4 0-2.6.8-3.5.8-2.5 0-5.7-5.5-5.7-10 0-4.6 3-7 5.8-7 1.5 0 2.8.9 3.6.9.8 0 2.3-1 4-1 1.6 0 3.1.7 4 1.9-3.5 2-2.9 5.9 1 6.1zM14.5 4.1c.7-.9 1.2-2.1 1.1-3.3-1.1.1-2.4.7-3.2 1.6-.7.8-1.3 2-1.1 3.2 1.2.1 2.4-.6 3.2-1.5z" />
+    </svg>
+  );
+}
+
+export function LinuxIcon(props: ComponentProps<"svg">) {
+  return (
+    <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M12 2c-1.1 0-2 .9-2 2 0 .7.4 1.4 1 1.7v1.4c-2.4.4-4.3 2.2-4.8 4.6l-.2.1c-1.4 0-2.5 1.1-2.5 2.5s1.1 2.5 2.5 2.5h.3c.4 1.2 1.2 2.2 2.2 3v1.2c0 .6.4 1 1 1h6c.6 0 1-.4 1-1v-1.2c1-.8 1.8-1.8 2.2-3h.3c1.4 0 2.5-1.1 2.5-2.5s-1.1-2.5-2.5-2.5l-.2-.1c-.5-2.4-2.4-4.2-4.8-4.6V5.7c.6-.3 1-1 1-1.7 0-1.1-.9-2-2-2zm-2 12c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm4 0c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1z" />
+    </svg>
+  );
+}
+
 /** The traffic-light title bar shared by every app mock. */
 export function WindowBar({ title, children }: { title: ReactNode; children?: ReactNode }) {
   return (
