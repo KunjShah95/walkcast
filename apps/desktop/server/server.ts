@@ -364,6 +364,7 @@ export function createApp(o: ServeOptions = {}): App {
       const next = safeNext(url.searchParams.get("next") ?? (target ? `/app#record?url=${encodeURIComponent(target)}` : null));
       if (user && mode !== "reset") return redirect(next);
       const opts = await authOptions();
+      opts.signupDisabled = (await authOptions()).signupDisabled;
       const notice = url.searchParams.get("notice") ?? undefined;
       return send(
         200,
@@ -374,6 +375,7 @@ export function createApp(o: ServeOptions = {}): App {
 
     // ---------------------------------------------------------------- accounts
     if (url.pathname === "/auth/signup" && req.method === "POST") {
+      if ((await authOptions()).signupDisabled) throw new AuthError(403, "Sign-ups are closed.");
       const b = await readJson(req);
       const next = safeNext(typeof b.next === "string" ? b.next : null);
       const name = typeof b.name === "string" ? b.name : undefined;

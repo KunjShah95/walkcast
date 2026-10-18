@@ -39,7 +39,7 @@ const GOOGLE_ICON = `<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden
  */
 export function authPage(
   mode: AuthMode,
-  opts: { google: boolean; next: string; openrouter?: boolean; chatgpt?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string; skip?: boolean },
+  opts: { google: boolean; next: string; openrouter?: boolean; chatgpt?: boolean; url?: string; forgot?: boolean; provider?: "local" | "supabase"; notice?: string; skip?: boolean; signupDisabled?: boolean },
 ): string {
   const copy = {
     signup: { h1: "Start recording", lede: "Free. Record narrated walkthroughs of sites you own or may test.", button: "Create account", title: "Create an account" },
@@ -85,7 +85,7 @@ export function authPage(
       mode === "signup"
         ? `Already have an account? <a href="/login?next=${encodeURIComponent(opts.next)}">Sign in</a>`
         : mode === "login"
-          ? `New here? <a href="/signup?next=${encodeURIComponent(opts.next)}">Create an account</a>${opts.forgot ? ` · <a href="/forgot">Forgot your password?</a>` : ""}`
+          ? (opts.signupDisabled ? `Forgot your password? <a href="/forgot">Reset it</a>` : `New here? <a href="/signup?next=${encodeURIComponent(opts.next)}">Create an account</a>${opts.forgot ? ` · <a href="/forgot">Forgot your password?</a>` : ""}`)
           : `<a href="/login">Back to sign in</a>`
     }</p>
     ${opts.skip && (mode === "signup" || mode === "login") ? `<p class="note"><a href="/app">Use Walkcast without an account</a></p>` : ""}
