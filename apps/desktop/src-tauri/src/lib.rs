@@ -5,7 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+  menu::{Menu, MenuItemBuilder, PredefinedMenuItem},
+  tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+  AppHandle, LogicalSize, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
@@ -38,9 +42,28 @@ fn healthy(port: u16) -> bool {
   let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
   if stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").is_err() {
     return false;
-  }
+  };
   let mut head = [0u8; 12];
   stream.read_exact(&mut head).is_ok() && head.ends_with(b"200")
+}
+
+/// GET a path from the app server and hand back the whole response. One loopback request, so no
+/// client library.
+fn http_get(port: u16, path: &str) -> Option<String> {
+  let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(500)).ok()?;
+  stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
+  stream
+    .write_all(format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").as_bytes())
+    .ok()?;
+  let mut body = String::new();
+  stream.read_to_string(&mut body).ok()?;
+  Some(body)
+}
+
+/// Whether the server's job worker is mid-recording. This is what lets the app keep recording with
+/// the window closed, and what makes a quit wait for the walkthrough instead of killing it.
+fn recording(port: u16) -> bool {
+  http_get(port, "/healthz").is_some_and(|body| body.contains("\"worker\":\"busy\""))
 }
 
 /// 1280×820, but never larger than the screen it opens on: on a laptop at 125-150% scaling that
@@ -263,6 +286,100 @@ fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
   });
 }
 
+/// Where the app server is listening, kept for the tray's background checks.
+#[derive(Default)]
+struct Port(Mutex<u16>);
+
+/// The tray icon: the app's front door once the window is closed, and the only place a quit comes
+/// from. Closing the window hides it; the recording keeps running in the sidecar either way.
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+  let open = MenuItemBuilder::with_id("open", "Open Walkcast").build(app)?;
+  let quit = MenuItemBuilder::with_id("quit", "Quit Walkcast").build(app)?;
+  let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &quit])?;
+  let mut tray = TrayIconBuilder::with_id("tray")
+    .tooltip("Walkcast")
+    .menu(&menu)
+    .on_menu_event(|app, event| match event.id().as_ref() {
+      "open" => show_window(app),
+      "quit" => request_quit(app),
+      _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+      if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+        show_window(tray.app_handle());
+      }
+    });
+  if let Some(icon) = app.default_window_icon().cloned() {
+    tray = tray.icon(icon);
+  }
+  tray.build(app)?;
+  Ok(())
+}
+
+fn show_window(app: &AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+  }
+}
+
+/// Quit, but never mid-recording: a walkthrough takes minutes and killing the sidecar throws it
+/// away. While one is running the app stays alive, says so in the tray, and quits when it lands.
+fn request_quit(app: &AppHandle) {
+  let port = app.state::<Port>().0.lock().unwrap().to_owned();
+  if !recording(port) {
+    app.exit(0);
+    return;
+  }
+  log::info!("quit asked for during a recording; waiting for it to finish");
+  let app = app.clone();
+  set_tray_tooltip(&app, "Walkcast — finishing the recording, then quitting…");
+  std::thread::spawn(move || {
+    // Long enough for any walkthrough this build can start; past that, the person gave up on it.
+    let deadline = Instant::now() + Duration::from_secs(30 * 60);
+    while Instant::now() < deadline {
+      std::thread::sleep(Duration::from_secs(3));
+      if !recording(port) {
+        app.exit(0);
+        return;
+      }
+    }
+    log::warn!("gave up waiting for the recording; quitting");
+    app.exit(0);
+  });
+}
+
+fn set_tray_tooltip(app: &AppHandle, text: &str) {
+  if let Some(tray) = app.tray_by_id("tray") {
+    let _ = tray.set_tooltip(Some(text.to_string()));
+  }
+}
+
+/// Keep the tray icon honest about what the sidecar is doing: the window can be closed for the
+/// length of a recording, and this is the only sign of it that anything is still happening.
+fn watch_recording(app: &AppHandle, started: Arc<AtomicBool>) {
+  let app = app.clone();
+  std::thread::spawn(move || {
+    let mut busy = false;
+    while started.load(Ordering::SeqCst) {
+      std::thread::sleep(Duration::from_secs(4));
+      if !started.load(Ordering::SeqCst) {
+        return;
+      }
+      let port = app.state::<Port>().0.lock().unwrap().to_owned();
+      let now = recording(port);
+      if now != busy {
+        busy = now;
+        set_tray_tooltip(
+          &app,
+          if now { "Walkcast — recording…" } else { "Walkcast" },
+        );
+      }
+    }
+  });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -272,8 +389,25 @@ pub fn run() {
     .plugin(tauri_plugin_process::init())
     .invoke_handler(tauri::generate_handler![check_update, install_update])
     .manage(Sidecar(Mutex::new(None)))
+    .manage(Port(Mutex::new(0)))
     .setup(|app| {
       let handle = app.handle().clone();
+      build_tray(&handle)?;
+      // Closing the window hides it: the recording runs in the sidecar, so closing mid-walkthrough
+      // used to throw it away. The tray's "Quit Walkcast" is the way out, and it waits for a job.
+      if let Some(window) = app.get_webview_window("main") {
+        let (handle, on_window) = (handle.clone(), window.clone());
+        window.on_window_event(move |event| {
+          if let WindowEvent::CloseRequested { api, .. } = event {
+            // Nothing is running yet (the server failed to start): closing really means closing.
+            if handle.state::<Port>().0.lock().unwrap().to_owned() == 0 {
+              return;
+            }
+            api.prevent_close();
+            let _ = on_window.hide();
+          }
+        });
+      }
       if cfg!(debug_assertions) {
         open_window(&handle, WebviewUrl::External(Url::parse(DEV_URL)?))?;
         return Ok(());
@@ -289,6 +423,7 @@ pub fn run() {
           return Ok(());
         }
       };
+      *handle.state::<Port>().0.lock().unwrap() = port;
       // Wait off the main thread so the event loop keeps running.
       std::thread::spawn(move || {
         let started = Instant::now();
@@ -301,6 +436,7 @@ pub fn run() {
               log::error!("could not open the app: {e}");
             }
             watch_for_updates(handle.clone(), window.clone());
+            watch_recording(&handle, exited.clone());
             return;
           }
           std::thread::sleep(Duration::from_millis(200));
