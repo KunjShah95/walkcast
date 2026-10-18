@@ -75,7 +75,7 @@ The diagrams are editable Excalidraw files in [`docs/architecture/`](docs/archit
 ## Quick start
 
 ```sh
-git clone https://github.com/KunjShah95/browser-user.git && cd browser-user
+git clone https://github.com/KunjShah95/walkcast.git && cd walkcast
 npm ci
 npx playwright install chromium          # skip if Chromium is already available
 ffmpeg -hide_banner -filters | grep flite  # optional: narration audio needs this line to print
@@ -192,6 +192,10 @@ npm run web:build        # dist/web
 
 The installed app runs its own server; Chromium (~250 MB) downloads once on first launch into
 `<data>/browsers`; ffmpeg is bundled (Windows builds have no flite voice → SAPI narration).
+
+A recording runs in that server, not in the window, so it survives you switching away or closing
+the window: closing hides it to the tray icon (which says "recording…" while one is in flight), and
+"Quit Walkcast" in the tray waits for a running recording to finish rather than throwing it away.
 
 ---
 
