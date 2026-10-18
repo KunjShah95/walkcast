@@ -9,7 +9,7 @@ import { SEED_LEADS } from "../packages/core/src/lab/task.ts";
 import { open, seal } from "../packages/core/src/jobs/secret-box.ts";
 import { LocalMedia, S3Media } from "../packages/core/src/media/store.ts";
 import { presignGet, signHeaders } from "../packages/core/src/media/s3.ts";
-import { FileStore, PgStore, migrate, type Store } from "../packages/core/src/store/index.ts";
+import { FileStore, PgStore, type Store } from "../packages/core/src/store/index.ts";
 import { freshSchema } from "./pg-helper.ts";
 import { serveDashboard } from "../apps/desktop/server/server.ts";
 

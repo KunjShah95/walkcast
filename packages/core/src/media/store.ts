@@ -63,7 +63,7 @@ export class S3Media implements MediaStore {
   }
 
   async publish(id: string, localDir: string, files: string[]): Promise<void> {
-    const cfg = await this.config();
+    await this.config(); // fail fast on missing configuration before touching any file
     for (const file of files) {
       const path = join(localDir, file);
       if (!existsSync(path)) continue;
