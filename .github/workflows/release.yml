@@ -58,6 +58,16 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: npm ci
+      # A tag can be pushed at any time, so the release cannot assume CI passed. These were the
+      # only quality gates anywhere on the tag path before: release.yml never ran lint, types or
+      # tests, so a broken build could ship.
+      - name: Lint, typecheck and unit tests
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+      - name: Rust tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: npm run ui:build
       # stage-sidecar copies this into the installer: without it the app records video and captions
       # only, because nothing on a user's machine is guaranteed to have ffmpeg.
