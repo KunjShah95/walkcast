@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { VoicePicker } from "../components/Studio.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
+import { Updates } from "../components/Updates.tsx";
 import { type Capabilities, type Me, type Voice, isSnapshot, loadCapabilities } from "../lib/api.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import { useI18n, LANGS } from "../lib/i18n.tsx";
@@ -31,6 +32,8 @@ export function Settings({ me }: { me: Me | null }) {
       </Panel>
 
       <Account me={me} />
+
+      <Updates />
 
       <Panel>
         <PanelHeader eyebrow="Desktop app" title="Download Walkcast" aside={<span className="font-mono text-[11.5px] text-ink-3">lightweight Tauri build</span>} />

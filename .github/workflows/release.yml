@@ -63,6 +63,10 @@ jobs:
           # Shipped unsigned by design. Windows shows a SmartScreen "more info" prompt and macOS
           # requires right-click → Open; no signing certificates are used or required.
           TAURI_BUNDLE_ENABLED: "true"
+          # Not OS code signing: the free minisign key the in-app updater verifies downloads with
+          # (pubkey in tauri.conf.json). Produces a .sig next to each updatable installer.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -76,17 +80,28 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
 
   publish:
     needs: build
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
+      # The feed the in-app updater polls (releases/latest/download/latest.json). A manual run
+      # names it after the app version so the dry run checks it too.
+      - name: Updater manifest
+        run: |
+          version=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          tag=${{ github.event_name == 'push' && github.ref_name || '' }}
+          node apps/desktop/scripts/updater-manifest.mjs artifacts "${tag:-v$version}"
+          cat artifacts/latest.json
       - name: List installers
-        run: ls -la artifacts
+        run: ls -laR artifacts
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3

@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "walkcast",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.walkcast.desktop",
   "build": {
     "frontendDist": "../splash",
@@ -13,7 +13,8 @@
     "windows": [],
     "security": {
       "csp": null
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
@@ -33,6 +34,18 @@
     ],
     "resources": {
       "sidecar/": "sidecar/"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFQjM1Q0ZDRUJCQTZDMDcKUldRSGJMcnIvRnl6bmpYbXJrcjJpUUVSdFloL01GcHZqNEJQYy9UY3RlYy9LU3c3bTB6WDhjaEsK",
+      "endpoints": [
+        "https://github.com/KunjShah95/browser-user/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

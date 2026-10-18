@@ -24,6 +24,7 @@ import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from 
 import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
+import { checkForUpdate } from "../../../packages/core/src/ops/updates.ts";
 import { alarmState, queueAlarmMs, startQueueMonitor } from "../../../packages/core/src/ops/queue-monitor.ts";
 import { importLegacySchedules, newSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
 
@@ -747,6 +748,11 @@ try {
       }
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
       return void res.end(body);
+    }
+    if (url.pathname === "/api/update" && req.method === "GET") {
+      // The newest published release vs. what this server runs. The desktop app installs updates
+      // itself (Tauri updater); servers and source checkouts get a link to the release.
+      return json(200, await checkForUpdate());
     }
     if (url.pathname === "/api/agents/usage" && req.method === "GET") {
       let windowMs = 86_400_000;

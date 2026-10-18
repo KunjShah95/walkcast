@@ -79,7 +79,8 @@ for (const name of [...used].sort()) {
   if (!version) throw new Error(`${name} is imported by the server but is not in package.json`);
   dependencies[name] = version;
 }
-writeFileSync(join(OUT, "package.json"), JSON.stringify({ name: "walkcast-sidecar", private: true, type: "module", dependencies }, null, 2));
+// The version lets the server report what is installed (/api/update).
+writeFileSync(join(OUT, "package.json"), JSON.stringify({ name: "walkcast-sidecar", version: (root as { version?: string }).version, private: true, type: "module", dependencies }, null, 2));
 // The root lockfile pins every transitive version; npm drops what this smaller manifest doesn't need.
 copyFileSync(join(REPO, "package-lock.json"), join(OUT, "package-lock.json"));
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";

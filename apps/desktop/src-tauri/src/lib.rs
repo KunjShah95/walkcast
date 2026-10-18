@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 /// The app server the window talks to. In a release build it is the bundled Node running
 /// `sidecar.ts` on a free loopback port; `tauri dev` uses the server `npm run ui` already started.
@@ -116,11 +117,70 @@ fn start_sidecar(app: &AppHandle, exited: Arc<AtomicBool>) -> Result<u16, Box<dy
   Ok(port)
 }
 
+/// What the dashboard's Updates section shows. `available` is false when this is the newest
+/// release, or when the check could not reach GitHub (then `error` says why).
+#[derive(serde::Serialize)]
+struct UpdateStatus {
+  current: String,
+  available: bool,
+  version: Option<String>,
+  notes: Option<String>,
+  date: Option<String>,
+  error: Option<String>,
+}
+
+/// Ask the release feed (tauri.conf.json → plugins.updater.endpoints) whether a newer, signed
+/// build exists. Never fails: a network error comes back as `error` so the UI can say so.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> UpdateStatus {
+  let current = app.package_info().version.to_string();
+  let checked = match app.updater() {
+    Ok(updater) => updater.check().await.map_err(|e| e.to_string()),
+    Err(e) => Err(e.to_string()),
+  };
+  match checked {
+    Ok(Some(update)) => UpdateStatus {
+      current,
+      available: true,
+      version: Some(update.version.clone()),
+      notes: update.body.clone(),
+      date: update.date.map(|d| d.to_string()),
+      error: None,
+    },
+    Ok(None) => UpdateStatus { current, available: false, version: None, notes: None, date: None, error: None },
+    Err(e) => UpdateStatus { current, available: false, version: None, notes: None, date: None, error: Some(e) },
+  }
+}
+
+/// Download the update, verify its signature against the public key built into this app, install
+/// it and restart. The sidecar is stopped first so the installer can replace its files.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+  let update = app
+    .updater()
+    .map_err(|e| e.to_string())?
+    .check()
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "Walkcast is already up to date.".to_string())?;
+  log::info!("downloading update {}", update.version);
+  let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
+    let _ = child.kill();
+  }
+  update.install(bytes).map_err(|e| e.to_string())?;
+  log::info!("update {} installed; restarting", update.version);
+  app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())
     .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_process::init())
+    .invoke_handler(tauri::generate_handler![check_update, install_update])
     .manage(Sidecar(Mutex::new(None)))
     .setup(|app| {
       let handle = app.handle().clone();
