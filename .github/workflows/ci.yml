@@ -66,6 +66,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run ui:build
+      # tauri-build resolves tauri.conf.json's externalBin and resources while compiling, so on a
+      # fresh checkout there is no `binaries/walkcast-node-<triple>` and `cargo test` fails with
+      # "resource path ... doesn't exist". Staged exactly as release.yml stages it, so this gate
+      # tests the same tree that ships rather than a placeholder.
+      - run: npm run desktop:stage
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
   # The production image builds and its health check answers.

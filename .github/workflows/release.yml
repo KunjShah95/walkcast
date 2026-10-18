@@ -66,8 +66,6 @@ jobs:
           npm run lint
           npm run typecheck
           npm test
-      - name: Rust tests
-        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - run: npm run ui:build
       # stage-sidecar copies this into the installer: without it the app records video and captions
       # only, because nothing on a user's machine is guaranteed to have ffmpeg.
@@ -75,6 +73,11 @@ jobs:
         run: node apps/desktop/scripts/fetch-ffmpeg.mjs
       - name: Stage sidecar
         run: npm run desktop:stage
+      # After Stage sidecar, never before: tauri-build resolves tauri.conf.json's externalBin and
+      # resources while compiling, so on a fresh checkout `cargo test` fails with "resource path
+      # `binaries/walkcast-node-<triple>` doesn't exist" until the sidecar is staged.
+      - name: Rust tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: Build Tauri (unsigned)
         run: npx tauri build --target ${{ matrix.target }}
         env:
