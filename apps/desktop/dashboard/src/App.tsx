@@ -15,7 +15,7 @@ import { Dashboard } from "./views/Dashboard.tsx";
 import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
-import { Simulator } from "./views/Simulator.tsx";
+import { FaultReplay } from "./views/FaultReplay.tsx";
 import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
@@ -46,9 +46,11 @@ function parse(hash: string): Route {
   if (h.startsWith("library/")) return { view: "library", dir: decodeURIComponent(h.slice(8)) };
   if (h.startsWith("record?")) return { view: "record", url: new URLSearchParams(h.slice(7)).get("url") ?? "" };
   if (h === "overview") return { view: "dashboard" };
+  // `#simulator?scenario=…` picks a scenario; the query is read by the view itself.
+  const bare = h.split("?")[0] ?? h;
   if (h === "mobile") return { view: "mobile" };
-  if (h === "runs" || h === "fixtures" || h === "experiments" || h === "simulator" || h === "record" || h === "library" || h === "settings" || h === "schedules" || h === "dashboard")
-    return { view: h };
+  if (bare === "runs" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
+    return { view: bare } as Route;
   return { view: "dashboard" };
 }
 
@@ -227,9 +229,9 @@ export function App() {
                 {index && route.view === "dashboard" && <Dashboard index={index} me={me} go={go} />}
                 {index && route.view === "runs" && <Runs index={index} go={go} />}
                 {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
-                {index && route.view === "experiments" && <Experiments index={index} />}
+                {index && route.view === "experiments" && <Experiments index={index} go={go} />}
                 {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
-                {index && route.view === "simulator" && <Simulator index={index} go={go} refresh={refresh} />}
+                {index && route.view === "simulator" && <FaultReplay index={index} go={go} />}
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
                 {route.view === "settings" && <Settings me={me} />}

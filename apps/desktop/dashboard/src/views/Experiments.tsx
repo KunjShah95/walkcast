@@ -1,4 +1,5 @@
 import { formatInterval } from "../../../../../packages/core/src/lab/stats.ts";
+import type { Route } from "../App.tsx";
 import { Empty, Panel, PanelHeader } from "../components/ui.tsx";
 import { faultLabel, cn, label, ms } from "../lib/format.ts";
 import type { ExperimentSummary, LabIndex } from "../lib/types.ts";
@@ -6,16 +7,26 @@ import type { ExperimentSummary, LabIndex } from "../lib/types.ts";
 /** The summary as stored (and served): `falseSuccess` is absent in experiments run before it existed. */
 type Summary = ExperimentSummary["summary"];
 
-export function Experiments({ index }: { index: LabIndex }) {
+export function Experiments({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
   const experimentsAll = index.experiments ?? [];
   if (experimentsAll.length === 0) {
     return (
       <Empty
-        title="No experiments yet"
+        title="No agent comparison yet"
         tone="signal"
         icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6L4.6 18.4A1.7 1.7 0 0 0 6.1 21h11.8a1.7 1.7 0 0 0 1.5-2.6L14 9V3" /><path d="M7.2 15h9.6" /></svg>}
+        action={
+          <button
+            type="button"
+            onClick={() => go({ view: "simulator" })}
+            className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
+          >
+            Compare agents on a real failure
+          </button>
+        }
       >
-        Run <code className="font-mono">npm run lab -- experiment --seeds 5 --trials 3</code> to measure detection, reproduction and pass^k.
+        This page compares two or more agent versions against the same failures, repeatedly, so a difference in reliability is a measurement rather
+        than an opinion. Once you have more than one version running, it fills itself in.
       </Empty>
     );
   }

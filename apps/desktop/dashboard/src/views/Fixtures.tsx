@@ -8,11 +8,21 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
   if (fixturesAll.length === 0) {
     return (
       <Empty
-        title="No fixtures yet"
+        title="Nothing to guard against yet"
         tone="signal"
         icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>}
+        action={
+          <button
+            type="button"
+            onClick={() => go({ view: "simulator" })}
+            className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
+          >
+            Browse the failure library
+          </button>
+        }
       >
-        A failed run writes one automatically: <code className="font-mono">npm run lab -- run --fault gateway-timeout --agent v0</code>
+        A regression guard is saved automatically the first time an agent gets something wrong. It freezes the app, the data and the failure, so the
+        same case can be re-checked on every future change.
       </Empty>
     );
   }

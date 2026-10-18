@@ -16,7 +16,7 @@ type Attempt = { url: string; status: "running" | "failed"; message: string; at:
  * how far to walk, which voice. While it records, the job panel shows what the browser is doing.
  */
 export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; refresh: () => Promise<LabIndex>; initialUrl?: string; go: (r: Route) => void }) {
-  const [prefs] = usePrefs();
+  const [prefs, setPrefs] = usePrefs();
   const [url, setUrl] = useState(initialUrl ?? "");
   const [signIn, setSignIn] = useState(false);
   const [username, setUsername] = useState("");

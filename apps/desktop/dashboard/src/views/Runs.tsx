@@ -53,11 +53,21 @@ export function Runs({ index, go }: { index: LabIndex; go: (r: Route) => void })
       {runs.length === 0 ? (
         index.runs.length === 0 ? (
           <Empty
-            title="No lab runs yet"
+            title="No agent runs recorded yet"
             tone="signal"
             icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6L4.6 18.4A1.7 1.7 0 0 0 6.1 21h11.8a1.7 1.7 0 0 0 1.5-2.6L14 9V3" /><path d="M7.2 15h9.6" /></svg>}
+            action={
+              <button
+                type="button"
+                onClick={() => go({ view: "simulator" })}
+                className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
+              >
+                See what a run looks like
+              </button>
+            }
           >
-            Replay a fault from Fault replay, or run <code className="font-mono">npm run lab -- run --fault stale-owners --agent v0</code>.
+            This is where every agent run lands, newest first, with the verdict and the evidence behind it. Until you record one, start with Fault replay —
+            it walks through the same checks on a worked example.
           </Empty>
         ) : (
           <Empty title="No runs match these filters" tone="muted" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11" /><circle cx="4.5" cy="6.5" r="1.1" fill="currentColor" /><circle cx="4.5" cy="12" r="1.1" fill="currentColor" /><circle cx="4.5" cy="17.5" r="1.1" fill="currentColor" /></svg>}>

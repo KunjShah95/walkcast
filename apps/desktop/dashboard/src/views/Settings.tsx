@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { VoicePicker } from "../components/Studio.tsx";
+import { TtsPicker } from "../components/TtsPicker.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
 import { Updates } from "../components/Updates.tsx";
 import { type Capabilities, type Me, type Voice, isSnapshot, loadCapabilities } from "../lib/api.ts";
@@ -62,26 +63,16 @@ export function Settings({ me }: { me: Me | null }) {
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">Narration voice</span>
             <p className="text-[12.5px] text-ink-3">Used for every new walkthrough. You can change it per recording afterwards.</p>
-            <div className="mt-1">
-              <VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />
-            </div>
-            <div className="grid gap-1.5">
-              <span className="text-[13px] font-medium">TTS provider</span>
-              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in the server environment. The default is the built-in voice: Windows speech on Windows, flite elsewhere.</p>
-              <select value={prefs.ttsProvider} onChange={(e) => setPrefs({ ttsProvider: e.target.value as TtsProvider })} className="h-9 max-w-md rounded-lg border border-line bg-panel px-3 text-[13px]">
-                <option value="flite">Built-in voice (local, offline)</option>
-                <option value="sarvam">Sarvam (Indian)</option>
-                <option value="bhashini">Bhashini (Indian, govt)</option>
-                <option value="elevenlabs">ElevenLabs</option>
-                <option value="google">Google Cloud</option>
-                <option value="azure">Azure</option>
-                <option value="awspolly">AWS Polly</option>
-                <option value="openai">OpenAI</option>
-                <option value="murf">Murf</option>
-                <option value="reverie">Reverie</option>
-                <option value="custom">Custom / Maya</option>
-                <option value="custom-voice">Custom voice (uploaded sample)</option>
-              </select>
+            <div className="mt-1 grid max-w-md gap-3">
+              <TtsPicker
+                provider={prefs.ttsProvider}
+                voice={prefs.ttsVoices[prefs.ttsProvider] ?? ""}
+                selectClassName="h-9 w-full rounded-lg border border-line bg-panel px-3 text-[13px]"
+                onProvider={(ttsProvider: TtsProvider) => setPrefs({ ttsProvider })}
+                onVoice={(v) => setPrefs({ ttsVoices: { ...prefs.ttsVoices, [prefs.ttsProvider]: v } })}
+                localVoicePicker={<VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />}
+              />
+              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. The default is the built-in voice: Windows speech on Windows, flite elsewhere.</p>
             </div>
           </div>
           <label className="grid gap-1.5">
