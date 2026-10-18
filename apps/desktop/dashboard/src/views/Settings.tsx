@@ -214,6 +214,7 @@ interface CredKey { env: string; label: string; set: boolean }
 
 function Credentials() {
   const [keys, setKeys] = useState<CredKey[]>([]);
+  const [editable, setEditable] = useState(true);
   const [values, setValues] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -222,8 +223,9 @@ function Credentials() {
     try {
       const res = await fetch("/api/credentials");
       if (!res.ok) return;
-      const body = (await res.json()) as { keys: CredKey[] };
+      const body = (await res.json()) as { keys: CredKey[]; editable?: boolean };
       setKeys(body.keys ?? []);
+      setEditable(body.editable ?? true);
     } catch { /* ignore */ }
   }
   useEffect(() => { void load(); }, []);
@@ -249,7 +251,11 @@ function Credentials() {
     <Panel>
       <PanelHeader eyebrow="Credentials" title="API keys" aside={<span className="font-mono text-[11.5px] text-ink-3">stored locally, never sent to the browser again</span>} />
       <div className="grid gap-2 px-4 py-4">
-        <p className="text-[12.5px] text-ink-3">Enter API keys for cloud providers (TTS and LLM). Saved to this machine and applied immediately.</p>
+        <p className="text-[12.5px] text-ink-3">
+          {editable
+            ? "Enter API keys for cloud providers (TTS and LLM). Saved to this machine and applied immediately."
+            : "These keys belong to the server, so only its operator can change them. They apply to every account here."}
+        </p>
         {status && <p className="text-[12.5px] text-ink-2">{status}</p>}
         <ul className="grid gap-2">
           {keys.map((k) => (

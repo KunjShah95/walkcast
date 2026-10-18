@@ -234,7 +234,11 @@ export function createApp(o: ServeOptions = {}): App {
   // page content from everyone's runs, or delete the operator's keys. Fail closed — writing them
   // is refused whenever accounts exist unless an operator explicitly opts back in. Reading which
   // keys are set stays open; it exposes no values.
-  const credentialsEditable = !requireAuth || process.env.LAB_CREDENTIALS_EDITABLE === "1";
+  // The desktop app is deliberately excluded: it runs one account on that person's own machine and
+  // writes the keys to their own app-data directory, so Settings must keep working there even
+  // though releases set WALKCAST_REQUIRE_ACCOUNTS=1. The restriction targets a *hosted* server
+  // shared between accounts.
+  const credentialsEditable = !requireAuth || Boolean(o.desktop) || process.env.LAB_CREDENTIALS_EDITABLE === "1";
   const store = o.store ?? createStore(root);
   const media = o.media ?? createMedia(root);
   const data = new LabData(root);
@@ -559,7 +563,7 @@ export function createApp(o: ServeOptions = {}): App {
     // ---------------------------------------------------------------- credentials
     if (url.pathname === "/api/credentials" && req.method === "GET") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      return json(200, { keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: Boolean(process.env[k.env]) })) });
+      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: Boolean(process.env[k.env]) })) });
     }
     if (url.pathname === "/api/credentials" && req.method === "POST") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
