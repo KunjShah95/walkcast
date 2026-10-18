@@ -94,3 +94,16 @@ test("first-run sample site: a demo job records a sample CRM the worker starts i
     await worker.stop(1000);
   }
 });
+
+test("sign-in wall: nothing of the app is served before sign-in, and there is no way around it", async () => {
+  const app = await fetch(`${srv.url}/app`, { redirect: "manual" });
+  assert.equal(app.status, 302);
+  assert.equal(app.headers.get("location"), `/login?next=${encodeURIComponent("/app")}`);
+  assert.equal((await fetch(`${srv.url}/api/index`)).status, 401);
+  const login = await (await fetch(`${srv.url}/login`)).text();
+  assert.ok(!login.includes("without an account"), "no skip link when sign-in is required");
+  const cookie = await account("wall@example.com");
+  const signedIn = await call(cookie, "/app", { redirect: "manual" });
+  assert.equal(signedIn.status, 200);
+  assert.match(await signedIn.text(), /<html/i);
+});

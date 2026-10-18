@@ -54,6 +54,11 @@ try {
 const shipped = PUBLIC_KEYS.map((k) => [k, process.env[k] ?? dotenv[k]] as const).filter(([, v]) => v);
 writeFileSync(join(OUT, "desktop.env"), shipped.map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
 console.log(shipped.length ? `Accounts: Supabase (${shipped.map(([k]) => k).join(", ")})` : "Accounts: none configured (local only)");
+// Release builds must sign people in through Supabase: an installer without it silently falls back
+// to accounts that exist only on one machine.
+if (process.env.WALKCAST_REQUIRE_ACCOUNTS === "1" && !(shipped.some(([k]) => k === "SUPABASE_URL") && shipped.some(([k]) => k !== "SUPABASE_URL"))) {
+  throw new Error("WALKCAST_REQUIRE_ACCOUNTS=1 but SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY) are not set");
+}
 
 // Runtime packages: every bare import in the staged sources, mapped to its package name.
 const builtins = new Set(builtinModules);

@@ -173,6 +173,96 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
   app.restart();
 }
 
+/// How long a launch waits for the update feed before opening the app anyway.
+const LAUNCH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+/// How often a running app looks for a new release.
+const RECHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+
+fn set_splash(window: &WebviewWindow, message: &str) {
+  let text = serde_json::to_string(message).unwrap_or_else(|_| "\"Updating Walkcast…\"".into());
+  let _ = window.eval(&format!("document.querySelector('p').textContent = {text};"));
+}
+
+fn auto_update_disabled() -> bool {
+  std::env::var("WALKCAST_NO_AUTO_UPDATE").map(|v| v == "1").unwrap_or(false)
+}
+
+/// At launch, before the app opens: if a newer signed release exists, install it and restart into
+/// it, so people are always on the latest version without doing anything. Returns false (open the
+/// app as usual) when there is no update, the feed can't be reached in time, or anything fails.
+async fn update_at_launch(app: &AppHandle, window: &WebviewWindow) -> bool {
+  if auto_update_disabled() {
+    return false;
+  }
+  let updater = match app.updater_builder().timeout(LAUNCH_CHECK_TIMEOUT).build() {
+    Ok(updater) => updater,
+    Err(e) => {
+      log::warn!("updater unavailable: {e}");
+      return false;
+    }
+  };
+  let update = match updater.check().await {
+    Ok(Some(update)) => update,
+    Ok(None) => return false,
+    Err(e) => {
+      log::warn!("update check failed at launch: {e}");
+      return false;
+    }
+  };
+  log::info!("updating to {} at launch", update.version);
+  set_splash(window, &format!("Updating Walkcast to {}…", update.version));
+  let bytes = match update.download(|_, _| {}, || {}).await {
+    Ok(bytes) => bytes,
+    Err(e) => {
+      log::warn!("update download failed: {e}");
+      return false;
+    }
+  };
+  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
+    let _ = child.kill();
+  }
+  if let Err(e) = update.install(bytes) {
+    log::error!("update install failed: {e}");
+    return false;
+  }
+  app.restart();
+}
+
+/// While the app runs: look for a release every few hours and, when one appears, show a banner in
+/// the dashboard with a one-click restart. If it's ignored, the next launch installs it anyway.
+fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
+  if auto_update_disabled() {
+    return;
+  }
+  std::thread::spawn(move || loop {
+    std::thread::sleep(RECHECK_EVERY);
+    let found = tauri::async_runtime::block_on(async {
+      app.updater().ok()?.check().await.ok().flatten().map(|u| u.version)
+    });
+    if let Some(version) = found {
+      log::info!("update {version} is available; offering a restart");
+      let label = serde_json::to_string(&format!("Walkcast {version} is ready.")).unwrap_or_default();
+      let _ = window.eval(&format!(
+        r#"(() => {{
+  if (document.getElementById("walkcast-update")) return;
+  const bar = document.createElement("div");
+  bar.id = "walkcast-update";
+  bar.setAttribute("role", "status");
+  bar.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;gap:12px;align-items:center;padding:10px 14px;border-radius:12px;background:#1b1a17;color:#fff;font:14px system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25)";
+  const text = document.createElement("span");
+  text.textContent = {label};
+  const go = document.createElement("button");
+  go.textContent = "Restart now";
+  go.style.cssText = "border:0;border-radius:999px;padding:6px 12px;background:#9c5700;color:#fff;font-weight:600;cursor:pointer";
+  go.onclick = () => {{ go.disabled = true; go.textContent = "Updating…"; window.__TAURI__.core.invoke("install_update").catch((e) => {{ go.textContent = "Update failed"; text.textContent = String(e); }}); }};
+  bar.append(text, go);
+  document.body.append(bar);
+}})();"#
+      ));
+    }
+  });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -204,10 +294,13 @@ pub fn run() {
         let started = Instant::now();
         while started.elapsed() < STARTUP_TIMEOUT && !exited.load(Ordering::SeqCst) {
           if healthy(port) {
+            // Install a pending release first; on success the app restarts and never gets here.
+            tauri::async_runtime::block_on(update_at_launch(&handle, &window));
             let url = Url::parse(&format!("http://127.0.0.1:{port}/app")).expect("a valid local URL");
             if let Err(e) = window.navigate(url) {
               log::error!("could not open the app: {e}");
             }
+            watch_for_updates(handle.clone(), window.clone());
             return;
           }
           std::thread::sleep(Duration::from_millis(200));

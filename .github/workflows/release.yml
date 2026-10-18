@@ -23,6 +23,14 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
+    env:
+      # Shipped in the installer (desktop.env) so sign-in goes through the project's Supabase Auth.
+      # Both are public by design (the anon key can't read RLS-protected tables); they are repo
+      # variables, not secrets. Staging fails if either is missing, instead of shipping a build
+      # with local-only accounts.
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      WALKCAST_REQUIRE_ACCOUNTS: "1"
     steps:
       - uses: actions/checkout@v7
 

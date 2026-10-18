@@ -341,7 +341,7 @@ export function createApp(o: ServeOptions = {}): App {
       return send(
         200,
         "text/html; charset=utf-8",
-        authPage(mode, { skip: Boolean(o.desktop), google: opts.google, openrouter: opts.openrouter, chatgpt: opts.chatgpt, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
+        authPage(mode, { skip: Boolean(o.desktop) && !requireAuth, google: opts.google, openrouter: opts.openrouter, chatgpt: opts.chatgpt, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
       );
     }
 
@@ -909,6 +909,8 @@ try {
       return streamFile(req, res, abs, type, "private, max-age=3600");
     }
     if (url.pathname === "/app" || url.pathname === "/app/") {
+      // Nothing of the app is shown before sign-in when accounts are required: not even the shell.
+      if (requireAuth && !user) return redirect(`/login?next=${encodeURIComponent("/app")}`);
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",

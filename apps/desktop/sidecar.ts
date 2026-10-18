@@ -12,9 +12,10 @@ import { parseArgs } from "node:util";
  *   - Everything is local by default. Recordings, runs and the queue live under the data
  *     directory; hosted-database settings in the environment are ignored unless the person opts
  *     in with WALKCAST_DATABASE_URL (their own Supabase connection string, never shipped).
- *   - Signing in is optional. With Supabase configured (desktop.env, written by the staging
- *     script: the project URL and its public anon key, nothing secret) people can create an account
- *     or sign in, Google included via the system browser; without one, nothing is gated.
+ *   - Signing in is required before anything of the app is shown. With Supabase configured
+ *     (desktop.env, written by the staging script: the project URL and its public anon key,
+ *     nothing secret) accounts live in Supabase, Google included via the system browser; without
+ *     it, accounts are local to this machine. LAB_AUTH=off turns the gate off for development.
  *   - Chromium is downloaded once, on first run, into the data directory (it is too large to ship
  *     in the installer). The dashboard shows the progress (/api/browser), and a recording asked for
  *     before it finishes is refused with a message saying so.
@@ -78,9 +79,10 @@ mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true });
 const { installChromium } = await import("../../packages/core/src/record/browser-install.ts");
 const { serveDashboard } = await import("./server/server.ts");
 
-// One person on one machine: the dashboard opens without signing in. Accounts stay available
-// (Sign in / Create account); LAB_AUTH=on makes them required.
-const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: process.env.LAB_AUTH === "on", desktop: true });
+// Sign-in first: the app shows nothing until the person has an account and is signed in (through
+// Supabase when desktop.env configures it, which release builds always do). LAB_AUTH=off restores
+// the old open-on-launch behaviour for local development.
+const server = await serveDashboard(port, { root, host: "127.0.0.1", requireAuth: process.env.LAB_AUTH !== "off", desktop: true });
 installChromium();
 
 let stopping = false;
