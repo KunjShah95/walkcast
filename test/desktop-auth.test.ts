@@ -45,29 +45,34 @@ test("Google sign-in goes through the system browser and lands in the app window
   // The app window asks for Google: the server opens the system browser and shows a waiting page.
   const start = await fetch(`${srv.url}/auth/google?next=${encodeURIComponent("/app#library")}`);
   assert.equal(start.status, 200);
-  assert.match(await start.text(), /Continue in your browser/);
+  // The desktop test server binds a random port (never 4317), so the sidecar could not take the
+  // allow-listed loopback port and Google sign-in comes back through walkcast:// instead.
+  assert.match(await start.text(), /Check Walkcast/);
   const authorize = new URL(opened.at(-1)!);
   assert.equal(authorize.origin + authorize.pathname, `${gotrue.url}/auth/v1/authorize`);
   const redirectTo = new URL(authorize.searchParams.get("redirect_to")!);
-  const state = /^\/auth\/desktop\/callback\/([\w-]+)$/.exec(redirectTo.pathname)?.[1];
+  // In deep-link mode the redirect target is walkcast://auth/callback?state=... because the
+  // sidecar could not take port 4317 (the test server never can). In loopback mode it is
+  // http://127.0.0.1:4317/auth/desktop/callback/<state>.
+  const state = redirectTo.searchParams.get("state");
   assert.ok(state, `redirect_to carries the flow's state: ${redirectTo}`);
-  assert.equal(redirectTo.origin, srv.url);
+  assert.equal(redirectTo.protocol, "walkcast:");
 
-  // Nothing yet.
-  assert.equal((await poll(state)).status, 202);
-
-  // The system browser: Google consents, Supabase redirects back to the local server, no cookies.
+  // The OS would hand the code to the app window; simulate that by POSTing it over the app's
+  // own origin, exactly as lib/deep-link.ts does in production.
   const back = await fetch(authorize, { redirect: "manual", headers: { apikey: gotrue.anonKey } });
-  const landing = await fetch(back.headers.get("location")!, { redirect: "manual" });
-  assert.equal(landing.status, 200);
-  assert.match(await landing.text(), /You.re signed in/);
-  assert.equal(landing.headers.get("set-cookie"), null, "the browser tab gets no session");
-
-  // The app window's next poll takes the session.
-  const claimed = await poll(state);
-  assert.equal(claimed.status, 200);
-  assert.deepEqual(await claimed.json(), { next: "/app#library" });
-  const cookie = claimed.headers.get("set-cookie")!.split(";")[0]!;
+  const code = new URL(back.headers.get("location")!).searchParams.get("code");
+  assert.ok(code, "Supabase issues a code on the redirect");
+  const exchange = await fetch(`${srv.url}/auth/desktop/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state, code }),
+  });
+  const exchangeBody = await exchange.text();
+  console.log("EXCHANGE", exchange.status, exchangeBody);
+  assert.equal(exchange.status, 200, exchangeBody);
+  assert.deepEqual(JSON.parse(exchangeBody), { next: "/app#library" });
+  const cookie = exchange.headers.get("set-cookie")!.split(";")[0]!;
   const me = (await (await fetch(`${srv.url}/api/me`, { headers: { cookie } })).json()) as { user: { email: string } };
   assert.equal(me.user.email, "gina@example.com");
 
@@ -149,20 +154,25 @@ describe("the desktop app with an account required", () => {
     assert.equal(start.status, 200, "the waiting page is served: it is not behind the wall");
     const authorize = new URL(lockedOpened.at(-1)!);
     const redirectTo = new URL(authorize.searchParams.get("redirect_to")!);
-    const state = /^\/auth\/desktop\/callback\/([\w-]+)$/.exec(redirectTo.pathname)?.[1];
+    const state = redirectTo.searchParams.get("state");
     assert.ok(state, `redirect_to carries the flow's state: ${redirectTo}`);
+    assert.equal(redirectTo.protocol, "walkcast:");
 
     // Google consents in the system browser, which shares no cookies with the app window.
     const back = await fetch(authorize, { redirect: "manual", headers: { apikey: gotrue.anonKey } });
-    const landing = await fetch(back.headers.get("location")!, { redirect: "manual" });
-    assert.equal(landing.status, 200);
-    assert.match(await landing.text(), /You.re signed in/);
-    assert.equal(landing.headers.get("set-cookie"), null, "the browser tab gets no session");
+    const code = new URL(back.headers.get("location")!).searchParams.get("code");
+    assert.ok(code, "Supabase issues a code on the redirect");
 
-    const claimed = await fetch(`${locked.url}/auth/desktop/poll/${state}`, { method: "POST" });
-    assert.equal(claimed.status, 200);
-    assert.deepEqual(await claimed.json(), { next: "/app#library" });
-    const cookie = claimed.headers.get("set-cookie")!.split(";")[0]!;
+    // The app window receives the code through the OS and swaps it for a session.
+    const exchange = await fetch(`${locked.url}/auth/desktop/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, code }),
+    });
+    const exchangeBody = await exchange.text();
+    assert.equal(exchange.status, 200, exchangeBody);
+    assert.deepEqual(JSON.parse(exchangeBody), { next: "/app#library" });
+    const cookie = exchange.headers.get("set-cookie")!.split(";")[0]!;
 
     // The wall is down for this session.
     const authed = (path: string, init: RequestInit = {}) => fetch(`${locked.url}${path}`, { ...init, headers: { cookie, ...(init.headers as Record<string, string> | undefined) } });

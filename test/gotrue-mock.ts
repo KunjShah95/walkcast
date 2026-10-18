@@ -162,7 +162,9 @@ export class GoTrueMock {
         this.users.push(user);
       }
       const code = this.code(user, url.searchParams.get("code_challenge")!, "signin");
-      return { status: 302, headers: { Location: `${url.searchParams.get("redirect_to")}?code=${code}` } };
+      const redirect = url.searchParams.get("redirect_to") ?? "";
+      const sep = redirect.includes("?") ? "&" : "?";
+      return { status: 302, headers: { Location: `${redirect}${sep}code=${code}` } };
     }
     if (path === "/recover" && req.method === "POST") {
       const user = this.users.find((u) => u.email === body.email);
