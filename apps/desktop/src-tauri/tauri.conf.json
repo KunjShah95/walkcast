@@ -38,6 +38,13 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "walkcast"
+        ]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFQjM1Q0ZDRUJCQTZDMDcKUldRSGJMcnIvRnl6bmpYbXJrcjJpUUVSdFloL01GcHZqNEJQYy9UY3RlYy9LU3c3bTB6WDhjaEsK",
       "endpoints": [

@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "deep-link",
+  "description": "Lets the app receive the walkcast:// callback that browser sign-in returns through, and read the URL the OS launched it with at startup. Without a fixed loopback port, a busy 4317 can no longer strand the flow.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*"]
+  },
+  "permissions": ["deep-link:default"]
+}

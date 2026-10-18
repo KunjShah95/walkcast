@@ -26,6 +26,11 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Browser sign-in returns through the walkcast:// scheme instead of a fixed loopback port, so a
+# taken port 4317 can no longer strand the flow. One instance only, so a second launch focuses the
+# first instead of quietly stealing the preferred port.
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 # Only so the tests can exercise Tauri's own capability-URL matcher against the pattern in

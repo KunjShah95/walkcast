@@ -383,6 +383,16 @@ fn watch_recording(app: &AppHandle, started: Arc<AtomicBool>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // Must be first: a second launch must focus the running app and exit rather than start a
+    // second sidecar on a random port, which is the usual reason 4317 is unavailable.
+    .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+      }
+    }))
+    .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_updater::Builder::new().build())

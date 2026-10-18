@@ -41,6 +41,16 @@ export interface SupabaseAuthConfig {
   anonKey: string;
 }
 
+/**
+ * The port Supabase's redirect allow-list pins for the desktop app. It matches PREFERRED_PORT in
+ * src-tauri/src/lib.rs; when the sidecar cannot get it, browser sign-in has to come back through
+ * the app's own URL scheme instead.
+ */
+export const LOOPBACK_PORT = 4317;
+
+/** Must match the scheme registered in src-tauri/tauri.conf.json (plugins.deep-link). */
+export const DEEP_LINK_SCHEME = "walkcast";
+
 export function supabaseAuthConfig(env = process.env): SupabaseAuthConfig | null {
   const url = env.SUPABASE_URL;
   const anonKey = env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
@@ -180,18 +190,25 @@ export class SupabaseAuth extends Sessions {
    */
   private desktopFlows = new Map<string, { verifier: string; next: string; at: number; user?: User; error?: string }>();
 
-  desktopGoogleStart(next: string): { state: string; url: string } {
+  desktopGoogleStart(next: string): { state: string; url: string; mode: "loopback" | "link" } {
     for (const [k, v] of this.desktopFlows) if (Date.now() - v.at > 15 * 60_000) this.desktopFlows.delete(k);
     const { verifier, challenge } = pkce();
     const state = randomBytes(24).toString("base64url");
     this.desktopFlows.set(state, { verifier, next: safeNext(next), at: Date.now() });
+    // Supabase only honours a redirect URL it has been told about, and the desktop entry is
+    // pinned to port 4317. When this run could not get that port, a loopback return would be
+    // rejected by Supabase and the user would sit on "Waiting for the browser…" for 15 minutes
+    // with no explanation. So use the walkcast:// scheme instead, which is port-independent, and
+    // only fall back to the loopback redirect if the scheme turns out not to be registered.
+    const mode: "loopback" | "link" = new URL(this.siteUrl).port === String(LOOPBACK_PORT) ? "loopback" : "link";
+    const redirectTo = mode === "loopback" ? `${this.siteUrl}/auth/desktop/callback/${state}` : `${DEEP_LINK_SCHEME}://auth/callback?state=${state}`;
     const params = new URLSearchParams({
       provider: "google",
-      redirect_to: `${this.siteUrl}/auth/desktop/callback/${state}`,
+      redirect_to: redirectTo,
       code_challenge: challenge,
       code_challenge_method: "s256",
     });
-    return { state, url: `${this.cfg.url}/auth/v1/authorize?${params}` };
+    return { state, url: `${this.cfg.url}/auth/v1/authorize?${params}`, mode };
   }
 
   /** The system browser's return from Google. Completes the flow for the app window to claim. */
@@ -209,6 +226,28 @@ export class SupabaseAuth extends Sessions {
       flow.user = await this.adopt(session);
     } catch (e) {
       flow.error = e instanceof AuthError ? e.message : "Sign-in failed. Please try again.";
+      throw e;
+    }
+  }
+
+  /**
+   * The walkcast:// return. The OS hands the code to the app window rather than to a browser tab,
+   * so the same exchange as {@link desktopCallback} happens over the app's own origin. The flow is
+   * keyed by the same `state`, so it is still single-use.
+   */
+  async desktopDeepLinkCallback(state: string, code: string): Promise<{ user: User; next: string }> {
+    const flow = this.desktopFlows.get(state);
+    if (!flow || Date.now() - flow.at > 15 * 60_000) throw new AuthError(400, "This sign-in has expired. Start again from Walkcast.");
+    if (flow.user || flow.error) throw new AuthError(400, "This sign-in has already finished.");
+    try {
+      const session = await this.call<SupabaseSession>("POST", "/token?grant_type=pkce", { auth_code: code, code_verifier: flow.verifier }).catch((e: unknown) => {
+        throw e instanceof SupabaseError && e.status < 500 ? new AuthError(400, "This sign-in link has expired or was already used. Please try again.") : e;
+      });
+      flow.user = await this.adopt(session);
+      return { user: flow.user, next: flow.next };
+    } catch (e) {
+      flow.error = e instanceof AuthError ? e.message : "Sign-in failed. Please try again.";
+      this.desktopFlows.delete(state);
       throw e;
     }
   }

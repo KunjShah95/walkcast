@@ -6,6 +6,7 @@ import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
 import { DotGrid } from "./components/aceternity.tsx";
 import { type Me, isAuthError, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
+import { watchDeepLinks } from "./lib/deep-link.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
@@ -137,9 +138,16 @@ export function App() {
     };
     window.addEventListener("hashchange", onHash);
     window.addEventListener("popstate", onHash);
+    // Browser sign-in can come back through walkcast:// instead of the loopback port. Handles the
+    // URL the OS launched us with (cold start) and any that arrive while we are open.
+    let stopDeepLinks: (() => void) | undefined;
+    void watchDeepLinks().then((stop) => {
+      stopDeepLinks = stop;
+    });
     return () => {
       window.removeEventListener("hashchange", onHash);
       window.removeEventListener("popstate", onHash);
+      stopDeepLinks?.();
     };
   }, []);
 

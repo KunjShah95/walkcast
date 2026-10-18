@@ -13,7 +13,7 @@ import { createMedia, type MediaStore } from "../../../packages/core/src/media/s
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
 import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
-import { defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, voicesFor } from "../../../packages/core/src/record/voices.ts";
+import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
@@ -147,17 +147,11 @@ const TTS_PROVIDERS = ["flite", "elevenlabs", "openai", "google", "azure", "awsp
 
 const TTS_PROVIDER_LABEL: Record<string, string> = {
   flite: "Built-in voice (local, offline)",
-  elevenlabs: "ElevenLabs",
-  openai: "OpenAI",
-  google: "Google Cloud",
-  azure: "Azure",
-  awspolly: "AWS Polly",
   sarvam: "Sarvam (Indian)",
   bhashini: "Bhashini (Indian, govt)",
-  murf: "Murf",
-  reverie: "Reverie",
   custom: "Custom / Maya",
   "custom-voice": "Custom voice (uploaded sample)",
+  ...Object.fromEntries(["elevenlabs", "openai", "google", "azure", "awspolly", "murf", "reverie"].map((p) => [p, providerLabel(p)])),
 };
 
 function credentialsPath(root: string): string {
@@ -425,6 +419,12 @@ export function createApp(o: ServeOptions = {}): App {
       if (o.desktop && auth.kind === "supabase") {
         const flow = auth.desktopGoogleStart(url.searchParams.get("next") ?? "/app#record");
         (o.openExternal ?? openExternal)(flow.url);
+        if (flow.mode === "link") {
+          // Nothing is listening on this tab: the browser is about to be handed to the OS, which
+          // opens Walkcast with the code. Tell the user what to expect instead of showing the
+          // loopback "waiting" page, which would never finish.
+          return send(200, "text/html; charset=utf-8", messagePage("Check Walkcast", "Sign-in continues in the Walkcast window. You can close this tab.", { ok: true }));
+        }
         return send(200, "text/html; charset=utf-8", continueInBrowserPage(flow.state, flow.url));
       }
       return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
@@ -457,6 +457,22 @@ export function createApp(o: ServeOptions = {}): App {
       if ("error" in claim) return json(400, { error: claim.error });
       await auth.startSession(res, claim.user);
       return json(200, { next: safeNext(claim.next) });
+    }
+    // The walkcast:// return, delivered by the OS to the app window. Same-origin, so the session
+    // cookie this sets is one the app already sends.
+    if (url.pathname === "/auth/desktop/exchange" && req.method === "POST" && o.desktop && auth.kind === "supabase") {
+      const b = await readJson(req);
+      const state = String(b.state ?? "");
+      const code = String(b.code ?? "");
+      if (!/^[\w-]{20,64}$/.test(state) || !code) return json(400, { error: "That sign-in link is incomplete." });
+      try {
+        const r = await auth.desktopDeepLinkCallback(state, code);
+        await auth.startSession(res, r.user);
+        return json(200, { next: safeNext(r.next) });
+      } catch (e) {
+        if (!(e instanceof AuthError)) throw e;
+        return json(400, { error: e.message });
+      }
     }
     if (url.pathname === "/auth/callback" && auth.kind === "supabase") {
       try {
@@ -753,6 +769,14 @@ try {
       const kind = url.pathname === "/api/run" ? "run" : "record";
       const b = await readJson(req);
       const input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
+      // A cloud voice this process can't reach would silently narrate with the built-in voice, which
+      // reads as "I picked ElevenLabs and got SAPI". When we hold the worker we can say so up front,
+      // instead of returning a video in the wrong voice minutes later.
+      if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
+        const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
+        const env = credentialFor(input.ttsProvider);
+        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would be narrated by the built-in voice instead. Add the key in Settings, or pick the built-in voice.`);
+      }
       // A retried submit (double-click, network retry) gets the job it already created.
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;
       if (idempotencyKey) {
@@ -1094,6 +1118,9 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
       url: "sample:minicrm",
       maxPages: Number.isFinite(pagesIn) ? Math.max(1, Math.min(10, Math.trunc(pagesIn))) : 5,
       ...(isVoice(b.voice) ? { voice: b.voice } : {}),
+      // The sample site narrates with the voice the person picked, like any other recording.
+      ...voiceBlock(b),
+      ...lengthBlock(b),
       blockPrivate: false,
     };
   }
@@ -1106,28 +1133,38 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
     throw new AuthError(400, "That doesn't look like a web address. Paste the full link, starting with https://");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new AuthError(400, "Only http(s) addresses can be recorded.");
-  const pages = Number(b.maxPages);
-  // "polly" and "maya" are older aliases of two providers still in the list.
-  const allowedTts = [...TTS_PROVIDERS, "polly", "maya"];
-  const ttsProvider = typeof b.ttsProvider === "string" && allowedTts.includes(b.ttsProvider.toLowerCase() as typeof allowedTts[number]) ? b.ttsProvider.toLowerCase() : undefined;
-  // A chosen voice must be one this provider actually has, unless the provider has no public list
-  // (Murf, a custom endpoint), where the id is passed through as typed.
-  const chosen = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
-  const list = ttsProvider ? voicesFor(ttsProvider) : [];
-  const ttsVoice = ttsProvider && chosen && (list.length === 0 || list.some((v) => v.id === chosen)) ? chosen : undefined;
-  // A language is only meaningful where the provider needs one and the voice doesn't carry it.
-  const asked = typeof b.ttsLanguage === "string" ? b.ttsLanguage.trim().slice(0, 20) : "";
-  const ttsLanguage = ttsProvider && /^[a-z]{2,3}([-_][A-Za-z]{2,4})?$/i.test(asked) ? asked.replace("_", "-") : undefined;
   return {
     url: url.toString(),
     ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
-    maxPages: Number.isFinite(pages) ? Math.max(1, Math.min(30, Math.trunc(pages))) : 8,
+    maxPages: Number.isFinite(Number(b.maxPages)) ? Math.max(1, Math.min(30, Math.trunc(Number(b.maxPages)))) : 8,
+    ...lengthBlock(b),
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
-    ...(ttsProvider ? { ttsProvider } : {}),
-    ...(ttsVoice ? { ttsVoice } : {}),
-    ...(ttsLanguage ? { ttsLanguage } : {}),
+    ...voiceBlock(b),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
+}
+
+/** The length cap in seconds, or nothing for "as many pages as it reaches". */
+function lengthBlock(b: Record<string, unknown>): { maxSeconds?: number } {
+  const asked = Number(b.maxSeconds);
+  return Number.isFinite(asked) && asked > 0 ? { maxSeconds: Math.max(15, Math.min(3600, Math.trunc(asked))) } : {};
+}
+
+/** The provider, its voice and its language, validated against what that provider actually has. */
+function voiceBlock(b: Record<string, unknown>): { ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string } {
+  // "polly" and "maya" are older aliases of two providers still in the list.
+  const allowed = [...TTS_PROVIDERS, "polly", "maya"];
+  const ttsProvider = typeof b.ttsProvider === "string" && allowed.includes(b.ttsProvider.toLowerCase() as typeof allowed[number]) ? b.ttsProvider.toLowerCase() : undefined;
+  if (!ttsProvider) return {};
+  // A chosen voice must be one this provider actually has, unless the provider has no public list
+  // (Murf, a custom endpoint), where the id is passed through as typed.
+  const chosen = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
+  const list = voicesFor(ttsProvider);
+  const ttsVoice = chosen && (list.length === 0 || list.some((v) => v.id === chosen)) ? chosen : undefined;
+  // A language is only meaningful where the provider needs one and the voice doesn't carry it.
+  const asked = typeof b.ttsLanguage === "string" ? b.ttsLanguage.trim().slice(0, 20) : "";
+  const ttsLanguage = /^[a-z]{2,3}([-_][A-Za-z]{2,4})?$/i.test(asked) ? asked.replace("_", "-") : undefined;
+  return { ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}) };
 }
 
 async function readBodyToTemp(req: IncomingMessage, limit: number, _prefix: string): Promise<string> {
