@@ -103,11 +103,28 @@ export function App() {
   const [index, setIndex] = useState<LabIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
+  const [meReady, setMeReady] = useState(false);
   const [drawer, setDrawer] = useState(false);
 
   useEffect(() => {
     loadIndex().then(setIndex, (e: Error) => setError(e.message));
-    if (!isSnapshot) loadMe().then(setMe);
+    if (!isSnapshot) {
+      // Track "have we asked yet" separately from the answer. `me === null` used to mean both
+      // "signed out" and "not loaded yet", so every launch flashed the Sign in / Create account
+      // buttons at an already-signed-in user.
+      loadMe().then(
+        (m) => {
+          setMe(m);
+          setMeReady(true);
+        },
+        () => {
+          // Could not reach /api/me. Showing signed-out would be a guess, but blocking the app on a
+          // transient blip would be worse, so treat it as signed out and let the next load retry.
+          setMe(null);
+          setMeReady(true);
+        },
+      );
+    }
     const onHash = () => {
       setRoute(parse(location.hash));
       setDrawer(false);
@@ -184,7 +201,7 @@ export function App() {
     };
   }, []);
 
-  const sidebar = <Sidebar active={active} index={index} me={me} go={go} onClose={() => setDrawer(false)} closable={drawer} />;
+  const sidebar = <Sidebar active={active} index={index} me={me} meReady={meReady} go={go} onClose={() => setDrawer(false)} closable={drawer} />;
 
   return (
     <I18nProvider>
@@ -262,8 +279,11 @@ export function App() {
                 {index && route.view === "simulator" && <FaultReplay index={index} go={go} />}
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
-                {route.view === "settings" && <Settings me={me} />}
-                {route.view === "schedules" && <Schedules />}
+                {/* Every view is gated on `index`, which is null whenever there is no session. Settings and
+                  schedules were not, so a stale #settings hash rendered them signed-out and their
+                  fetches silently no-opped on 401. */}
+                {index && route.view === "settings" && <Settings me={me} />}
+                {index && route.view === "schedules" && <Schedules />}
                 {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
                 {index && route.view === "mobile" && <Mobile index={index} go={go} refresh={refresh} />}
             </div>
@@ -280,6 +300,7 @@ function Sidebar({
   active,
   index,
   me,
+  meReady,
   go,
   onClose,
   closable,
@@ -287,6 +308,7 @@ function Sidebar({
   active: Route["view"];
   index: LabIndex | null;
   me: Me | null;
+  meReady: boolean;
   go: (r: Route) => void;
   onClose: () => void;
   closable: boolean;
@@ -350,7 +372,7 @@ function Sidebar({
         </button>
         <div className="mt-2 flex min-w-0 items-center gap-2 px-1">
           <div className="min-w-0 flex-1">
-            <Account me={me} />
+            <Account me={me} ready={meReady} />
           </div>
           <ThemeToggle className="shrink-0" />
         </div>
@@ -359,8 +381,11 @@ function Sidebar({
   );
 }
 
-function Account({ me }: { me: Me | null }) {
+function Account({ me, ready }: { me: Me | null; ready: boolean }) {
   if (isSnapshot) return <span className="text-[12.5px] text-ink-3">Snapshot</span>;
+  // Until /api/me has answered, "signed in" and "signed out" are both unknown. Rendering the
+  // signed-out controls here produced a visible flash on every launch.
+  if (!ready) return <span className="text-[12.5px] text-ink-3">…</span>;
   if (me?.user) {
     const name = me.user.name || me.user.email;
     return (
@@ -369,9 +394,13 @@ function Account({ me }: { me: Me | null }) {
         <span className="min-w-0 truncate text-[12.5px] text-ink-2" title={me.user.email}>
           {name}
         </span>
-        <a href="/auth/logout" title="Sign out" aria-label="Sign out" className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 text-ink-3 hover:bg-panel-2 hover:text-ink">
-          <span className="text-[12px]">Sign out</span>
-        </a>
+        {/* POST, not a link: a GET /auth/logout is reachable from any page on the internet,
+            and SameSite=Lax still sends the cookie on a top-level navigation. */}
+        <form method="post" action="/auth/logout">
+          <button type="submit" title="Sign out" aria-label="Sign out" className="inline-flex h-7 shrink-0 cursor-pointer items-center justify-center rounded-md px-1.5 text-ink-3 hover:bg-panel-2 hover:text-ink">
+            <span className="text-[12px]">Sign out</span>
+          </button>
+        </form>
       </span>
     );
   }

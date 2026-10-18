@@ -135,10 +135,14 @@ function Account({ me }: { me: Me | null }) {
     );
   }
 
-  const links: [string, boolean | undefined, string][] = [
-    ["Google", me.user.google ?? me.google, "/auth/google"],
-    ["OpenRouter", me.user.openrouter ?? me.openrouter, "/auth/openrouter"],
-    ["ChatGPT", me.user.chatgpt ?? me.chatgpt, "/auth/chatgpt"],
+  // "Not connected" and "this server doesn't offer it" are different states. The server turns
+  // OpenRouter and ChatGPT off under Supabase (server.ts forces them false), but the panel still
+  // rendered a Connect button, and following it replaced the whole dashboard with a bare JSON
+  // 503 from the generic error handler.
+const links: { label: string; connected: boolean; available: boolean; href: string }[] = [
+    { label: "Google", connected: Boolean(me.user.google ?? me.google), available: me.google !== false, href: "/auth/google" },
+    { label: "OpenRouter", connected: Boolean(me.user.openrouter ?? me.openrouter), available: me.openrouter !== false, href: "/auth/openrouter" },
+    { label: "ChatGPT", connected: Boolean(me.user.chatgpt ?? me.chatgpt), available: me.chatgpt !== false, href: "/auth/chatgpt" },
   ];
   return (
     <Panel>
@@ -151,7 +155,7 @@ function Account({ me }: { me: Me | null }) {
         <div>
           <div className="mb-2 text-[13px] font-medium">Connected sign-ins</div>
           <ul className="grid gap-1.5 sm:grid-cols-3">
-            {links.map(([label, connected, href]) => (
+            {links.map(({ label, connected, available, href }) => (
               <li key={label}>
                 {connected ? (
                   <span className="flex h-9 items-center gap-2 rounded-lg border border-line bg-panel-2 px-3 text-[13px]">
@@ -159,10 +163,15 @@ function Account({ me }: { me: Me | null }) {
                     {label}
                     <span className="ml-auto text-[12px] text-ink-3">Connected</span>
                   </span>
-                ) : (
+                ) : available ? (
                   <a href={href} className="flex h-9 items-center rounded-lg border border-line px-3 text-[13px] text-ink-2 hover:border-line-strong hover:bg-panel-2 hover:text-ink">
                     Connect {label}
                   </a>
+                ) : (
+                  <span className="flex h-9 items-center gap-2 rounded-lg border border-line px-3 text-[13px] text-ink-3" title={`${label} sign-in is not available on this server.`}>
+                    {label}
+                    <span className="ml-auto text-[12px]">Unavailable</span>
+                  </span>
                 )}
               </li>
             ))}
@@ -171,9 +180,11 @@ function Account({ me }: { me: Me | null }) {
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
           <span className="text-[12.5px] text-ink-3">Signed in{me.provider ? ` via ${me.provider}` : ""}.</span>
-          <a href="/auth/logout" className="rounded-full border border-line-strong px-3.5 py-1.5 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
-            Sign out
-          </a>
+          <form method="post" action="/auth/logout">
+            <button type="submit" className="cursor-pointer rounded-full border border-line-strong px-3.5 py-1.5 text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
     </Panel>

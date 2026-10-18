@@ -152,6 +152,12 @@ async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobS
     await new Promise((r) => setTimeout(r, delay));
     const poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
     if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
+    // 404/410 are permanent, not transient: the job belongs to a different account (the server
+    // hides it as 404) or the queue has forgotten it. Only the 5xx/network cases are worth
+    // retrying — treating 404 as transient spun the recorder forever with no error.
+    if (poll.status === 404 || poll.status === 410) {
+      throw new SignInRequired("This job is no longer available. It belongs to a different account, or the server restarted.");
+    }
     if (!poll.ok) continue; // transient (deploy, network); keep waiting
     job = ((await poll.json()) as { job: JobStatus }).job;
     onProgress?.(job);
@@ -193,14 +199,18 @@ export interface Me {
   authRequired: boolean;
 }
 
-export async function loadMe(): Promise<Me | null> {
-  if (baked) return null;
-  try {
-    const res = await fetch("/api/me");
-    return res.ok ? await res.json() : null;
-  } catch {
-    return null;
-  }
+/**
+ * Who am I. `/api/me` answers anonymously by design: a signed-out visitor gets a 200 with
+ * `user: null`, which is the honest "signed out" signal and must not be confused with a failure.
+ * Anything else (network error, 5xx) is an unknown, so it throws rather than reporting
+ * "signed out" — otherwise a transient blip shows the sign-in wall, and following the sign-in
+ * link bounces straight back to /app because the session was never actually gone.
+ */
+export async function loadMe(): Promise<Me> {
+  if (baked) return { user: null, google: false, openrouter: false, chatgpt: false, authRequired: false };
+  const res = await fetch("/api/me");
+  if (!res.ok) throw new HttpError(res.status, `Could not reach the account service (${res.status}).`);
+  return (await res.json()) as Me;
 }
 
 /** A short spoken sample of a narration voice. */
