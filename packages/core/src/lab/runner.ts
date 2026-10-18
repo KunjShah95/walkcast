@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
@@ -34,6 +34,12 @@ export interface RunOptions {
   cassette?: string;
   /** Live mode: which provider:model serves each channel. Defaults to LAB_AGENT_MODEL / LAB_STAGEHAND_MODEL or Claude. */
   models?: ModelSelection;
+  /**
+   * Replay third-party traffic (anything not served by the test app) from this HAR instead of the
+   * network. Requests the HAR doesn't contain are aborted, so a replay never depends on a
+   * third-party service being up or answering the same way.
+   */
+  har?: string;
 }
 
 export interface RunResult {
@@ -53,6 +59,8 @@ export interface RunResult {
   oracle: OracleResult;
   diagnosis: Diagnosis;
   agentError: string | null;
+  /** Third-party traffic recorded during the run (file name in runDir), or null when there was none. */
+  networkHar: string | null;
   browserVersion: string;
   runDir: string;
   cost?: { mode: string; calls: number; inputTokens: number; outputTokens: number };
@@ -99,6 +107,20 @@ interface Session {
 
 registerSecret("app_password", CREDENTIALS.password);
 
+/** Every http(s)/ws(s) URL except the test app's own origin: what HAR recording and replay cover. */
+export function thirdPartyPattern(appUrl: string): RegExp {
+  const origin = new URL(appUrl).origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^(?!${origin}(?:/|$))(?:https?|wss?)://`);
+}
+
+const BROWSER_LOST = /CDP connection closed|Target page, context or browser has been closed|RPC client is closed|Browser has been closed|browser has disconnected|Target closed/i;
+
+/** "Browser connection lost: …" when a step failed because the browser itself went away. */
+export function browserLost(events: { type: string; error?: string; stepId?: number }[]): string | null {
+  const step = events.find((e) => e.type === "step" && typeof e.error === "string" && BROWSER_LOST.test(e.error));
+  return step ? `Browser connection lost at step ${step.stepId}: ${step.error}` : null;
+}
+
 export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
@@ -119,8 +141,8 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     throw error;
   }
   async function openSession(): Promise<Session> {
-  if (spec.kind === "scripted") {
-    return scriptedSession(spec, runDir, options.video ?? false);
+  if (spec.kind === "scripted" || spec.kind === "plugin") {
+    return scriptedSession(spec, runDir, options.video ?? false, thirdPartyPattern(app.url));
   } else {
     const mode = options.modelMode ?? "live";
     selection = mode === "live" ? (options.models ?? defaultSelection()) : null;
@@ -129,6 +151,15 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     gateway = new ModelGateway(mode, backend, recorder, cassette);
     return stagehandSession(spec, gateway);
   }
+  }
+  if (options.har) {
+    try {
+      await session.context.routeFromHAR(options.har, { url: thirdPartyPattern(app.url), notFound: "abort" });
+    } catch (error) {
+      await session.close().catch(() => undefined);
+      await app.close();
+      throw error;
+    }
   }
   const started = Date.now();
   let agentError: string | null = null;
@@ -142,6 +173,9 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
       agentError = error instanceof Error ? error.message.split("\n")[0]! : String(error);
       if (!recorder.claim()) await tools.done(false, `Agent crashed: ${agentError}`);
     }
+    // An agent that catches the browser dying and reports it honestly didn't throw, but the run
+    // still says nothing about the agent: treat it like a crash (no fixture, agent-error cause).
+    agentError ??= browserLost(recorder.events);
   } finally {
     // Always release the browser and the test app, whatever happened above.
     await session.close().catch(() => undefined);
@@ -149,7 +183,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     // browser, deadline abort), it stays memoized silently, and every later job in this worker
     // fails with "Target closed" — job succeeded from the queue's view, unrecoverable in fact.
     // When the process is dead, drop the memo so the next claim launches a fresh browser.
-    if (spec.kind === "scripted") {
+    if (spec.kind === "scripted" || spec.kind === "plugin") {
       const b = await browser().catch(() => undefined);
       if (!b?.isConnected()) await closeBrowser();
     }
@@ -174,6 +208,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   });
 
   recorder.flush();
+  const networkHar = finishHar(join(runDir, "network.har"));
   if (gateway) gateway.writeCassette(join(runDir, "model-calls.jsonl"));
   const result: RunResult = {
     runId,
@@ -192,6 +227,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     oracle,
     diagnosis,
     agentError,
+    networkHar,
     browserVersion: session.browserVersion,
     runDir,
     cost,
@@ -201,11 +237,14 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   return result;
 }
 
-async function scriptedSession(spec: AgentSpec & { kind: "scripted" }, runDir: string, video: boolean): Promise<Session> {
+async function scriptedSession(spec: AgentSpec & { kind: "scripted" | "plugin" }, runDir: string, video: boolean, thirdParty: RegExp): Promise<Session> {
   const b = await browser();
   const context = await b.newContext({
     viewport: { width: 1920, height: 1080 },
+    // Service workers would answer requests outside both the recorder and the HAR router.
     serviceWorkers: "block",
+    // Third-party traffic only: the app itself must stay live, it is what the oracle reads.
+    recordHar: { path: join(runDir, "network.har"), content: "embed", urlFilter: thirdParty },
     ...(video ? { recordVideo: { dir: runDir, size: { width: 1920, height: 1080 } } } : {}),
   });
   const page = await context.newPage();
@@ -213,9 +252,28 @@ async function scriptedSession(spec: AgentSpec & { kind: "scripted" }, runDir: s
     context,
     page,
     browserVersion: b.version(),
-    run: (tools, task) => runScriptedAgent(tools, task, spec),
+    run: (tools, task) => (spec.kind === "plugin" ? spec.run(tools, task) : runScriptedAgent(tools, task, spec)),
     close: () => context.close(),
   };
+}
+
+/**
+ * Keep the HAR only when it recorded something, with secrets replaced by placeholders like every
+ * other file the run writes. Returns the file name, or null.
+ */
+function finishHar(path: string): string | null {
+  if (!existsSync(path)) return null;
+  try {
+    const har = JSON.parse(readFileSync(path, "utf8")) as { log?: { entries?: unknown[] } };
+    if (!har.log?.entries?.length) {
+      rmSync(path, { force: true });
+      return null;
+    }
+    writeFileSync(path, JSON.stringify(scrub(har)));
+    return "network.har";
+  } catch {
+    return null;
+  }
 }
 
 /** Stagehand drives Chrome; Playwright attaches to the same browser over CDP to capture. */

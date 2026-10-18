@@ -5,7 +5,6 @@ import { RateLimiter } from "./rate-limit.ts";
 // ChatGPT plan usage requires stream: true and store: false; requests cannot carry system-role
 // messages, temperature, max_output_tokens, etc. System prompt goes through `instructions`.
 
-interface ChatGPTResolved { accessToken: string; }
 
 function accessToken(): string {
   const t = lookup("CHATGPT_ACCESS_TOKEN");

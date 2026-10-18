@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
+import { detectInjection } from "./injection.ts";
 import { type PageState, type Recorder, type TargetCheck, redact } from "./recorder.ts";
 
 /** One interactive element as an agent sees it. Compact on purpose: no raw DOM. */
@@ -65,6 +66,8 @@ export class BrowserTools {
       fingerprint: o.fingerprint,
       // Compact control inventory (no values) so runs can be diffed against a baseline.
       controls: o.elements.map((e) => ({ role: e.role, name: e.name, selector: e.selector })),
+      // Instruction-shaped page text (possible prompt injection), quoted for the classifier.
+      ...((): { injection?: string[] } => { const hits = detectInjection(o.text); return hits.length ? { injection: hits } : {}; })(),
     }));
   }
 

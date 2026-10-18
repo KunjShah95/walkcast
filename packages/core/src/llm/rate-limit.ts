@@ -14,7 +14,6 @@ export class TokenBucket {
     this.last = Date.now();
   }
   async acquire(cost = 1): Promise<void> {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const now = Date.now();
       const elapsed = (now - this.last) / 1000;

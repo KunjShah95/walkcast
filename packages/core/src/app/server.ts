@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { type FaultId, type Scenario, type TaskId, normalizeScenario, parseScenario, seededInt } from "./faults.ts";
+import { type FaultId, type FaultPlugin, type Scenario, type TaskId, normalizeScenario, parseScenario, pluginFault, seededInt } from "./faults.ts";
 
 /**
  * MiniCRM: a deliberately small CRM used as the controlled application under test.
@@ -85,8 +85,28 @@ export async function startApp(options: AppOptions): Promise<RunningApp> {
   };
   let nextId = Math.max(1000, ...state.leads.map((l) => l.id)) + 1;
 
+  // Plugin faults: page rewrites wrap every HTML response, request hooks run before the app.
+  const plugins = [...active].map((f) => pluginFault(f)).filter((p): p is FaultPlugin => Boolean(p));
   const server = createServer((req, res) => {
-    handle(req, res).catch((error: unknown) => {
+    const ctx = { path: new URL(req.url ?? "/", "http://localhost").pathname, method: req.method ?? "GET", task, seed };
+    if (plugins.some((p) => p.transformPage)) {
+      const writeHead = res.writeHead.bind(res) as (...a: unknown[]) => ServerResponse;
+      const end = res.end.bind(res) as (...a: unknown[]) => ServerResponse;
+      let html = false;
+      (res as unknown as { writeHead: unknown }).writeHead = (...a: unknown[]) => {
+        const headers = a.find((x) => x && typeof x === "object") as Record<string, string> | undefined;
+        html = /text\/html/.test(String(headers?.["Content-Type"] ?? ""));
+        return writeHead(...a);
+      };
+      (res as unknown as { end: unknown }).end = (chunk?: unknown, ...rest: unknown[]) => {
+        if (html && typeof chunk === "string") for (const p of plugins) if (p.transformPage) chunk = p.transformPage(ctx, chunk as string);
+        return end(chunk, ...rest);
+      };
+    }
+    (async () => {
+      for (const p of plugins) if (p.onRequest && (await p.onRequest({ ...ctx, req, res }))) return;
+      await handle(req, res);
+    })().catch((error: unknown) => {
       if (!res.headersSent) send(res, 500, page("Error", `<p>Internal error</p>`));
       console.error("[minicrm]", error);
     });
@@ -361,7 +381,7 @@ function redirect(res: ServerResponse, location: string, headers: Record<string,
 
 function safeNext(next: string | undefined): string {
   const fallback = "/leads";
-  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return fallback;
+  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next) /* eslint-disable-line no-control-regex -- refusing control characters is the point */) return fallback;
   try {
     const base = "http://same.invalid";
     const url = new URL(next, base);

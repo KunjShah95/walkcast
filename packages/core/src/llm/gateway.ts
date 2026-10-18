@@ -1,9 +1,14 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClientLLM } from "@browserbasehq/stagehand";
 import type { Recorder } from "../capture/recorder.ts";
 import { scrub, unscrub } from "../capture/secrets.ts";
+import { type CassetteEntry as GenericEntry, type CassetteHooks, CassettePlayer, hashRequest, promptText, readCassette as readEntries, writeCassette } from "./cassette.ts";
+
+export { normalizeText, remapElementIds } from "./cassette.ts";
+
+export function readCassette(path: string): CassetteEntry[] {
+  return readEntries<Channel>(path);
+}
 
 /**
  * Every model call made during a run goes through this gateway, whichever component makes it:
@@ -38,17 +43,10 @@ export interface ModelBackend {
   stagehand(params: StagehandParams): Promise<StagehandResult>;
 }
 
-export interface CassetteEntry {
-  channel: Channel;
-  seq: number;
-  requestHash: string;
-  request: unknown;
-  response: unknown;
-  model: string;
-  latencyMs: number;
-  inputTokens?: number;
-  outputTokens?: number;
-}
+export type CassetteEntry = GenericEntry<Channel>;
+
+/** Secrets never reach a cassette: placeholders on disk and in hashes, restored in memory. */
+const HOOKS: CassetteHooks = { redact: scrub, restore: unscrub };
 
 export type GatewayMode = "live" | "replay" | "scripted";
 
@@ -63,17 +61,11 @@ export interface GatewayStatus {
   outputTokens: number;
 }
 
-class ReplayExhaustedError extends Error {
-  constructor(channel: Channel, seq: number) {
-    super(`Replay cassette has no recorded ${channel} call #${seq}; the run diverged from the recording.`);
-  }
-}
-
 export class ModelGateway {
   readonly entries: CassetteEntry[] = [];
   readonly status: GatewayStatus;
   private seq: Record<Channel, number> = { agent: 0, stagehand: 0 };
-  private recorded: Record<Channel, CassetteEntry[]> = { agent: [], stagehand: [] };
+  private player: CassettePlayer<Channel> | null = null;
 
   constructor(
     readonly mode: GatewayMode,
@@ -84,7 +76,7 @@ export class ModelGateway {
     this.status = { mode, calls: 0, drifted: [], exhausted: false, inputTokens: 0, outputTokens: 0 };
     if (mode === "replay") {
       if (!cassette) throw new Error("Replay mode needs a recorded cassette");
-      for (const entry of cassette) this.recorded[entry.channel].push(entry);
+      this.player = new CassettePlayer(cassette, HOOKS);
     } else if (!backend) {
       throw new Error(`Mode '${mode}' needs a model backend`);
     }
@@ -106,27 +98,27 @@ export class ModelGateway {
 
   private async call(channel: Channel, request: unknown, live: (backend: ModelBackend) => Promise<unknown>): Promise<unknown> {
     const seq = this.seq[channel]++;
-    const requestHash = hashRequest(channel, request);
+    let requestHash: string;
     const started = performance.now();
     let response: unknown;
     let model: string;
     let drift = false;
 
-    if (this.mode === "replay") {
-      const entry = this.recorded[channel][seq];
-      if (!entry) {
+    if (this.player) {
+      let played: ReturnType<CassettePlayer<Channel>["next"]>;
+      try {
+        played = this.player.next(channel, request, { remapIds: channel === "stagehand" });
+      } catch (e) {
         this.status.exhausted = true;
-        throw new ReplayExhaustedError(channel, seq);
+        throw e;
       }
-      if (entry.requestHash !== requestHash) {
-        drift = true;
-        this.status.drifted.push({ channel, seq });
-      }
-      // Cassettes hold placeholders, never secrets; restore them only in memory.
-      const recordedResponse = unscrub(entry.response);
-      response = channel === "stagehand" ? remapElementIds(unscrub(entry.request), request, recordedResponse) : recordedResponse;
-      model = `replay:${entry.model}`;
+      requestHash = played.requestHash;
+      drift = played.drift;
+      if (drift) this.status.drifted.push({ channel, seq });
+      response = played.response;
+      model = `replay:${played.entry.model}`;
     } else {
+      requestHash = hashRequest(channel, request, HOOKS);
       response = await live(this.backend!);
       const routed = this.backend as Partial<{ servedBy(c: Channel): string }>;
       model = routed.servedBy ? routed.servedBy(channel) : this.backend!.name;
@@ -153,93 +145,8 @@ export class ModelGateway {
   }
 
   writeCassette(path: string): void {
-    writeFileSync(path, this.entries.map((e) => JSON.stringify(scrub(e))).join("\n") + "\n");
+    writeCassette(path, this.entries, HOOKS);
   }
-}
-
-export function readCassette(path: string): CassetteEntry[] {
-  if (!existsSync(path)) throw new Error(`No cassette at ${path}`);
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as CassetteEntry);
-}
-
-// ------------------------------------------------------------------ normalisation
-
-/** Session-local values that legitimately differ between runs and must not count as drift. */
-export function normalizeText(text: string): string {
-  return text
-    .replace(/https?:\/\/127\.0\.0\.1:\d+/g, "<app>")
-    .replace(/\[\d+-\d+\]/g, "[id]")
-    .replace(/\b0-\d+\b/g, "<id>");
-}
-
-function hashRequest(channel: Channel, request: unknown): string {
-  const normalized = normalizeText(JSON.stringify(stripVolatile(scrub(request))));
-  return createHash("sha256").update(channel + normalized).digest("hex").slice(0, 16);
-}
-
-/** Thinking blocks carry opaque signatures that change every call; ignore them for drift. */
-function stripVolatile(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripVolatile);
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (record.type === "thinking" || record.type === "redacted_thinking") return { type: record.type };
-    return Object.fromEntries(Object.entries(record).filter(([k]) => k !== "id" && k !== "tool_use_id").map(([k, v]) => [k, stripVolatile(v)]));
-  }
-  return value;
-}
-
-/**
- * Stagehand addresses elements by backend node id ("0-17"), which is session-local. Map each id in
- * the recorded response to the accessibility-tree line it referred to in the recorded prompt, then
- * to the id that the same line has in the replayed prompt.
- */
-export function remapElementIds(recordedRequest: unknown, newRequest: unknown, response: unknown): unknown {
-  const before = treeIndex(promptText(recordedRequest));
-  const after = treeLookup(promptText(newRequest));
-  const remap = (id: string): string => {
-    const key = before.get(id);
-    return (key && after.get(key)) ?? id;
-  };
-  const walk = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(walk);
-    if (value && typeof value === "object") {
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, k === "elementId" && typeof v === "string" ? remap(v) : walk(v)]),
-      );
-    }
-    return value;
-  };
-  return walk(response);
-}
-
-function promptText(request: unknown): string {
-  const messages = (request as StagehandParams | undefined)?.messages ?? [];
-  return messages
-    .flatMap((m) => (Array.isArray(m.content) ? m.content : [m.content]))
-    .map((c) => (c.type === "text" ? c.text : ""))
-    .join("\n");
-}
-
-/** id -> "label#occurrence" for every "[0-17] role: name" line. */
-function treeIndex(text: string): Map<string, string> {
-  const map = new Map<string, string>();
-  const seen = new Map<string, number>();
-  for (const match of text.matchAll(/\[(\d+-\d+)\]\s*([^\n]*)/g)) {
-    const label = match[2]!.trim();
-    const n = seen.get(label) ?? 0;
-    seen.set(label, n + 1);
-    map.set(match[1]!, `${label}#${n}`);
-  }
-  return map;
-}
-
-function treeLookup(text: string): Map<string, string> {
-  const inverse = new Map<string, string>();
-  for (const [id, key] of treeIndex(text)) inverse.set(key, id);
-  return inverse;
 }
 
 function tokenUsage(channel: Channel, response: unknown): { input: number; output: number } {

@@ -28,6 +28,8 @@ export interface FixtureManifest {
     appVersion: string;
     playwrightVersion: string;
     browserVersion: string;
+    /** Third-party traffic recorded in the original run (HAR in the fixture dir); replays serve it. */
+    network?: string | null;
   };
   /** What a fixed agent must achieve. */
   expectation: RunResult["expectation"];
@@ -86,6 +88,7 @@ export async function writeFixture(result: RunResult, task: Task, fixturesDir: s
       appVersion: appVersion(),
       playwrightVersion: playwrightVersion(),
       browserVersion: result.browserVersion,
+      network: result.networkHar,
     },
     expectation: result.expectation,
     assertions: result.oracle.checks.map((c) => c.name),
@@ -114,6 +117,7 @@ export async function writeFixture(result: RunResult, task: Task, fixturesDir: s
   copyFileSync(join(result.runDir, "trace.jsonl"), join(dir, "original-trace.jsonl"));
   copyFileSync(join(result.runDir, "report.md"), join(dir, "original-report.md"));
   if (result.model) copyFileSync(join(result.runDir, "model-calls.jsonl"), join(dir, "model-calls.jsonl"));
+  if (result.networkHar) copyFileSync(join(result.runDir, result.networkHar), join(dir, result.networkHar));
   return { dir, manifest };
 }
 
@@ -175,6 +179,8 @@ export async function replayFixture(
   const modelMode: GatewayMode | undefined =
     spec.kind === "scripted" ? undefined : (options.modelMode ?? (sameAgent && cassette && existsSync(cassette) ? "replay" : "live"));
   if (modelMode === "replay" && !sameAgent) drift.push(`replaying ${manifest.original.agent.id}'s model calls with agent ${spec.id}`);
+  const har = manifest.environment.network ? join(fixture.dir, manifest.environment.network) : undefined;
+  if (har && !existsSync(har)) drift.push(`recorded network traffic ${manifest.environment.network} is missing; third-party requests go to the live network`);
 
   const results: RunResult[] = [];
   for (let i = 0; i < trials; i++) {
@@ -188,6 +194,7 @@ export async function replayFixture(
         ...(modelMode ? { modelMode } : {}),
         ...(modelMode === "replay" ? { cassette } : {}),
         ...(options.models ? { models: options.models } : {}),
+        ...(har && existsSync(har) ? { har } : {}),
       }),
     );
   }

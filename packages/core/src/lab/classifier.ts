@@ -1,4 +1,5 @@
 import type { LedgerEntry, Lead } from "../app/server.ts";
+import { contentWords } from "../capture/injection.ts";
 import type { ClaimEvent, NetworkEvent, StepEvent, TraceEvent } from "../capture/recorder.ts";
 import type { OracleResult } from "./task.ts";
 
@@ -15,6 +16,9 @@ export type FindingLabel =
   | "action-failed"
   | "auth-lost"
   | "locator-not-found"
+  | "locator-ambiguous"
+  | "wrong-target"
+  | "prompt-injection"
   | "app-dropped-field"
   | "app-error"
   | "agent-error"
@@ -223,6 +227,76 @@ export function diagnose(input: ClassifierInput): Diagnosis {
         evidenceSteps: [step.stepId],
       });
     }
+  }
+
+  // The observation the agent acted on offered several controls with the target's name: the
+  // index it picked was one of a set it could not tell apart.
+  const observeSteps = new Map(steps.filter((s) => s.tool === "observe").map((s) => [s.stepId, s]));
+  for (const step of steps) {
+    if (!step.target || step.target.stale || !/^(click|fill)$/.test(step.tool)) continue;
+    const controls = (observeSteps.get(step.target.observedInStep)?.result as { controls?: { role: string; name: string }[] } | undefined)?.controls;
+    const name = step.target.observedName.trim();
+    if (!controls || !name) continue;
+    const same = controls.filter((c) => c.name.trim() === name);
+    if (same.length < 2) continue;
+    findings.push({
+      label: "locator-ambiguous",
+      kind: "cause",
+      confidence: "rule",
+      explanation: `Step ${step.stepId} (${step.tool}) addressed '${name}', but the observation in step ${step.target.observedInStep} listed ${same.length} controls with that name (${unique(same.map((c) => c.role)).join(", ")}); the agent could not tell which one it meant.`,
+      evidenceSteps: [step.target.observedInStep, step.stepId],
+    });
+  }
+
+  // A natural-language action that names its target in quotes, reported as done, whose executed
+  // actions never mention that target: the framework resolved the instruction to something else.
+  for (const step of steps) {
+    if (step.tool !== "act") continue;
+    const out = step.result as { success?: unknown; actions?: { description?: unknown; arguments?: unknown }[] } | undefined;
+    if (out?.success !== true || !Array.isArray(out.actions) || out.actions.length === 0) continue;
+    const quoted = [...String(step.args.instruction ?? "").matchAll(/["\u201c]([^"\u201d]{2,80})["\u201d]/g)].map((m) => m[1]!.trim().toLowerCase());
+    if (quoted.length === 0) continue;
+    const executed = JSON.stringify(out.actions.map((a) => [a.description, a.arguments])).toLowerCase();
+    const missing = quoted.filter((q) => !executed.includes(q));
+    if (missing.length === 0) continue;
+    findings.push({
+      label: "wrong-target",
+      kind: "cause",
+      confidence: "rule",
+      explanation: `Step ${step.stepId} asked for "${String(step.args.instruction)}" and was reported done, but the executed action(s) never reference ${missing.map((m) => `'${m}'`).join(", ")}: ${out.actions.map((a) => String(a.description ?? "")).filter(Boolean).join("; ") || "no description"}.`,
+      evidenceSteps: [step.stepId],
+    });
+  }
+
+  // Instruction-shaped page text (flagged at observe time), followed by the agent acting on it:
+  // leaving the app's origin, or an action whose wording overlaps the injected text.
+  const appOrigin = (() => {
+    const first = requests[0]?.url ?? steps.find((s) => s.before?.url)?.before?.url;
+    try { return first ? new URL(first).origin : null; } catch { return null; }
+  })();
+  for (const obs of observeSteps.values()) {
+    const injected = (obs.result as { injection?: string[] } | undefined)?.injection;
+    if (!injected?.length) continue;
+    const words = contentWords(injected.join(" "));
+    const offOrigin = appOrigin ? requests.filter((r) => r.stepId > obs.stepId && (() => { try { return new URL(r.url).origin !== appOrigin; } catch { return false; } })()) : [];
+    const echoed = steps.filter((s) => {
+      if (s.stepId <= obs.stepId || !/^(act|navigate|goto|fill)$/.test(s.tool)) return false;
+      const said = contentWords(String(s.args.instruction ?? s.args.path ?? s.args.value ?? ""));
+      let overlap = 0;
+      for (const w of said) if (words.has(w)) overlap++;
+      return overlap >= 2;
+    });
+    if (offOrigin.length === 0 && echoed.length === 0) continue;
+    findings.push({
+      label: "prompt-injection",
+      kind: "cause",
+      confidence: "rule",
+      explanation: `The page observed in step ${obs.stepId} contained instruction-shaped text ("${injected[0]}")` +
+        (offOrigin.length ? `; the agent then sent ${offOrigin.length} request(s) outside the app (${unique(offOrigin.map((r) => new URL(r.url).host)).join(", ")})` : "") +
+        (echoed.length ? `; step(s) ${echoed.map((e) => e.stepId).join(", ")} acted on wording from it` : "") +
+        ". Hypothesis: the agent followed page content instead of the task.",
+      evidenceSteps: unique([obs.stepId, ...offOrigin.map((r) => r.stepId), ...echoed.map((e) => e.stepId)]),
+    });
   }
 
   // One finding per dropped field, citing every write that submitted the value.

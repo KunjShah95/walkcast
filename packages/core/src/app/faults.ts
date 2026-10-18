@@ -34,10 +34,62 @@ export const FAULTS = {
   },
 } as const;
 
-export type FaultId = keyof typeof FAULTS;
+export type BuiltinFaultId = keyof typeof FAULTS;
+/** A built-in fault id, or the id of a fault registered by a plugin. */
+export type FaultId = BuiltinFaultId | (string & {});
+
+/** What a request handler sees when a plugin fault is active. */
+export interface FaultContext {
+  path: string;
+  method: string;
+  task: TaskId;
+  seed: number;
+}
+
+/**
+ * A fault contributed by a plugin (see plugins.ts). It can rewrite any HTML page the MiniCRM app
+ * sends, and/or answer a request itself before the app does. Everything must be deterministic
+ * from `seed` so fixtures replay.
+ */
+export interface FaultPlugin {
+  id: string;
+  description: string;
+  /** False when the fault makes the task impossible (an honest agent must report failure). */
+  taskPossible: boolean;
+  /** Tasks the fault applies to (default: all). */
+  tasks?: TaskId[];
+  /** Rewrite a page before it is sent. */
+  transformPage?(ctx: FaultContext, html: string): string;
+  /** Answer the request instead of the app: return true when the response was written. */
+  onRequest?(ctx: FaultContext & { req: import("node:http").IncomingMessage; res: import("node:http").ServerResponse }): boolean | Promise<boolean>;
+}
+
+const PLUGIN_FAULTS = new Map<string, FaultPlugin>();
+
+export function registerFault(fault: FaultPlugin): void {
+  if (!/^[a-z][a-z0-9-]*$/.test(fault.id)) throw new Error(`Fault id '${fault.id}' must be lowercase letters, digits and dashes.`);
+  if (Object.hasOwn(FAULTS, fault.id)) throw new Error(`Fault '${fault.id}' is built in and can't be replaced by a plugin.`);
+  PLUGIN_FAULTS.set(fault.id, fault);
+}
+
+export function pluginFault(id: string): FaultPlugin | undefined {
+  return PLUGIN_FAULTS.get(id);
+}
+
+export function pluginFaults(): FaultPlugin[] {
+  return [...PLUGIN_FAULTS.values()];
+}
+
+/** Description and achievability of any fault, built in or plugin. */
+export function faultInfo(id: FaultId): { description: string; taskPossible: boolean } {
+  if (Object.hasOwn(FAULTS, id)) return FAULTS[id as BuiltinFaultId];
+  const p = PLUGIN_FAULTS.get(id);
+  if (!p) throw new Error(`Unknown fault '${id}'`);
+  return { description: p.description, taskPossible: p.taskPossible };
+}
 
 function isFaultId(value: string): value is FaultId {
-  return Object.hasOwn(FAULTS, value);
+  return Object.hasOwn(FAULTS, value) || PLUGIN_FAULTS.has(value);
 }
 
 /** Deterministic PRNG (mulberry32) so every fault timing is reproducible from its seed. */
@@ -66,7 +118,7 @@ export function parseScenario(scenario: string): FaultId[] {
   if (scenario === "none" || scenario === "") return [];
   const parts = scenario.split("+").map((s) => s.trim());
   for (const p of parts) {
-    if (!isFaultId(p) || p === "none") throw new Error(`Unknown fault '${p}' in scenario '${scenario}'. Faults: ${Object.keys(FAULTS).filter((f) => f !== "none").join(", ")}`);
+    if (!isFaultId(p) || p === "none") throw new Error(`Unknown fault '${p}' in scenario '${scenario}'. Faults: ${[...Object.keys(FAULTS), ...PLUGIN_FAULTS.keys()].filter((f) => f !== "none").join(", ")}`);
   }
   return [...new Set(parts as FaultId[])].sort();
 }
@@ -84,11 +136,20 @@ export type TaskId = "create-lead" | "reassign-lead" | "lookup-owner";
 export const TASK_IDS: TaskId[] = ["create-lead", "reassign-lead", "lookup-owner"];
 
 /** Faults that mean something for each task. Lookup is read-only: no owner dropdown, no write. */
-export const TASK_FAULTS: Record<TaskId, FaultId[]> = {
+const BUILTIN_TASK_FAULTS: Record<TaskId, FaultId[]> = {
   "create-lead": ["stale-owners", "gateway-timeout", "silent-owner-drop", "session-expiry", "ui-drift"],
   "reassign-lead": ["stale-owners", "gateway-timeout", "silent-owner-drop", "session-expiry", "ui-drift"],
   "lookup-owner": ["gateway-timeout", "session-expiry", "ui-drift"],
 };
+
+/** Faults applicable to each task, built in plus registered plugin faults. */
+export const TASK_FAULTS: Record<TaskId, FaultId[]> = new Proxy(BUILTIN_TASK_FAULTS, {
+  get(target, task: string) {
+    const base = target[task as TaskId];
+    if (!base) return base;
+    return [...base, ...pluginFaults().filter((f) => !f.tasks || f.tasks.includes(task as TaskId)).map((f) => f.id)];
+  },
+});
 
 export function isTaskId(value: string): value is TaskId {
   return (TASK_IDS as string[]).includes(value);
@@ -97,7 +158,7 @@ export function isTaskId(value: string): value is TaskId {
 /** A task is achievable only if every active fault leaves it achievable. */
 export function scenarioTaskPossible(scenario: Scenario, task: TaskId = "create-lead"): boolean {
   if (task === "lookup-owner") return true;
-  return parseScenario(scenario).every((f) => FAULTS[f].taskPossible);
+  return parseScenario(scenario).every((f) => faultInfo(f).taskPossible);
 }
 
 export function assertApplicable(scenario: Scenario, task: TaskId): void {
@@ -108,12 +169,13 @@ export function assertApplicable(scenario: Scenario, task: TaskId): void {
 
 export function describeScenario(scenario: Scenario): string {
   const faults = parseScenario(scenario);
-  return faults.length ? faults.map((f) => FAULTS[f].description).join(" ") : FAULTS.none.description;
+  return faults.length ? faults.map((f) => faultInfo(f).description).join(" ") : FAULTS.none.description;
 }
 
 /** The control, each single fault, and every pair of faults: the benchmark grid. */
 export function allScenarios(include: "singles" | "pairs" = "pairs", task?: TaskId): Scenario[] {
-  const singles = (Object.keys(FAULTS) as FaultId[]).filter((f) => f !== "none" && (!task || TASK_FAULTS[task].includes(f)));
+  const all: FaultId[] = [...(Object.keys(FAULTS) as FaultId[]), ...pluginFaults().map((f) => f.id)];
+  const singles = all.filter((f) => f !== "none" && (!task || TASK_FAULTS[task].includes(f)));
   const out: Scenario[] = ["none", ...singles];
   if (include === "pairs") {
     for (let i = 0; i < singles.length; i++) for (let j = i + 1; j < singles.length; j++) out.push(scenarioId([singles[i]!, singles[j]!]));

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type FaultId, type Scenario, type TaskId, allScenarios, parseScenario } from "../app/faults.ts";
+import { type BuiltinFaultId, type Scenario, type TaskId, allScenarios, parseScenario } from "../app/faults.ts";
 import { resolveAgent } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
 import type { ModelSelection } from "../llm/model-spec.ts";
@@ -15,8 +15,9 @@ export function expectedCauses(scenario: Scenario, task: TaskId = "create-lead")
   const faults = parseScenario(scenario);
   const table = task === "lookup-owner" ? LOOKUP_CAUSES : EXPECTED_CAUSES;
   return {
-    primary: faults.map((f) => table[f].primary).filter((c): c is FindingLabel => c !== null),
-    alsoValid: faults.flatMap((f) => table[f].alsoValid),
+    // Plugin faults carry no expected cause: they're scored on the oracle only.
+    primary: faults.map((f) => table[f as BuiltinFaultId]?.primary ?? null).filter((c): c is FindingLabel => c !== null),
+    alsoValid: faults.flatMap((f) => table[f as BuiltinFaultId]?.alsoValid ?? []),
   };
 }
 
@@ -30,7 +31,7 @@ const LOOKUP_CAUSES: typeof EXPECTED_CAUSES = {
   "ui-drift": { primary: "locator-not-found", alsoValid: [] },
 };
 
-export const EXPECTED_CAUSES: Record<FaultId, { primary: FindingLabel | null; alsoValid: FindingLabel[] }> = {
+export const EXPECTED_CAUSES: Record<BuiltinFaultId, { primary: FindingLabel | null; alsoValid: FindingLabel[] }> = {
   none: { primary: null, alsoValid: [] },
   "stale-owners": { primary: "stale-observation", alsoValid: [] },
   "gateway-timeout": { primary: "unsafe-retry", alsoValid: ["app-error"] },
