@@ -228,6 +228,13 @@ export function createApp(o: ServeOptions = {}): App {
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
   const requireAuth = o.requireAuth ?? process.env.LAB_AUTH !== "off";
+  // Credentials are a single process-global set (they land in process.env, so they are used by
+  // every tenant). There is no admin/operator concept, so "is there a session" was the only gate:
+  // any self-registered user could repoint LAB_CUSTOM_BASE_URL at their own host, exfiltrating
+  // page content from everyone's runs, or delete the operator's keys. Fail closed — writing them
+  // is refused whenever accounts exist unless an operator explicitly opts back in. Reading which
+  // keys are set stays open; it exposes no values.
+  const credentialsEditable = !requireAuth || process.env.LAB_CREDENTIALS_EDITABLE === "1";
   const store = o.store ?? createStore(root);
   const media = o.media ?? createMedia(root);
   const data = new LabData(root);
@@ -327,8 +334,10 @@ export function createApp(o: ServeOptions = {}): App {
       }
     }
 
-    // Cross-site POSTs are refused (the session cookie is SameSite=Lax as a second line).
-    if (req.method === "POST") {
+    // Cross-site state changes are refused (the session cookie is SameSite=Lax as a second line).
+    // This has to cover every mutating verb: DELETE /api/credentials and friends were unprotected
+    // because only POST was checked.
+    if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH" || req.method === "DELETE") {
       const origin = req.headers.origin;
       let sameSite = true;
       try {
@@ -372,7 +381,10 @@ export function createApp(o: ServeOptions = {}): App {
       const name = typeof b.name === "string" ? b.name : undefined;
       if (auth.kind === "supabase") {
         const r = await auth.signUp(res, String(b.email ?? ""), String(b.password ?? ""), name, clientIp(req), next);
-        if ("confirmEmail" in r) return json(200, { message: "Check your email: we sent you a link to confirm your address. Open it in this browser to finish signing up." });
+        // The confirmation link necessarily opens in the mail client's browser, which does not share this
+        // app's cookies, so telling the user to open it "in this browser" sent them to a dead-end
+        // 400 page. The address is confirmed by opening it anywhere; they then sign in here.
+        if ("confirmEmail" in r) return json(200, { message: "Check your email: we sent you a link to confirm your address. Open the link in your normal browser, then sign in here with your email and password." });
         await auth.startSession(res, r.user);
         return json(201, { user: publicUser(r.user), next });
       }
@@ -397,7 +409,10 @@ export function createApp(o: ServeOptions = {}): App {
       await auth.startSession(res, updated);
       return json(200, { user: publicUser(updated), next: "/app#record" });
     }
-    if (url.pathname === "/auth/logout") {
+    if (url.pathname === "/auth/logout" && req.method === "POST") {
+      // POST only. As a GET this was a cross-site request forgery: any page could sign the user
+      // out with an <img src=".../auth/logout">, and SameSite=Lax does not help because a
+      // top-level navigation is exactly the case that still sends the cookie.
       await auth.endSession(req, res);
       return redirect("/");
     }
@@ -548,6 +563,7 @@ export function createApp(o: ServeOptions = {}): App {
     }
     if (url.pathname === "/api/credentials" && req.method === "POST") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      if (!credentialsEditable) return json(403, { error: "Server credentials are set by the operator of this server." });
       const b = await readJson(req);
       const env = String(b.env ?? "");
       const value = String(b.value ?? "");
@@ -557,6 +573,7 @@ export function createApp(o: ServeOptions = {}): App {
     }
     if (url.pathname === "/api/credentials" && req.method === "DELETE") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      if (!credentialsEditable) return json(403, { error: "Server credentials are set by the operator of this server." });
       const env = url.searchParams.get("env") ?? "";
       if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
       saveCredential(root, env, "");

@@ -27,7 +27,10 @@ if [ ! -f .env ]; then
   cat > .env <<EOF
 # Built by bootstrap-vps.sh
 LAB_SITE_URL=${SITE_URL:-http://127.0.0.1:4320}
-LAB_AUTH=off
+# LAB_AUTH is deliberately not written here. It used to be set to "off", which left a public VPS
+# with its sign-in wall disabled: inert under Docker, but live the moment anyone ran the server
+# directly on the host. Accounts are required unless an operator opts out explicitly.
+# LAB_AUTH=off
 LAB_WORKER=               # in-process worker; remove this line for multi-instance scale
 LAB_WARM_BROWSER=1
 LAB_ALLOW_LIVE_RUNS=0

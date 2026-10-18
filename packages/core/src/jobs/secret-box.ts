@@ -25,6 +25,23 @@ export function sharedKeyConfigured(): boolean {
   return Boolean(process.env.LAB_SECRET_KEY);
 }
 
+/**
+ * Seal a value that has to survive a restart, such as a user's linked OpenRouter or ChatGPT
+ * credentials. The per-process fallback key is deliberately not allowed here: it is regenerated
+ * on every boot, so anything sealed under it becomes permanently undecryptable the next time the
+ * server restarts, and the failure surfaces far from its cause (the worker's `open()` throws,
+ * gets swallowed as best-effort, and the run silently falls back to the operator's own key).
+ */
+export function sealPersistent(plain: string): string {
+  if (!sharedKeyConfigured()) {
+    throw new Error(
+      "LAB_SECRET_KEY must be set to link an account (32 bytes, base64: `openssl rand -base64 32`). " +
+        "Without it, linked credentials would be sealed under a key that changes on every restart.",
+    );
+  }
+  return seal(plain);
+}
+
 export function seal(plain: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);

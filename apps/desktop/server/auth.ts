@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "no
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { promisify } from "node:util";
 import { DuplicateError, type Store, type User } from "../../../packages/core/src/store/index.ts";
-import { seal } from "../../../packages/core/src/jobs/secret-box.ts";
+import { sealPersistent } from "../../../packages/core/src/jobs/secret-box.ts";
 import { chatgptHostId, s256 as cgS256, decodeJwtPayload, CHATGPT_AUTH_ENDPOINT, CHATGPT_TOKEN_ENDPOINT, CHATGPT_CLIENT_ID, CHATGPT_RESOURCE } from "../../../packages/core/src/llm/chatgpt-oauth.ts";
 
 export type { User };
@@ -194,7 +194,7 @@ export class Auth extends Sessions {
   }
 
   async upsertOpenRouter(req: IncomingMessage, key: string): Promise<User> {
-    const sealed = seal(key);
+    const sealed = sealPersistent(key);
     const keyHash = createHash("sha256").update(key).digest("hex");
     const current = await this.user(req);
     if (current) {
@@ -279,8 +279,8 @@ export class Auth extends Sessions {
     const creds = {
       clientId: CHATGPT_CLIENT_ID,
       hostId,
-      refreshToken: tokenResp.refresh_token ? seal(tokenResp.refresh_token) : "",
-      accessToken: tokenResp.access_token ? seal(tokenResp.access_token) : undefined,
+      refreshToken: tokenResp.refresh_token ? sealPersistent(tokenResp.refresh_token) : "",
+      accessToken: tokenResp.access_token ? sealPersistent(tokenResp.access_token) : undefined,
       accessExpiresAt: tokenResp.expires_in ? new Date(Date.now() + Number(tokenResp.expires_in) * 1000).toISOString() : undefined,
       scope: grantedScope,
       planUsage: grantedScope.includes("chatgpt.tokens.use.direct"),
