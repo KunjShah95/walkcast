@@ -78,3 +78,39 @@ test("the dashboard's local voice choice resolves to this machine's voice, never
   const local = localVoice("slt");
   if (local) assert.match(local.id, /^(flite|windows):/);
 });
+
+test("choosing a cloud voice picks that provider's voice, not the flite names", async () => {
+  const { engineFor } = await import("../packages/core/src/record/voice.ts");
+  process.env.ELEVENLABS_API_KEY = "test-key";
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const eleven = engineFor("elevenlabs", "slt", "pNInz6obpgDQGcFmaJgB");
+    assert.equal(eleven?.kind, "cloud");
+    assert.equal(eleven?.id, "elevenlabs:pNInz6obpgDQGcFmaJgB");
+    const openai = engineFor("openai", "slt", "onyx");
+    assert.equal(openai?.id, "openai:onyx");
+    // No key, no engine: the recorder falls back rather than speaking with the wrong voice.
+    delete process.env.ELEVENLABS_API_KEY;
+    assert.equal(engineFor("elevenlabs", "slt", "onyx"), null);
+  } finally {
+    delete process.env.ELEVENLABS_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("a voice id the provider doesn't have falls back to that provider's default", async () => {
+  const { resolveVoice, voicesFor, defaultVoiceFor, hasVoiceList, isCloudProvider } = await import("../packages/core/src/record/voices.ts");
+  // A curated provider only ever sends an id it publishes.
+  assert.equal(resolveVoice("openai", "onyx"), "onyx");
+  assert.equal(resolveVoice("openai", "not-a-voice"), defaultVoiceFor("openai"));
+  assert.equal(resolveVoice("openai", ""), defaultVoiceFor("openai"));
+  // Providers whose ids aren't a public list (Murf, a custom endpoint) take what you type.
+  assert.equal(hasVoiceList("murf"), false);
+  assert.equal(resolveVoice("murf", "en-IN-isha"), "en-IN-isha");
+  assert.ok(voicesFor("elevenlabs").length > 0);
+  // "polly" and "maya" are aliases of providers in the list.
+  assert.deepEqual(voicesFor("polly").map((v) => v.id), voicesFor("awspolly").map((v) => v.id));
+  assert.equal(isCloudProvider("flite"), false);
+  assert.equal(isCloudProvider("custom-voice"), false);
+  assert.equal(isCloudProvider("azure"), true);
+});
