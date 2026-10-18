@@ -67,9 +67,11 @@ export function Settings({ me }: { me: Me | null }) {
               <TtsPicker
                 provider={prefs.ttsProvider}
                 voice={prefs.ttsVoices[prefs.ttsProvider] ?? ""}
+                language={prefs.ttsLanguages[prefs.ttsProvider] ?? ""}
                 selectClassName="h-9 w-full rounded-lg border border-line bg-panel px-3 text-[13px]"
                 onProvider={(ttsProvider: TtsProvider) => setPrefs({ ttsProvider })}
                 onVoice={(v) => setPrefs({ ttsVoices: { ...prefs.ttsVoices, [prefs.ttsProvider]: v } })}
+                onLanguage={(l) => setPrefs({ ttsLanguages: { ...prefs.ttsLanguages, [prefs.ttsProvider]: l } })}
                 localVoicePicker={<VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />}
               />
               <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. The default is the built-in voice: Windows speech on Windows, flite elsewhere.</p>

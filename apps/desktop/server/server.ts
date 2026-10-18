@@ -13,7 +13,7 @@ import { createMedia, type MediaStore } from "../../../packages/core/src/media/s
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
 import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
-import { defaultVoiceFor, isCloudProvider, voicesFor } from "../../../packages/core/src/record/voices.ts";
+import { defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
@@ -624,6 +624,9 @@ export function createApp(o: ServeOptions = {}): App {
             /** False when the provider's voice ids aren't a public list: the picker takes a text box. */
             hasList: voices.length > 0,
             defaultVoice: cloud ? defaultVoiceFor(p) : (p === "flite" ? VOICES[0] : ""),
+            /** The language the default voice speaks, and whether the picker asks for one. */
+            defaultLanguage: cloud ? defaultLanguageFor(p) : "",
+            needsLanguage: cloud && needsLanguageInput(p),
             voices,
           };
         }),
@@ -631,10 +634,11 @@ export function createApp(o: ServeOptions = {}): App {
     }
     if (url.pathname === "/api/voices/preview" && (req.method === "GET" || req.method === "HEAD")) {
       const provider = (url.searchParams.get("provider") ?? "").trim();
-      const voice = (url.searchParams.get("voice") ?? "slt").trim();
+      const voice = (url.searchParams.get("voice") ?? "").trim();
+      const language = (url.searchParams.get("language") ?? "").trim().slice(0, 20);
       if (!provider) return json(400, { error: "provider is required." });
       try {
-        const buf = await cloudVoicePreview(provider, voice);
+        const buf = await cloudVoicePreview(provider, voice, language || undefined);
         const ct = buf.length >= 4 && buf.toString("ascii", 0, 4) === "RIFF" ? "audio/wav"
           : buf.length >= 3 && buf.toString("ascii", 0, 3) === "ID3" ? "audio/mpeg"
           : buf.length >= 4 && buf.toString("ascii", 0, 4) === "OggS" ? "audio/ogg"
@@ -1090,6 +1094,9 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
   const chosen = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
   const list = ttsProvider ? voicesFor(ttsProvider) : [];
   const ttsVoice = ttsProvider && chosen && (list.length === 0 || list.some((v) => v.id === chosen)) ? chosen : undefined;
+  // A language is only meaningful where the provider needs one and the voice doesn't carry it.
+  const asked = typeof b.ttsLanguage === "string" ? b.ttsLanguage.trim().slice(0, 20) : "";
+  const ttsLanguage = ttsProvider && /^[a-z]{2,3}([-_][A-Za-z]{2,4})?$/i.test(asked) ? asked.replace("_", "-") : undefined;
   return {
     url: url.toString(),
     ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
@@ -1097,6 +1104,7 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
     ...(ttsProvider ? { ttsProvider } : {}),
     ...(ttsVoice ? { ttsVoice } : {}),
+    ...(ttsLanguage ? { ttsLanguage } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
 }

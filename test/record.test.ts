@@ -114,3 +114,38 @@ test("a voice id the provider doesn't have falls back to that provider's default
   assert.equal(isCloudProvider("custom-voice"), false);
   assert.equal(isCloudProvider("azure"), true);
 });
+
+test("the voice a person picks decides the language, not the deployment default", async () => {
+  const { languageFor, defaultVoiceFor, needsLanguageInput } = await import("../packages/core/src/record/voices.ts");
+  const env = { LAB_TTS_LANGUAGE: "en-IN" } as NodeJS.ProcessEnv;
+  // A neural voice id carries its locale, and Google/Azure reject a mismatched languageCode.
+  assert.equal(languageFor("azure", "en-US-JennyNeural", env), "en-US");
+  assert.equal(languageFor("google", "hi-IN-Neural2-A", env), "hi-IN");
+  // Polly ids carry none, so the catalog maps the voice to the only language it may be used with.
+  assert.equal(languageFor("awspolly", "Joanna", env), "en-US");
+  assert.equal(languageFor("awspolly", "Kajal", env), "en-IN");
+  // A provider that infers language from the text is never sent one.
+  assert.equal(languageFor("elevenlabs", "21m00Tcm4TlvDq8ikWAM", env), "");
+  assert.equal(languageFor("openai", "onyx", env), "");
+  // Free-text ids fall back to the deployment's language, then the provider's own default.
+  assert.equal(languageFor("sarvam", "anushka", env), "en-IN");
+  assert.equal(languageFor("bhashini", "some-model", env), "en-IN");
+  assert.equal(languageFor("bhashini", "some-model", {} as NodeJS.ProcessEnv), "hi");
+  assert.equal(needsLanguageInput("sarvam"), true);
+  assert.equal(needsLanguageInput("azure"), false);
+  // With a language set, the default voice speaks it rather than being the list's first entry.
+  assert.equal(defaultVoiceFor("azure", env), "en-IN-NeerjaNeural");
+  assert.equal(defaultVoiceFor("azure", {} as NodeJS.ProcessEnv), "en-US-JennyNeural");
+  // Both Aditi and Kajal are en-IN; the first matching voice wins.
+  assert.equal(defaultVoiceFor("awspolly", { LAB_TTS_LANGUAGE: "hi-IN" } as NodeJS.ProcessEnv), "Aditi");
+});
+
+test("an explicit language from the picker is honoured, a junk one ignored", async () => {
+  const { resolveLanguage } = await import("../packages/core/src/record/voices.ts");
+  // Sarvam's free-text voice ids need one; a valid tag wins over the env default.
+  assert.equal(resolveLanguage("sarvam", "hi", "anushka"), "hi");
+  assert.equal(resolveLanguage("sarvam", "hi-IN", "anushka"), "hi-IN");
+  // Anything that isn't a language tag falls back rather than reaching the provider.
+  assert.equal(resolveLanguage("sarvam", "not a tag", "anushka"), "en-IN");
+  assert.equal(resolveLanguage("sarvam", "", "anushka"), "en-IN");
+});

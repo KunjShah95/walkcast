@@ -27,6 +27,8 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
   // Which voice inside the chosen provider; remembered per provider in prefs.
   const [ttsVoice, setTtsVoice] = useState(prefs.ttsVoices[ttsProvider] ?? "");
+  // ...and its language, for providers whose voice ids don't carry one.
+  const [ttsLanguage, setTtsLanguage] = useState(prefs.ttsLanguages[ttsProvider] ?? "");
   const [authorized, setAuthorized] = useState(false);
   const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
@@ -57,7 +59,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}) }, (s) => setJob(s));
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}) }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -184,10 +186,16 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                   onProvider={(p) => {
                     setTtsProvider(p);
                     setTtsVoice(prefs.ttsVoices[p] ?? "");
+                    setTtsLanguage(prefs.ttsLanguages[p] ?? "");
                   }}
                   onVoice={(v) => {
                     setTtsVoice(v);
                     setPrefs({ ttsVoices: { ...prefs.ttsVoices, [ttsProvider]: v } });
+                  }}
+                  language={ttsLanguage}
+                  onLanguage={(l) => {
+                    setTtsLanguage(l);
+                    setPrefs({ ttsLanguages: { ...prefs.ttsLanguages, [ttsProvider]: l } });
                   }}
                   localVoicePicker={<VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />}
                 />

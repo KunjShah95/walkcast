@@ -177,17 +177,17 @@ const cloudPreviews = new Map<string, Buffer>();
 /**
  * A short sample synthesized through a cloud TTS provider, for choosing one before recording.
  * `voice` is that provider's own voice id (see `voices.ts`); for the local provider it is a flite
- * name. An empty voice means "the provider's default".
+ * name. `language` is that provider's language tag, needed only where its voices are free-text ids.
  */
-export async function cloudVoicePreview(provider: string, voice: string = ""): Promise<Buffer> {
-  const cacheKey = `${provider}:${voice}`;
+export async function cloudVoicePreview(provider: string, voice: string = "", language?: string): Promise<Buffer> {
+  const cacheKey = `${provider}:${voice}:${language ?? ""}`;
   const hit = cloudPreviews.get(cacheKey);
   if (hit) return hit;
   const p = provider.trim().toLowerCase();
   const engine: VoiceEngine | null =
     p === "flite" || p === "local" || p === ""
       ? localVoice(isVoice(voice) ? voice : "slt")
-      : engineFor(p, "slt", voice.trim() || undefined);
+      : engineFor(p, "slt", voice.trim() || undefined, language?.trim() || undefined);
   if (!engine) throw new Error(`No TTS engine available for provider "${provider}".`);
   const dir = mkdtempSync(join(tmpdir(), "lab-voice-"));
   try {

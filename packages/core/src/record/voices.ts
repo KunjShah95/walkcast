@@ -1,6 +1,12 @@
 /**
- * The voices each cloud narration provider can speak with. The dashboard's TTS picker reads this
- * so picking a provider offers that provider's voices rather than the local flite names.
+ * The voices each cloud narration provider can speak with, and the language each one speaks. The
+ * dashboard's TTS picker reads this so picking a provider offers that provider's voices rather than
+ * the local flite names.
+ *
+ * Language and voice are one decision, not two: Google, Azure and Polly reject a voice whose
+ * language doesn't match, so the voice a person picks carries its language (from the voice id where
+ * the provider encodes one, else from the catalog), and only providers whose voices are free-text
+ * ids need a language typed alongside them.
  *
  * Providers whose voice ids are not a stable public list (Murf, Reverie, Bhashini, Sarvam, a custom
  * HTTP endpoint) are typed by hand instead: the picker shows a text box seeded with whatever
@@ -12,6 +18,8 @@ export interface CloudVoice {
   id: string;
   name: string;
   note?: string;
+  /** BCP-47 language tag this voice speaks, when the provider needs one to match it. */
+  lang?: string;
 }
 
 const CATALOG: Record<string, CloudVoice[]> = {
@@ -39,46 +47,45 @@ const CATALOG: Record<string, CloudVoice[]> = {
     { id: "verse", name: "Verse", note: "Expressive, gender-neutral" },
   ],
   google: [
-    { id: "en-US-Neural2-A", name: "Neural2 A", note: "US English, female" },
-    { id: "en-US-Neural2-D", name: "Neural2 D", note: "US English, male" },
-    { id: "en-US-Neural2-F", name: "Neural2 F", note: "US English, female" },
-    { id: "en-US-Studio-A", name: "Studio A", note: "Studio quality, female" },
-    { id: "en-US-Wavenet-A", name: "Wavenet A", note: "US English, female" },
-    { id: "en-US-Wavenet-D", name: "Wavenet D", note: "US English, male" },
-    { id: "en-US-Wavenet-F", name: "Wavenet F", note: "US English, female" },
-    { id: "en-GB-Neural2-A", name: "Neural2 A (UK)", note: "UK English, female" },
-    { id: "en-GB-Neural2-B", name: "Neural2 B (UK)", note: "UK English, male" },
-    { id: "en-IN-Neural2-A", name: "Neural2 A (India)", note: "Indian English, female" },
-    { id: "en-IN-Neural2-D", name: "Neural2 D (India)", note: "Indian English, male" },
+    { id: "en-US-Neural2-A", name: "Neural2 A", note: "US English, female", lang: "en-US" },
+    { id: "en-US-Neural2-D", name: "Neural2 D", note: "US English, male", lang: "en-US" },
+    { id: "en-US-Neural2-F", name: "Neural2 F", note: "US English, female", lang: "en-US" },
+    { id: "en-US-Studio-A", name: "Studio A", note: "Studio quality, female", lang: "en-US" },
+    { id: "en-US-Wavenet-A", name: "Wavenet A", note: "US English, female", lang: "en-US" },
+    { id: "en-US-Wavenet-D", name: "Wavenet D", note: "US English, male", lang: "en-US" },
+    { id: "en-US-Wavenet-F", name: "Wavenet F", note: "US English, female", lang: "en-US" },
+    { id: "en-GB-Neural2-A", name: "Neural2 A (UK)", note: "UK English, female", lang: "en-GB" },
+    { id: "en-GB-Neural2-B", name: "Neural2 B (UK)", note: "UK English, male", lang: "en-GB" },
+    { id: "en-IN-Neural2-A", name: "Neural2 A (India)", note: "Indian English, female", lang: "en-IN" },
+    { id: "en-IN-Neural2-D", name: "Neural2 D (India)", note: "Indian English, male", lang: "en-IN" },
   ],
   azure: [
-    { id: "en-US-JennyNeural", name: "Jenny", note: "US English, female, friendly" },
-    { id: "en-US-GuyNeural", name: "Guy", note: "US English, male" },
-    { id: "en-US-AriaNeural", name: "Aria", note: "US English, female, lively" },
-    { id: "en-US-DavisNeural", name: "Davis", note: "US English, male" },
-    { id: "en-GB-SoniaNeural", name: "Sonia (UK)", note: "UK English, female" },
-    { id: "en-GB-RyanNeural", name: "Ryan (UK)", note: "UK English, male" },
-    { id: "en-IN-NeerjaNeural", name: "Neerja (India)", note: "Indian English, female" },
-    { id: "en-IN-PrabhatNeural", name: "Prabhat (India)", note: "Indian English, male" },
-    { id: "hi-IN-SwaraNeural", name: "Swara (Hindi)", note: "Hindi, female" },
-    { id: "hi-IN-MadhurNeural", name: "Madhur (Hindi)", note: "Hindi, male" },
+    { id: "en-US-JennyNeural", name: "Jenny", note: "US English, female, friendly", lang: "en-US" },
+    { id: "en-US-GuyNeural", name: "Guy", note: "US English, male", lang: "en-US" },
+    { id: "en-US-AriaNeural", name: "Aria", note: "US English, female, lively", lang: "en-US" },
+    { id: "en-US-DavisNeural", name: "Davis", note: "US English, male", lang: "en-US" },
+    { id: "en-GB-SoniaNeural", name: "Sonia (UK)", note: "UK English, female", lang: "en-GB" },
+    { id: "en-GB-RyanNeural", name: "Ryan (UK)", note: "UK English, male", lang: "en-GB" },
+    { id: "en-IN-NeerjaNeural", name: "Neerja (India)", note: "Indian English, female", lang: "en-IN" },
+    { id: "en-IN-PrabhatNeural", name: "Prabhat (India)", note: "Indian English, male", lang: "en-IN" },
+    { id: "hi-IN-SwaraNeural", name: "Swara (Hindi)", note: "Hindi, female", lang: "hi-IN" },
+    { id: "hi-IN-MadhurNeural", name: "Madhur (Hindi)", note: "Hindi, male", lang: "hi-IN" },
   ],
   awspolly: [
-    { id: "Aditi", name: "Aditi", note: "Indian English/Hindi, female" },
-    { id: "Amy", name: "Amy", note: "US English, female" },
-    { id: "Brian", name: "Brian", note: "US English, male" },
-    { id: "Emma", name: "Emma", note: "UK English, female" },
-    { id: "Joanna", name: "Joanna", note: "US English, female, narration" },
-    { id: "Kevin", name: "Kevin", note: "US English, male" },
-    { id: "Salli", name: "Salli", note: "US English, female" },
-    { id: "Arthur", name: "Arthur", note: "US English, male" },
-    { id: "Kajal", name: "Kajal", note: "Indian English/Hindi, female" },
-    { id: "Liam", name: "Liam", note: "Irish English, male" },
-    { id: "Zhiyu", name: "Zhiyu", note: "Mandarin, female" },
+    { id: "Aditi", name: "Aditi", note: "Indian English/Hindi, female", lang: "en-IN" },
+    { id: "Amy", name: "Amy", note: "US English, female", lang: "en-US" },
+    { id: "Brian", name: "Brian", note: "US English, male", lang: "en-US" },
+    { id: "Emma", name: "Emma", note: "UK English, female", lang: "en-GB" },
+    { id: "Joanna", name: "Joanna", note: "US English, female, narration", lang: "en-US" },
+    { id: "Kevin", name: "Kevin", note: "US English, male", lang: "en-US" },
+    { id: "Salli", name: "Salli", note: "US English, female", lang: "en-US" },
+    { id: "Arthur", name: "Arthur", note: "US English, male", lang: "en-US" },
+    { id: "Kajal", name: "Kajal", note: "Indian English/Hindi, female", lang: "en-IN" },
+    { id: "Liam", name: "Liam", note: "Irish English, male", lang: "en-IE" },
+    { id: "Zhiyu", name: "Zhiyu", note: "Mandarin, female", lang: "cmn-CN" },
   ],
 };
 
-/** Providers with a curated list; anything else is typed in by hand. */
 /** `polly` is the alias AWS Polly is also selected by. */
 const ALIASES: Record<string, string> = { polly: "awspolly", maya: "custom" };
 
@@ -102,8 +109,56 @@ export function isCloudProvider(provider: string): boolean {
 }
 
 /**
+ * Providers whose API takes a language that has to match the voice. ElevenLabs' multilingual model
+ * and OpenAI's voices infer it from the text, so for those the language is empty by design.
+ */
+const LANGUAGE_AWARE = new Set(["sarvam", "bhashini", "google", "azure", "awspolly", "reverie", "custom"]);
+
+/** Each provider's fallback language, matching what these engines used before voices were pickable. */
+const LANGUAGE_FALLBACK: Record<string, string> = {
+  sarvam: "en-IN",
+  bhashini: "hi",
+  reverie: "hi",
+  custom: "en",
+  google: "en-US",
+  azure: "en-US",
+  awspolly: "en-US",
+};
+
+/** Free-text voice ids carry no language, so the picker asks for one next to the id. */
+export function needsLanguageInput(provider: string): boolean {
+  const p = normalizeProvider(provider);
+  return LANGUAGE_AWARE.has(p) && !voicesFor(p).some((v) => v.lang);
+}
+
+const LOCALE_IN_ID = /^([a-z]{2,3}(?:[-_][A-Za-z]{2,4})?)[-_]/;
+
+/**
+ * The language to send alongside `voice`: the one the voice speaks (from its id where the provider
+ * encodes it, else from the catalog), then `LAB_TTS_LANGUAGE`, then the provider's default. Voice
+ * wins over the env var because a mismatched language makes the provider reject the request.
+ */
+export function languageFor(provider: string, voice?: string | null, env: NodeJS.ProcessEnv = process.env): string {
+  const p = normalizeProvider(provider);
+  if (!LANGUAGE_AWARE.has(p)) return "";
+  const id = voice?.trim() ?? "";
+  const inId = LOCALE_IN_ID.exec(id)?.[1]?.replace("_", "-");
+  if (inId) return inId;
+  const listed = voicesFor(p).find((v) => v.id === id)?.lang;
+  if (listed) return listed;
+  return env.LAB_TTS_LANGUAGE?.trim() || LANGUAGE_FALLBACK[p] || "en";
+}
+
+/** The language a provider speaks when nothing is chosen. */
+export function defaultLanguageFor(provider: string, env: NodeJS.ProcessEnv = process.env): string {
+  const p = normalizeProvider(provider);
+  if (!LANGUAGE_AWARE.has(p)) return "";
+  return env.LAB_TTS_LANGUAGE?.trim() || voicesFor(p).find((v) => v.lang)?.lang || LANGUAGE_FALLBACK[p] || "en";
+}
+
+/**
  * The voice used when nothing is chosen: the server's `*_VOICE` env var if set, else the provider's
- * first catalog entry, else a sane built-in default.
+ * first voice that speaks the deployment's language, else its first voice.
  */
 const FALLBACK: Record<string, string> = {
   sarvam: "anushka",
@@ -127,7 +182,9 @@ export function defaultVoiceFor(provider: string, env: NodeJS.ProcessEnv = proce
     maya: env.LAB_TTS_VOICE,
   } as Record<string, string | undefined>)[p];
   if (configured?.trim()) return configured.trim();
-  return voicesFor(p)[0]?.id ?? FALLBACK[p] ?? "";
+  const list = voicesFor(p);
+  const wanted = defaultLanguageFor(p, env);
+  return list.find((v) => v.lang === wanted)?.id ?? list[0]?.id ?? FALLBACK[p] ?? "";
 }
 
 /**
@@ -142,4 +199,10 @@ export function resolveVoice(provider: string, chosen?: string | null): string {
   if (list.length > 0) return list.some((v) => v.id === chosen.trim()) ? chosen.trim() : fallback;
   // Free-text providers accept any id, so the choice stands.
   return chosen.trim();
+}
+
+/** The language the picker should send: a valid tag wins, then the voice's own language. */
+export function resolveLanguage(provider: string, chosen: string | null | undefined, voice?: string | null): string {
+  if (typeof chosen === "string" && /^[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?$/i.test(chosen.trim())) return chosen.trim().replace("_", "-");
+  return languageFor(provider, voice);
 }

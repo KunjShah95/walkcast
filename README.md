@@ -59,7 +59,7 @@ The diagrams are editable Excalidraw files in [`docs/architecture/`](docs/archit
 | --- | --- |
 | Runtime | Node.js ≥ 22, TypeScript 5.9, tsx |
 | Browser automation | Playwright 1.56 (Chromium), `@browserbasehq/stagehand` 4.2 (v4, Chrome for Testing) |
-| Media | ffmpeg (flite voices `slt`/`awb`/`kal`/`rms`, or Windows SAPI), H.264 MP4 + AAC, WebM (VP8) |
+| Media | ffmpeg (flite voices `slt`/`awb`/`kal`/`rms`, or Windows SAPI) or a cloud voice (ElevenLabs, OpenAI, Google, Azure, Polly, Sarvam, Bhashini, Murf, Reverie, custom) picked per recording, H.264 MP4 + AAC, WebM (VP8) |
 | LLM gateway | Anthropic SDK, OpenAI SDK, 15 provider routes (Anthropic, OpenAI, Vercel AI Gateway, OpenRouter, Gemini, Groq, Mistral, DeepSeek, Hugging Face, xAI, Together, Fireworks, Cerebras, Ollama, custom/LiteLLM) |
 | Web UI | React 19, Vite 8, Tailwind CSS 4, Motion 14, lucide-react, `@vercel/analytics` (opt-in) |
 | Desktop shell | Tauri 2, Rust sidecar, Node binary staged per OS |
@@ -131,7 +131,11 @@ How it works (`packages/core/src/record/`):
 - **Audio/video** (`media.ts`): each line spoken by a TTS engine — ffmpeg's built-in flite voice
   (`LAB_VOICE`, default `slt`), Windows SAPI on Windows, or cloud providers (Sarvam, Bhashini,
   ElevenLabs, Google Cloud, Azure, AWS Polly, OpenAI, Murf, Reverie, custom/Maya) selected via
-  `LAB_TTS_PROVIDER` or per recording in Settings/Record. The browser pauses after each action for
+  `LAB_TTS_PROVIDER` or per recording in Settings/Record, along with which of that provider's
+  voices speaks (`voices.ts` holds the catalog; a voice can be sampled before recording). Language
+  follows the voice — `en-US-JennyNeural` speaks US English — and only free-text voice ids take a
+  language of their own, with `LAB_TTS_LANGUAGE` as the deployment-wide fallback. The
+  browser pauses after each action for
   exactly as long as its line takes. Without ffmpeg/flite (and no cloud key) you still get the WebM
   video and captions.
 

@@ -45,6 +45,8 @@ export interface RecordOptions {
   ttsProvider?: string;
   /** Which voice inside that provider to speak with (e.g. an ElevenLabs voice id). Omitted means the provider's default. */
   ttsVoice?: string;
+  /** Which language that provider speaks in, for providers whose voices are free-text ids. */
+  ttsLanguage?: string;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -155,7 +157,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
   options.onProgress?.("Adding narration and encoding the video");
   const engine = options.ttsProvider
-    ? (engineFor(options.ttsProvider, options.voice ?? "slt", options.ttsVoice) ?? localVoice(options.voice ?? "slt"))
+    ? (engineFor(options.ttsProvider, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) ?? localVoice(options.voice ?? "slt"))
     : undefined;
   const media = await buildMedia(dir, captions, options.voice ?? "slt", engine ?? undefined);
   const result: RecordingResult = {

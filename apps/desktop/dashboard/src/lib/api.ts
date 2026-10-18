@@ -50,6 +50,8 @@ export interface CloudVoice {
   id: string;
   name: string;
   note?: string;
+  /** BCP-47 tag this voice speaks, when the provider needs a matching language. */
+  lang?: string;
 }
 
 /** One narration provider as the server reports it: which voices it has and whether it can speak. */
@@ -63,6 +65,10 @@ export interface TtsProviderInfo {
   /** The server holds credentials for this provider. */
   configured: boolean;
   defaultVoice: string;
+  /** The language the default voice speaks. Empty for providers that infer it from the text. */
+  defaultLanguage: string;
+  /** True where a language has to be typed because the provider's voice ids don't carry one. */
+  needsLanguage: boolean;
   voices: CloudVoice[];
 }
 
@@ -148,7 +154,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
@@ -181,8 +187,10 @@ export function voicePreviewUrl(voice: Voice): string {
 }
 
 /** A short sample of one cloud provider's voice, synthesized by the server. */
-export function cloudVoicePreviewUrl(provider: string, voice: string): string {
-  return `/api/voices/preview?provider=${encodeURIComponent(provider)}&voice=${encodeURIComponent(voice)}`;
+export function cloudVoicePreviewUrl(provider: string, voice: string, language?: string): string {
+  const query = new URLSearchParams({ provider, voice });
+  if (language) query.set("language", language);
+  return `/api/voices/preview?${query.toString()}`;
 }
 
 /** The server's voice catalog: providers, their voices, and their defaults. */

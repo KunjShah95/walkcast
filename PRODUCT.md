@@ -28,11 +28,13 @@ Every line of narration and every failure cause comes from what the browser actu
 - Signed-in web app at `/app` (Vite + React SPA, hash routes) served by the Node server; also deployed as one Vercel deployment (static marketing pages + server function).
 - Recording and lab runs execute on a job queue with a browser worker; the deployed function has no browser, so jobs there need a separate worker or `npm run dev`.
 - Lab concepts: runs, fixtures, experiments (with 95% Wilson score intervals), compare (base vs candidate), fault replay / simulator.
-- Narration uses ffmpeg's flite voices: `slt` (default), `awb`, `kal`, `rms`.
+- Narration defaults to ffmpeg's flite voices: `slt` (default), `awb`, `kal`, `rms` (or Windows SAPI on Windows); cloud narration is chosen per recording, provider plus voice, with a spoken sample.
 
 ## Capabilities and Constraints
 
 - Confirmed wanted (2026-10-16): synced clickable transcript player with captions and per-page chapters; narration voice choice with preview; editable narration script with re-rendered voice-over; recording the user's own voice in-browser to replace or add to synthetic narration.
+- Narration voice choice covers the provider's own voices, not just the flite names: picking ElevenLabs offers Rachel, Adam, Bella, ElevenLabs ids, and each can be sampled before recording.
+- Language is part of the voice, not a separate setting: a neural voice id carries its locale and providers reject a language that disagrees with it, so the picker shows the language and only asks for one where voice ids are free text.
 - Settings must cover: account and connected sign-ins (Google, OpenRouter, ChatGPT), sign out; recording defaults (voice, max pages, captions); connected model providers for Lab runs; usage and limits (daily recording/run quotas, jobs in flight).
 - Per-user limits exist server-side: 1 active job, 20 recordings/day, 100 runs/day by default.
 - Recording requires the user to confirm they own or are authorized to test the site.
