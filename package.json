@@ -32,7 +32,7 @@
     "doctor": "node --import tsx apps/desktop/cli.ts doctor",
     "walkcast": "node bin/walkcast.mjs",
     "qa": "npm run typecheck && npm run ui:build",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -58,19 +58,23 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "^2.12.3",
     "@types/node": "22.18.12",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
     "rolldown": "1.2.14",
     "tailwindcss": "4.3.3",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.2",
     "vite": "8.3.4",
-    "vite-plugin-singlefile": "2.3.3",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.2.10"
+    "vite-plugin-singlefile": "2.3.3"
   }
 }
