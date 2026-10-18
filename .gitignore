@@ -1,5 +1,8 @@
 node_modules
-.walkcast-credentials.json/
+# Written by the server as plaintext provider keys, so it must never be committed. No trailing
+# slash: the old ".walkcast-credentials.json/" only matched a *directory* of that name and let
+# the file itself through to `git add -A`.
+.walkcast-credentials.json
 chrome/
 runs/
 results/*/runs/

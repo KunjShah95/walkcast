@@ -17,10 +17,32 @@ const baked = typeof window !== "undefined" ? window.__LAB_DATA__ : undefined;
 
 export const isSnapshot = Boolean(baked);
 
+/**
+ * A failed fetch that still knows its HTTP status. The session ending is not a generic error —
+ * it is the one failure the app has to react to rather than retry or show "Try again" — so the
+ * status travels with the error instead of only being readable out of the message text.
+ */
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
+/** True when a rejection means "this session is gone" rather than "try again". */
+export function isAuthError(e: unknown): boolean {
+  if (e instanceof HttpError) return e.status === 401;
+  if (e instanceof SignInRequired) return true;
+  // Anything thrown before HttpError existed, or by a path that has no status yet.
+  return /(^|\D)401(\D|$)/.test(e instanceof Error ? e.message : String(e));
+}
+
 export async function loadIndex(): Promise<LabIndex> {
   if (baked) return baked.index;
   const res = await fetch("/api/index");
-  if (!res.ok) throw new Error(`Could not load the lab index (${res.status}).`);
+  if (!res.ok) throw new HttpError(res.status, `Could not load the lab index (${res.status}).`);
   return (await res.json()) as LabIndex;
 }
 

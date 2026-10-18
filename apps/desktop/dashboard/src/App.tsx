@@ -5,7 +5,7 @@ import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
 import { DotGrid } from "./components/aceternity.tsx";
-import { type Me, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
+import { type Me, isAuthError, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
@@ -160,7 +160,21 @@ export function App() {
   useEffect(() => {
     if (isSnapshot) return;
     const onVisible = () => {
-      if (!document.hidden) void refresh();
+      if (document.hidden) return;
+      // A background refresh can fail long after start-up, most often because the session
+      // expired (it hard-expires, and there is no renewal). Dropping the rejection left the old
+      // `index` in place, so the app looked completely normal while every action 401'd, with no
+      // route back to sign-in. Send an auth failure to the error state instead, which renders the
+      // sign-in wall. Anything else (a blip, the server restarting) keeps the stale index: the
+      // view stays usable and the next refresh picks the change up.
+      refresh().then(
+        () => setError(null),
+        (e: unknown) => {
+          if (!isAuthError(e)) return;
+          setIndex(null);
+          setError(e instanceof Error ? e.message : String(e));
+        },
+      );
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
