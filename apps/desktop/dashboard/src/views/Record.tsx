@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
-import { VoicePicker, hostOf } from "../components/Studio.tsx";
+import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, type JobStatus, SignInRequired, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
@@ -23,6 +23,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [maxPages, setMaxPages] = useState(prefs.maxPages);
+  const [maxSeconds, setMaxSeconds] = useState(prefs.maxSeconds);
   const [voice, setVoice] = useState(prefs.voice);
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
   // Which voice inside the chosen provider; remembered per provider in prefs.
@@ -59,7 +60,10 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}) }, (s) => setJob(s));
+      const length = maxSeconds > 0 ? { maxSeconds } : {};
+      // The sample site records with the same voice as a real one, so what you hear in the demo is
+      // the voice you picked.
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -176,6 +180,13 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 <input id="rec-pages" type="range" min={1} max={30} value={maxPages} onChange={(e) => setMaxPages(Number(e.target.value))} disabled={busy} />
                 <p className="text-[12px] text-ink-3">Stops sooner if the site has fewer pages to reach.</p>
               </div>
+              <div className="grid content-start gap-2">
+                <span className="text-[13px] font-medium">Length</span>
+                <LengthPicker value={maxSeconds} onChange={setMaxSeconds} disabled={busy} />
+                <p className="text-[12px] text-ink-3">
+                  {maxSeconds > 0 ? "Stops at the next whole page when the time is up, and says so in the narration." : "No time limit — it walks as many pages as the site reaches."}
+                </p>
+              </div>
               <div className="grid content-start gap-2 sm:col-span-2">
                 <span className="text-[13px] font-medium">Narration voice</span>
                 <TtsPicker
@@ -187,6 +198,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     setTtsProvider(p);
                     setTtsVoice(prefs.ttsVoices[p] ?? "");
                     setTtsLanguage(prefs.ttsLanguages[p] ?? "");
+                    setPrefs({ ttsProvider: p });
                   }}
                   onVoice={(v) => {
                     setTtsVoice(v);

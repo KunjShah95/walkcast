@@ -131,18 +131,19 @@ export function Hero() {
       <div className="wrap">
         <h1>
           <motion.span className="line" {...line(0)}>
-            Paste a <Tile icon={Link} tone="ink" tilt={-6} /> link.
+            Send a <Tile icon={Link} tone="ink" tilt={-6} /> visitor.
           </motion.span>
           <motion.span className="line" {...line(1)}>
-            Get it <Tile icon={Play} tone="rec" tilt={5} fill /> narrated.
+            Get the <Tile icon={Play} tone="rec" tilt={5} fill /> whole visit.
           </motion.span>
           <motion.span className="line dim" {...line(2)}>
-            No mic. No <span className="strike">editor</span>.
+            No script. No <span className="strike">editor</span>.
           </motion.span>
         </h1>
         <motion.p className="lede" {...line(3)}>
-          A real browser signs in <Ex n={1} at={0} seek={seek} />, walks your pages <Ex n={5} at={4} seek={seek} /> and hands back an MP4 with a spoken
-          voice-over, captions and a transcript <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
+          Paste a link and a real browser visits your site like a first-time user: it signs in <Ex n={1} at={0} seek={seek} />, clicks through your
+          pages <Ex n={5} at={4} seek={seek} /> and hands back the complete visit as an MP4, with voice-over, captions and a transcript
+          on top <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
         </motion.p>
         <motion.div className="actions" {...line(4)}>
           <DownloadButton big />

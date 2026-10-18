@@ -182,7 +182,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);

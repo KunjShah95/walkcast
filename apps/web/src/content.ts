@@ -24,9 +24,9 @@ export const ROUTES: Route[] = [
   {
     path: "/",
     label: "Home",
-    title: "Walkcast · Narrated video walkthroughs of any website",
+    title: "Walkcast · Send a visitor to your website, get the whole visit on video",
     description:
-      "Paste a site link, get a narrated video walkthrough: an MP4 with voice-over, captions and transcript. Walkcast signs in and walks the pages. Free for Windows.",
+      "Send a visitor to your site, get the whole visit on video. A real browser signs in and clicks through your pages; you get an MP4 with voice-over, captions and transcript. Free for Windows.",
   },
   {
     path: "/guides/narrated-website-walkthrough",
@@ -92,11 +92,11 @@ export const MORE_FAQ: [string, string][] = [
     "Yes. Because it runs on your PC, it can record any site that PC can reach, including localhost and company intranets, as long as you may test it.",
   ],
 ];
-export const TAGLINE = "Narrated video walkthroughs of any website, from a link";
+export const TAGLINE = "Send a visitor to your website, get the whole visit on video";
 export const DESCRIPTION =
-  "Paste your website's link and get a narrated video walkthrough. Walkcast signs in, walks your pages and hands back an MP4 with a spoken voice-over, captions and a transcript. Free desktop app for Windows.";
+  "Send a visitor to your website and get the whole visit on video. A real browser signs in, clicks through your pages like a first-time user and hands back the complete recording as an MP4, with voice-over, captions and a transcript. Free desktop app for Windows.";
 export const DEFINITION =
-  "Walkcast is a free, open-source Windows app that makes a narrated video walkthrough from a website link. A real browser signs in, visits up to 30 pages on that site, and returns an MP4 with a spoken voice-over, WebVTT captions and a transcript. Every line of narration comes from what the browser actually did.";
+  "Walkcast is a free, open-source Windows app that sends a visitor to your website and records the whole visit. From one link, a real browser signs in, visits up to 30 pages the way a first-time user would, and returns the complete recording as an MP4 with a voice-over, WebVTT captions and a transcript. Every line of narration comes from what the browser actually did.";
 
 export const FAQ: [string, string][] = [
   ["What is Walkcast?", DEFINITION],
@@ -135,13 +135,13 @@ export const FAQ: [string, string][] = [
 export const HOWTO: [string, string][] = [
   ["Install Walkcast", "Download the Windows installer and run it. WebView2 is fetched automatically if the PC does not have it yet."],
   ["Paste the link and sign-in", "Paste the site's address and the username and password you use. Confirm you own the site or may test it."],
-  ["Press Record", "A browser signs in, walks up to 30 pages and returns a narrated MP4 with captions and a transcript."],
+  ["Press Record", "A real browser signs in, visits up to 30 pages and returns the whole visit as an MP4 with voice-over, captions and a transcript."],
 ];
 
 /** The demo recording on the page, described for VideoObject and the video sitemap. */
 export const DEMO = {
-  title: "Estate360 walkthrough, narrated by Walkcast",
-  description: "An unedited Walkcast recording: a browser opens Estate360, walks six pages and narrates each one.",
+  title: "A Walkcast visit to Estate360, recorded end to end",
+  description: "An unedited Walkcast recording: a browser visits Estate360, signs in, goes through six pages and narrates each one.",
   durationIso: "PT1M11S",
   uploadDate: "2026-10-14",
 };

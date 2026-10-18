@@ -240,6 +240,8 @@ export interface Store {
 
   /** Cheap round trip for readiness checks. */
   ping(): Promise<void>;
+  /** Flush any pending debounced writes. PgStore is synchronous, so this is a no-op there. */
+  flush(): Promise<void>;
   close(): Promise<void>;
 }
 

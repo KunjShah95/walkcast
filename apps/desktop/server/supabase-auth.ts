@@ -61,6 +61,8 @@ export function supabaseAuthConfig(env = process.env): SupabaseAuthConfig | null
 export class SupabaseAuth extends Sessions {
   readonly kind = "supabase" as const;
   private settings: { at: number; value: { google: boolean; confirmEmail: boolean; signupDisabled: boolean } } | undefined;
+  /** Runs with the Supabase access token while it is still valid, before adopt() signs it out. */
+  onSession?: (accessToken: string) => Promise<void>;
 
   constructor(
     store: Store,
@@ -243,8 +245,12 @@ export class SupabaseAuth extends Sessions {
       const session = await this.call<SupabaseSession>("POST", "/token?grant_type=pkce", { auth_code: code, code_verifier: flow.verifier }).catch((e: unknown) => {
         throw e instanceof SupabaseError && e.status < 500 ? new AuthError(400, "This sign-in link has expired or was already used. Please try again.") : e;
       });
-      flow.user = await this.adopt(session);
-      return { user: flow.user, next: flow.next };
+      const user = await this.adopt(session);
+      flow.user = user;
+      // No polling claims this one, so retire it now: a second exchange (replay, or the browser
+      // tab arriving later) must not mint a second session.
+      this.desktopFlows.delete(state);
+      return { user, next: flow.next };
     } catch (e) {
       flow.error = e instanceof AuthError ? e.message : "Sign-in failed. Please try again.";
       this.desktopFlows.delete(state);
@@ -311,7 +317,10 @@ export class SupabaseAuth extends Sessions {
   /** Turn a Supabase session into our user, then end the Supabase session (we keep our own). */
   private async adopt(session: SupabaseSession): Promise<User> {
     try {
-      return await this.link(session.user);
+      const user = await this.link(session.user);
+      // Best effort: a sign-in must never fail because a side service (the free voice) is down.
+      await this.onSession?.(session.access_token).catch(() => undefined);
+      return user;
     } finally {
       await this.call("POST", "/logout?scope=local", undefined, session.access_token).catch(() => undefined);
     }

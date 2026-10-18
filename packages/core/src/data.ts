@@ -117,6 +117,10 @@ export interface RecordingSummary {
   skipped: { url: string; reason: string }[];
   captions: { start: number; end: number; text: string }[];
   media: { video: string | null; mp4: string | null; webm?: string | null; audio: string | null; captions: string; voice: string; note: string };
+  /** Why the walk ended, when a length cap was set. */
+  stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
+  /** What the person asked the narration to be, and what spoke instead. */
+  narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
 }
 
 export interface LabIndex {
@@ -147,12 +151,16 @@ export class LabData {
 
     const runRoots: [string, string][] = [["runs", "runs"], ["baselines", "baseline"]];
     const fixtureRoots: [string, string][] = [["fixtures", "fixtures"], [join("runs", "_fixtures"), "runs"]];
-    for (const exp of this.dirs("results")) {
-      const expDir = join("results", exp);
+    // One experiment = a directory holding `summary.json` beside its `runs/` and `fixtures/`. The
+    // first published results were written straight into `results/` (the CLI's `--out results`);
+    // every one since goes to `results/<name>/`. Both layouts are the lab's real output, so the
+    // folder itself counts as an experiment and the dashboard shows everything it finds.
+    const experimentRoots: [string, string][] = [["results", "results"], ...this.dirs("results").map((exp): [string, string] => [join("results", exp), exp])];
+    for (const [expDir, exp] of experimentRoots) {
       runRoots.push([join(expDir, "runs"), `experiment:${exp}`]);
       fixtureRoots.push([join(expDir, "fixtures"), `experiment:${exp}`]);
       const summaryPath = join(this.root, expDir, "summary.json");
-      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: `results/${exp}`, summary: withRates(readJson<StoredExperimentSummary>(summaryPath)) });
+      if (existsSync(summaryPath)) experiments.push({ id: exp, dir: this.rel(expDir), summary: withRates(readJson<StoredExperimentSummary>(summaryPath)) });
     }
 
     for (const [base, source] of runRoots) {
@@ -165,7 +173,7 @@ export class LabData {
     for (const [base, source] of fixtureRoots) {
       for (const name of this.dirs(base)) {
         const manifestPath = join(this.root, base, name, "manifest.json");
-        if (existsSync(manifestPath)) fixtures.push({ id: name, dir: `${base}/${name}`, source, manifest: readJson(manifestPath) });
+        if (existsSync(manifestPath)) fixtures.push({ id: name, dir: this.rel(base, name), source, manifest: readJson(manifestPath) });
       }
     }
     runs.sort((a, b) => b.createdAt - a.createdAt);
@@ -221,6 +229,11 @@ export class LabData {
       events,
       report: existsSync(reportPath) ? readFileSync(reportPath, "utf8") : "",
     };
+  }
+
+  /** A workspace-relative path with forward slashes; `dir` becomes part of a URL and a shell command. */
+  rel(...parts: string[]): string {
+    return join(...parts).split(sep).join("/");
   }
 
   /** Resolve a workspace-relative path, refusing anything outside the lab's output folders. */

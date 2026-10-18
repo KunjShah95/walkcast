@@ -398,6 +398,9 @@ export class PgStore implements Store {
   async ping() {
     await this.sql`select 1`;
   }
+  async flush() {
+    // Writes commit synchronously in Postgres; nothing to flush.
+  }
   async close() {
     if (this.read !== this.sql) await this.read.end({ timeout: 5 });
     await this.sql.end({ timeout: 5 });

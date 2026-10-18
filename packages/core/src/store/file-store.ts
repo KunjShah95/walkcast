@@ -461,6 +461,10 @@ export class FileStore implements Store {
     return [...by.values()].sort((a, b) => b.total - a.total);
   }
 
+  async flush() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    try { this.persistSync(); } catch { /* best effort */ }
+  }
   async ping() {}
   async close() {
     if (this.closed) return;

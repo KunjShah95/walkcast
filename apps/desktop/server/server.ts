@@ -12,7 +12,7 @@ import { configuredProviders } from "../../../packages/core/src/llm/providers.ts
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
+import { TRIAL_TICKET_ENV, configuredCloudProviders, trialUrl } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -146,7 +146,7 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
 const TTS_PROVIDERS = ["flite", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
 
 const TTS_PROVIDER_LABEL: Record<string, string> = {
-  flite: "Built-in voice (local, offline)",
+  flite: "Walkcast voice (captions only)",
   sarvam: "Sarvam (Indian)",
   bhashini: "Bhashini (Indian, govt)",
   custom: "Custom / Maya",
@@ -164,7 +164,7 @@ function applyCredentialsFile(root: string): void {
   try {
     const data = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
     for (const [k, v] of Object.entries(data)) {
-      if (typeof v === "string" && CREDENTIAL_KEYS.some((c) => c.env === k)) process.env[k] = v;
+      if (typeof v === "string" && (CREDENTIAL_KEYS.some((c) => c.env === k) || k === TRIAL_TICKET_ENV)) process.env[k] = v;
     }
   } catch { /* ignore */ }
 }
@@ -240,6 +240,23 @@ export function createApp(o: ServeOptions = {}): App {
   const forceLocal = process.env.LAB_AUTH === "local" || process.env.LAB_AUTH === "off";
   const supabaseCfg = forceLocal ? null : supabaseAuthConfig();
   const auth: Auth | SupabaseAuth = supabaseCfg ? new SupabaseAuth(store, siteUrl, supabaseCfg) : new Auth(store, siteUrl);
+  // The free voice trial is a desktop thing: the ticket lands in this PC's credentials file, next to
+  // the user's own keys. A shared server must not hand one user's ticket to everyone's recordings.
+  if (auth instanceof SupabaseAuth && o.desktop) {
+    auth.onSession = async (accessToken) => {
+      const base = trialUrl();
+      if (!base) return;
+      const res = await fetch(`${base}/ticket`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, apikey: supabaseCfg!.anonKey },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { ticket?: string; state?: string };
+      // A spent trial has nothing left to speak: leave no ticket, so recordings don't ask.
+      saveCredential(root, TRIAL_TICKET_ENV, body.state === "spent" ? "" : (body.ticket ?? ""));
+    };
+  }
   const authOptions = async () =>
     auth.kind === "supabase"
       ? // Desktop: a reset link opens in the system browser, which can't hand the reset back to the app.
@@ -769,13 +786,13 @@ try {
       const kind = url.pathname === "/api/run" ? "run" : "record";
       const b = await readJson(req);
       const input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
-      // A cloud voice this process can't reach would silently narrate with the built-in voice, which
-      // reads as "I picked ElevenLabs and got SAPI". When we hold the worker we can say so up front,
+      // A cloud voice this process can't reach would quietly fall back to the free voice or to no
+      // voice, which reads as "I picked ElevenLabs and got something else". When we hold the worker we can say so up front,
       // instead of returning a video in the wrong voice minutes later.
       if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
         const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
         const env = credentialFor(input.ttsProvider);
-        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would be narrated by the built-in voice instead. Add the key in Settings, or pick the built-in voice.`);
+        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the Walkcast voice.`);
       }
       // A retried submit (double-click, network retry) gets the job it already created.
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;

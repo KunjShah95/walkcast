@@ -10,14 +10,14 @@ web
 
 Two equal audiences share one signed-in app:
 
-- **Walkthrough makers**: founders, marketers and PMs who paste a link to a site they own or may test and want a narrated video walkthrough (MP4 + voice-over + captions + transcript) without writing a script.
+- **Walkthrough makers**: founders, marketers and PMs who paste a link to a site they own or may test and want to send a visitor through it and get the whole visit on video (MP4, with voice-over, captions and transcript on top) without writing a script. The visit is the product; the voice is a layer on it.
 - **Agent engineers**: teams building browser AI agents who need a failed run turned into a classified, reproducible regression test, and want to know whether the next agent version fixed it or broke something else.
 
 Neither audience is primary; the app must serve both without one feeling like an afterthought.
 
 ## Product Purpose
 
-Walkcast drives a real browser through a site and turns what actually happened into an artifact: a narrated walkthrough video for makers, a replayable regression fixture for engineers. Success: a maker gets a shareable video from one URL; an engineer gets a cause, cited evidence, and a test that holds.
+Walkcast drives a real browser through a site and turns what actually happened into an artifact: the full recorded visit for makers, a replayable regression fixture for engineers. Success: a maker gets a shareable video from one URL; an engineer gets a cause, cited evidence, and a test that holds.
 
 ## Positioning
 

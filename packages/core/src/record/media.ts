@@ -41,11 +41,11 @@ export function isVoice(v: unknown): v is Voice {
 const VOICE: Voice = isVoice(process.env.LAB_VOICE) ? process.env.LAB_VOICE : "slt";
 
 /**
- * Turn the browser video and captions into a narrated MP4. Each caption is spoken by the local
- * voice (ffmpeg's flite where the build has it, Windows speech otherwise, or a configured cloud
- * engine), the clips are laid out without overlapping (captions shift to match the speech), mixed
- * into one track, and muxed with the video plus a caption track. Without ffmpeg or any voice the
- * recording still has the WebM video and WebVTT captions for the dashboard player.
+ * Turn the browser video and captions into a narrated MP4. Each caption is spoken by `engine` (a
+ * cloud voice, the free trial voice, or the offline voice where LAB_ROBOT_VOICE=1 asks for it), the
+ * clips are laid out without overlapping (captions shift to match the speech), mixed into one
+ * track, and muxed with the video plus a caption track. With no voice, or when the voice fails, the
+ * recording is still a full MP4 of the visit with captions on, just silent.
  */
 export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice), onProgress?: (p: string) => void): Promise<MediaResult> {
   const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
@@ -57,13 +57,20 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   };
   if (!video) return finish("The browser produced no video.");
   if (!canEncode()) return finish("ffmpeg (with libx264) is not installed; the recording has video and captions only.");
-  if (!engine) return finish("No voice is available (ffmpeg has no flite and this is not Windows); the recording has video and captions only.");
+  // Keep the whole visit either way: a silent MP4 with the caption track still plays anywhere.
+  const silent = async (note: string) => {
+    writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
+    try {
+      Object.assign(result, await muxSilent(dir, video, onProgress));
+    } catch { /* the WebM and captions are still there */ }
+    return finish(note);
+  };
+  if (!engine) return silent("No voice: the video has captions and a transcript. Add a voice key in Settings to narrate.");
 
   try {
     return await narrate(dir, video, captions, result, engine, onProgress);
   } catch (e) {
-    // Keep what we have (video + captions) and say what went wrong.
-    return finish(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the recording has video and captions only.`);
+    return silent(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the video has captions and a transcript.`);
   } finally {
     for (const [i] of captions.entries()) {
       rmSync(join(dir, `.tts-${i}.wav`), { force: true });
@@ -135,6 +142,23 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
     audio: "narration.wav",
     mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null,
   };
+}
+
+/** The visit with no narration: H.264 video plus the caption track, for when nothing speaks. */
+async function muxSilent(dir: string, video: string, onProgress?: (p: string) => void): Promise<Pick<MediaResult, "mp4">> {
+  const mp4 = join(dir, "recording.mp4");
+  onProgress?.("Encoding the MP4");
+  await run([
+    "-i", join(dir, video),
+    "-i", join(dir, "captions.vtt"),
+    "-map", "0:v", "-map", "1:s",
+    "-vf", "format=yuv420p",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
+    "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
+    "-movflags", "+faststart",
+    mp4,
+  ]);
+  return { mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null };
 }
 
 /**
@@ -278,14 +302,23 @@ export function canNarrate(): boolean {
   return canEncode() && localVoice(VOICE) !== null;
 }
 
-/** A configured cloud voice (LAB_TTS_PROVIDER) wins; otherwise the local one. */
-function pickEngine(voice: Voice): VoiceEngine | null {
+/**
+ * The offline voice (flite / Windows speech) sounds robotic enough to hurt every recording it
+ * speaks on, so a recording only uses it when LAB_ROBOT_VOICE=1 asks for it. Studio's re-narrate
+ * and the voice previews, where someone picks it on purpose, still can.
+ */
+export function robotVoiceAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LAB_ROBOT_VOICE === "1";
+}
+
+/** A configured cloud voice (LAB_TTS_PROVIDER) wins; then the offline one if asked for; else silent. */
+export function pickEngine(voice: Voice = VOICE): VoiceEngine | null {
   const provider = process.env.LAB_TTS_PROVIDER?.trim().toLowerCase();
   if (provider && provider !== "flite") {
     const engine = chooseVoiceEngine();
     if (engine.kind === "cloud") return engine;
   }
-  return localVoice(voice);
+  return robotVoiceAllowed() ? localVoice(voice) : null;
 }
 
 /** Duration of a PCM WAV from its header (avoids a probe per clip). */

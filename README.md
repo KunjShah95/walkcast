@@ -1,8 +1,8 @@
 # Walkcast
 
-**Paste a link, get a narrated video walkthrough of the website.** Walkcast drives a real browser
-through a site you own or may test and returns an MP4 with a spoken voice-over, captions and a
-transcript. The same recorder powers **Walkcast Lab**: it turns a failed browser-agent run into a
+**Send a visitor to your website, get the whole visit on video.** Walkcast sends a real browser
+through a site you own or may test, the way a first-time user would, and returns the complete
+recording as an MP4 with a voice-over, captions and a transcript. The same recorder powers **Walkcast Lab**: it turns a failed browser-agent run into a
 classified, reproducible regression test.
 
 MIT licensed. The price is zero.

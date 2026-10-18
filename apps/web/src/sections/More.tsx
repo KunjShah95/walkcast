@@ -121,7 +121,7 @@ export function Bento() {
         <div className="bento">
           <Card className="b-pages">
             <h3>Walks the whole site in one go.</h3>
-            <p>Follows links on the same site, page by page, and narrates each one.</p>
+            <p>Visits your site the way a first-time user would, page by page, and records all of it.</p>
             <div className="path-chips">
               {["/", "/product", "/pricing", "/contact", "/login", "/signup", "/dashboard", "/leads"].map((p, i) => (
                 <motion.span
@@ -656,7 +656,7 @@ export function Footer() {
         <div className="foot">
           <div>
             <a className="brand" href="/#top"><BrandMark />walkcast</a>
-            <p>Narrated video walkthroughs of any website, made on your Windows PC.</p>
+            <p>Send a visitor to your website and get the whole visit on video, made on your Windows PC.</p>
             <DownloadButton />
             <span className="ver mono"><a href={RELEASES_URL}>v{VERSION}</a> · Windows 10/11 · x64</span>
           </div>

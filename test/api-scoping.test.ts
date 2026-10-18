@@ -71,6 +71,44 @@ test("model-backed agents have their own daily ceiling; replays are free", async
   assert.equal((await call(c, "/api/agents/usage?windowMs=-1")).status, 400);
 });
 
+test("the sample site records with the voice that was picked, and the length that was asked for", async () => {
+  // The demo path used to drop the provider, so a test recording always came back in the
+  // built-in voice no matter what the picker said.
+  const c = await account("demo-voice@example.com");
+  const r = await call(c, "/api/record", {
+    method: "POST",
+    body: JSON.stringify({ demo: true, maxPages: 2, ttsProvider: "openai", ttsVoice: "onyx", maxSeconds: 45 }),
+  });
+  assert.equal(r.status, 202, await r.clone().text());
+  const { job } = (await r.json()) as { job: { id: string } };
+  const input = (await store.job(job.id))?.input as { ttsProvider?: string; ttsVoice?: string; maxSeconds?: number };
+  assert.equal(input.ttsProvider, "openai");
+  assert.equal(input.ttsVoice, "onyx");
+  assert.equal(input.maxSeconds, 45);
+});
+
+test("a cloud provider this server has no key for is refused, not silently swapped for the built-in voice", async () => {
+  // Its own server, because the refusal only applies where this process holds the worker (the
+  // desktop app): a separate worker machine may hold a key this web server can't see.
+  const solo = mkdtempSync(join(tmpdir(), "lab-tts-"));
+  const own = await serveDashboard(5400 + Math.floor(Math.random() * 200), { root: solo, unref: true, store: new FileStore(join(solo, ".lab", "store.json")), worker: true });
+  try {
+    const signup = await fetch(`${own.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "no-key@example.com", password: "a-good-password" }) });
+    const cookie = signup.headers.get("set-cookie")!.split(";")[0]!;
+    const r = await fetch(`${own.url}/api/record`, {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ demo: true, maxPages: 1, ttsProvider: "elevenlabs" }),
+    });
+    const body = (await r.json()) as { error?: string };
+    assert.equal(r.status, 400, JSON.stringify(body));
+    assert.match(body.error ?? "", /ELEVENLABS_API_KEY/, "says which key is missing");
+  } finally {
+    await own.close?.();
+    rmSync(solo, { recursive: true, force: true });
+  }
+});
+
 test("first-run sample site: a demo job records a sample CRM the worker starts itself", { timeout: 180_000 }, async () => {
   const { Worker } = await import("../packages/core/src/jobs/worker.ts");
   const { LocalMedia } = await import("../packages/core/src/media/store.ts");

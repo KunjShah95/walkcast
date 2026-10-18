@@ -58,10 +58,16 @@ export function pagesAsked(maxPages: unknown): number {
  * The wall-clock ceiling for one job. An explicit cap — the `deadlineMs` option or
  * `LAB_JOB_DEADLINE_MS` — wins outright, so a fleet can still impose its own hard limit.
  */
-export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null): number {
+export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null): number {
   if (explicit !== null) return explicit;
   if (kind !== "record") return LAB_CEILING_MS;
-  return RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
+  const pageBased = RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
+  // A requested recording length is itself a budget (the walk runs that long, then narration and
+  // the libx264 encode run on top), so the job ceiling must not be shorter than it — otherwise a
+  // long recording gets killed mid-walk even though the user asked for it.
+  const ms = Number(maxSeconds);
+  const lengthBased = Number.isFinite(ms) && ms > 0 ? ms * 1000 + RECORD_BASE_MS : 0;
+  return Math.max(pageBased, lengthBased);
 }
 
 export interface WorkerOptions {
@@ -234,7 +240,7 @@ export class Worker {
         abort.abort(new Error("lease unconfirmed: no heartbeat acknowledgement within the lease margin"));
       }
     }, 2000);
-    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs);
+    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds);
     const deadline = setTimeout(() => abort.abort(new Error(`took longer than ${Math.round(ceilingMs / 1000)} s`)), ceilingMs);
     // Stall guard: only a record job reports progress, so only a record job has a liveness signal to
     // measure. A lab run keeps its flat ceiling and gets no stall check, exactly as before.
@@ -248,8 +254,13 @@ export class Worker {
     // Flush before finalizing in both directions: on failure the last label is what tells the
     // user (and the log) where the job died.
     const finish = async (outcome: Parameters<Store["finish"]>[2]) => {
-      await progress.flush();
+      // Flushing progress is best-effort: a failed flush must not prevent the terminal transition
+      // (the job would otherwise stay "running" until its lease lapses and get re-run).
+      try { await progress.flush(); } catch (e) { log.warn("job.progress_flush_failed", { job: job.id, error: String(e) }); }
       await this.o.store.finish(job.id, this.id, outcome);
+      // Persist terminal state immediately on the FileStore (PgStore commits synchronously), so a
+      // crash right after completion cannot lose the result in the debounced-write window.
+      await this.o.store.flush().catch((e) => log.warn("job.store_flush_failed", { job: job.id, error: String(e) }));
     };
     try {
       const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await this.labRun(job);

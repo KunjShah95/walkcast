@@ -89,6 +89,45 @@ const CATALOG: Record<string, CloudVoice[]> = {
 /** `polly` is the alias AWS Polly is also selected by. */
 const ALIASES: Record<string, string> = { polly: "awspolly", maya: "custom" };
 
+/** The credential each cloud provider needs, so "you picked one we can't reach" can say which. */
+const CREDENTIAL: Record<string, string> = {
+  elevenlabs: "ELEVENLABS_API_KEY",
+  openai: "OPENAI_API_KEY",
+  google: "GOOGLE_TTS_API_KEY",
+  azure: "AZURE_TTS_KEY",
+  awspolly: "AWS_ACCESS_KEY_ID",
+  sarvam: "SARVAM_API_KEY",
+  bhashini: "BHASHINI_API_KEY",
+  murf: "MURF_API_KEY",
+  reverie: "REVERIE_API_KEY",
+  custom: "LAB_TTS_ENDPOINT",
+};
+
+/** The env var a provider is configured with, or "" when it needs none. */
+export function credentialFor(provider: string): string {
+  return CREDENTIAL[normalizeProvider(provider)] ?? "";
+}
+
+/** How each provider is named in the dashboard, the errors and the narration notes. */
+const LABEL: Record<string, string> = {
+  flite: "Walkcast voice",
+  elevenlabs: "ElevenLabs",
+  openai: "OpenAI",
+  google: "Google Cloud",
+  azure: "Azure",
+  awspolly: "AWS Polly",
+  sarvam: "Sarvam",
+  bhashini: "Bhashini",
+  murf: "Murf",
+  reverie: "Reverie",
+  custom: "Custom TTS",
+  "custom-voice": "Custom voice",
+};
+
+export function providerLabel(provider: string): string {
+  return LABEL[provider.trim().toLowerCase()] ?? provider;
+}
+
 export function normalizeProvider(provider: string): string {
   const p = provider.trim().toLowerCase();
   return ALIASES[p] ?? p;
