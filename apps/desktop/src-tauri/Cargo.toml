@@ -26,3 +26,8 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+[dev-dependencies]
+# Only so the tests can exercise Tauri's own capability-URL matcher against the pattern in
+# capabilities/updates.json. Never linked into the app.
+tauri-utils = "=2.10.2"

@@ -322,3 +322,36 @@ pub fn run() {
       }
     });
 }
+
+#[cfg(test)]
+mod tests {
+  use std::str::FromStr;
+
+  use tauri_utils::acl::RemoteUrlPattern;
+
+  /// The dashboard is served by the sidecar, not from the bundle, so the capability that grants it
+  /// `check_update`/`install_update` is scoped by `remote.urls`. Tauri resolves that with
+  /// `RemoteUrlPattern::test`, and a pattern that quietly fails to match would leave the app
+  /// exactly as broken as it was with no pattern at all -- so the real matcher is exercised here,
+  /// against the string in capabilities/updates.json.
+  const REMOTE_URL_PATTERN: &str = "http://127.0.0.1:*";
+
+  fn matches(url: &str) -> bool {
+    let pattern = RemoteUrlPattern::from_str(REMOTE_URL_PATTERN).expect("capability pattern parses");
+    pattern.test(&url.parse().expect("a valid url"))
+  }
+
+  #[test]
+  fn loopback_pattern_covers_the_sidecar_and_dev_urls() {
+    // PREFERRED_PORT, a free-port fallback, and the `tauri dev` server.
+    for url in ["http://127.0.0.1:4317/app", "http://127.0.0.1:53124/app", "http://127.0.0.1:4320/app"] {
+      assert!(matches(url), "the updater capability must apply to {url}");
+    }
+  }
+
+  #[test]
+  fn loopback_pattern_is_not_a_blanket_grant() {
+    assert!(!matches("http://example.com:4317/app"), "must not match another host");
+    assert!(!matches("http://localhost:4317/app"), "must not match another host name");
+  }
+}
