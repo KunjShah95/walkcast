@@ -13,6 +13,9 @@ recordings/
 
 .vercel
 .env*
+# .env.example is the documented template and must stay committable; without this the .env*
+# rule above makes it silently untrackable for anyone who edits it.
+!.env.example
 apps/desktop/src-tauri/target
 apps/desktop/src-tauri/gen
 
@@ -20,3 +23,13 @@ apps/desktop/src-tauri/gen
 .impeccable/review/
 .impeccable/questions/
 .playwright-mcp/
+
+# Scratch captured from a terminal rather than written by a build.
+# (testout*.txt, typecheck*.txt were committed this way by accident; keep it from recurring.)
+/*.txt
+*.log
+*.tsbuildinfo
+coverage/
+
+.DS_Store
+Thumbs.db
