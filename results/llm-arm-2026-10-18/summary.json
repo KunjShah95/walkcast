@@ -1,0 +1,212 @@
+{
+  "meta": {
+    "startedAt": "2026-10-18T03:59:36.666Z",
+    "finishedAt": "2026-10-18T04:15:56.032Z",
+    "seeds": 1,
+    "trials": 3,
+    "concurrency": 2,
+    "baseline": "sh-p0",
+    "candidates": [
+      "sh-p1"
+    ],
+    "agents": {
+      "sh-p0": {
+        "kind": "stagehand",
+        "id": "sh-p0",
+        "description": "Claude + Stagehand v4 act(), baseline prompt.",
+        "prompt": "p0",
+        "maxTurns": 30
+      },
+      "sh-p1": {
+        "kind": "stagehand",
+        "id": "sh-p1",
+        "description": "Claude + Stagehand v4 act(), prompt with verification and safe-retry guidance.",
+        "prompt": "p1",
+        "maxTurns": 30
+      }
+    },
+    "modelMode": "live",
+    "models": {
+      "agent": "openrouter:anthropic/claude-sonnet-5",
+      "stagehand": "openrouter:anthropic/claude-haiku-4.5"
+    },
+    "live": false,
+    "browserVersion": "155.0.8059.82",
+    "node": "v22.23.2",
+    "caveat": "Stagehand agents ran against a live model for new runs; fixture replays of the same agent used recorded model calls. Model behaviour varies between runs: read pass^k over trials, not single runs."
+  },
+  "detection": [
+    {
+      "fault": "none",
+      "runs": 1,
+      "failing": 0,
+      "correctlyAttributed": 0,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "stale-owners",
+      "runs": 1,
+      "failing": 0,
+      "correctlyAttributed": 0,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "gateway-timeout",
+      "runs": 1,
+      "failing": 0,
+      "correctlyAttributed": 0,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "silent-owner-drop",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "session-expiry",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 1,
+      "spuriousCauses": [],
+      "unexplained": 0
+    },
+    {
+      "fault": "ui-drift",
+      "runs": 1,
+      "failing": 1,
+      "correctlyAttributed": 0,
+      "spuriousCauses": [
+        "unexplained"
+      ],
+      "unexplained": 1
+    }
+  ],
+  "falsePositives": {
+    "baselineCleanRunsFailed": 0,
+    "baselineCleanRuns": 1,
+    "candidateCleanRunsFailed": 0,
+    "candidateCleanRuns": 1
+  },
+  "reproduction": [
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "reproduced": 3,
+      "trials": 3,
+      "drift": []
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "reproduced": 3,
+      "trials": 3,
+      "drift": [
+        "model replay ran past the recording (the run diverged)"
+      ]
+    },
+    {
+      "fixture": "ui-drift-s1-unexplained",
+      "reproduced": 3,
+      "trials": 3,
+      "drift": [
+        "app changed (66944e3db565 → d8d7a26cb6bc)",
+        "9 model request(s) differed from the recording"
+      ]
+    }
+  ],
+  "regression": [
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "agent": "sh-p0",
+      "passes": 0,
+      "trials": 3,
+      "passAll": false,
+      "causes": [
+        "app-dropped-field"
+      ]
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "agent": "sh-p0",
+      "passes": 0,
+      "trials": 3,
+      "passAll": false,
+      "causes": [
+        "auth-lost"
+      ]
+    },
+    {
+      "fixture": "ui-drift-s1-unexplained",
+      "agent": "sh-p0",
+      "passes": 0,
+      "trials": 3,
+      "passAll": false,
+      "causes": [
+        "unexplained"
+      ]
+    },
+    {
+      "fixture": "silent-owner-drop-s1-app-dropped-field",
+      "agent": "sh-p1",
+      "passes": 3,
+      "trials": 3,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "session-expiry-s1-auth-lost",
+      "agent": "sh-p1",
+      "passes": 3,
+      "trials": 3,
+      "passAll": true,
+      "causes": []
+    },
+    {
+      "fixture": "ui-drift-s1-unexplained",
+      "agent": "sh-p1",
+      "passes": 3,
+      "trials": 3,
+      "passAll": true,
+      "causes": []
+    }
+  ],
+  "falseSuccess": {
+    "runs": 6,
+    "successClaims": 4,
+    "falseSuccesses": 1
+  },
+  "rates": {
+    "reproductionTrials": {
+      "k": 9,
+      "n": 9
+    },
+    "passByAgent": [
+      {
+        "agent": "sh-p0",
+        "passes": 0,
+        "trials": 9,
+        "fixturesPassed": 0,
+        "fixtures": 3
+      },
+      {
+        "agent": "sh-p1",
+        "passes": 9,
+        "trials": 9,
+        "fixturesPassed": 3,
+        "fixtures": 3
+      }
+    ]
+  },
+  "cost": {
+    "agentRuns": 25,
+    "modelCalls": 626,
+    "liveInputTokens": 244426,
+    "liveOutputTokens": 9010,
+    "medianRunMs": 45581,
+    "p95RunMs": 336400
+  }
+}

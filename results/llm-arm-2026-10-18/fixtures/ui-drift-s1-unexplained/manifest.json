@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "ui-drift-s1-unexplained",
+  "createdAt": "2026-10-18T04:07:00.927Z",
+  "task": {
+    "id": "create-lead",
+    "goal": "Create a lead for Acme Corp (contact Jane Roe) assigned to Priya Shah, then report the lead ID.",
+    "startPath": "/leads/new",
+    "params": {
+      "contact": "Jane Roe",
+      "company": "Acme Corp",
+      "owner": "Priya Shah"
+    }
+  },
+  "environment": {
+    "fault": "ui-drift",
+    "faultDescription": "The submit button's id and label change (#save-lead 'Save lead' -> #create-lead-v2 'Create'), simulating a site redesign that breaks cached selectors.",
+    "seed": 1,
+    "timings": {
+      "ownersRefreshMs": 864,
+      "submitDelayMs": 2469
+    },
+    "appVersion": "66944e3db565",
+    "playwrightVersion": "1.56.1",
+    "browserVersion": "155.0.8059.82"
+  },
+  "expectation": "task-success",
+  "assertions": [
+    "exactly-one-lead",
+    "owner-correct",
+    "contact-correct",
+    "claim-matches-state"
+  ],
+  "original": {
+    "runId": "ui-drift-s1-sh-p0-mvdat6e46mz",
+    "agent": {
+      "kind": "stagehand",
+      "id": "sh-p0",
+      "description": "Claude + Stagehand v4 act(), baseline prompt.",
+      "prompt": "p0",
+      "maxTurns": 30
+    },
+    "model": {
+      "mode": "live",
+      "selection": {
+        "agent": "openrouter:anthropic/claude-sonnet-5",
+        "stagehand": "openrouter:anthropic/claude-haiku-4.5"
+      },
+      "calls": 23,
+      "inputTokens": 44215,
+      "outputTokens": 1552,
+      "cassette": "model-calls.jsonl"
+    },
+    "verdict": "fail",
+    "symptoms": [
+      "wrong-outcome"
+    ],
+    "causes": [
+      "unexplained"
+    ],
+    "claim": {
+      "type": "claim",
+      "stepId": 19,
+      "at": 333423,
+      "success": false,
+      "summary": "Filled in the new lead form with Contact name \"Jane Roe\", Company \"Acme Corp\", and Owner \"Priya Shah\", but the browser/CDP connection closed unexpectedly right when clicking Create, and subsequent attempts to reconnect or navigate failed with \"RPC client is closed\" / \"Target page, context or browser has been closed\" errors. Unable to confirm whether the lead was actually created or retrieve its ID."
+    },
+    "failedChecks": [
+      "exactly-one-lead",
+      "owner-correct",
+      "contact-correct"
+    ]
+  },
+  "reproduction": {
+    "mode": "controlled-simulation",
+    "notes": [
+      "The application, its seed data and the injected fault are rebuilt from this manifest; the original network traffic is not replayed.",
+      "Fault timings are derived from the seed, so the race is re-created rather than recorded.",
+      "Scripted agents are deterministic. LLM agents replay their recorded model outputs (model-calls.jsonl) for an exact, zero-cost re-run, or run live over repeated trials (pass^k) to judge a prompt or model change."
+    ]
+  }
+}
