@@ -175,7 +175,10 @@ The desktop app (Tauri shell + sidecar) runs the same `createApp` handler on a f
 `127.0.0.1` port with the app's data directory as the working root. Consequences for the
 guarantees above:
 
-- **Store**: `FileStore` only (Postgres ignored on desktop); single process, so the
+- **Store**: `FileStore` by default (hosted-database variables are ignored on desktop). Setting
+  `WALKCAST_DATABASE_URL` to a Supabase connection string in your own environment opts the desktop
+  app into the shared `PgStore`; the installer never carries a database password. With the
+  default `FileStore`, it's a single process, so the
   `chain` serialization in `FileStore.write` is sufficient. Jobs that were `running` when the
   app quit are reset to `queued` on next start (constructor sweep).
 - **Worker**: runs in-process (`LAB_WORKER` default on); `closeWarmBrowser()` is called on

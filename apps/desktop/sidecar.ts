@@ -9,8 +9,9 @@ import { parseArgs } from "node:util";
  * The Tauri process (src-tauri/src/lib.rs) starts this with the bundled Node and the app's data
  * directory as the working directory, waits for /healthz, then opens the window on /app. So:
  *
- *   - Everything is local. Recordings, runs and the queue live under the data directory; any
- *     hosted-database settings in the environment are ignored.
+ *   - Everything is local by default. Recordings, runs and the queue live under the data
+ *     directory; hosted-database settings in the environment are ignored unless the person opts
+ *     in with WALKCAST_DATABASE_URL (their own Supabase connection string, never shipped).
  *   - Signing in is optional. With Supabase configured (desktop.env, written by the staging
  *     script: the project URL and its public anon key, nothing secret) people can create an account
  *     or sign in, Google included via the system browser; without one, nothing is gated.
@@ -55,9 +56,18 @@ if (process.env.SUPABASE_URL) {
     delete process.env.SUPABASE_PUBLISHABLE_KEY;
   }
 }
-// Local data: these must be unset before the store and auth modules read them.
+// Local data by default: these must be unset before the store and auth modules read them.
 for (const key of ["SUPABASE_DB_URL", "DATABASE_URL", "LAB_SITE_URL", "LAB_HOST"]) {
   delete process.env[key];
+}
+// Opt-in shared database: a person who sets WALKCAST_DATABASE_URL in their own environment (a
+// Supabase connection string) gets the Postgres store, so the desktop app shares accounts, the
+// queue and the recordings index with their deployment. Never read from desktop.env: a database
+// password must not ship inside an installer.
+const shared = process.env.WALKCAST_DATABASE_URL?.trim();
+if (shared) {
+  if (/^postgres(ql)?:\/\//.test(shared)) process.env.SUPABASE_DB_URL = shared;
+  else console.error("sidecar: WALKCAST_DATABASE_URL is not a postgres:// URL; using the local store");
 }
 // The ffmpeg the installer ships (stage-sidecar.ts), set before the media modules read it.
 const bundledFfmpeg = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
