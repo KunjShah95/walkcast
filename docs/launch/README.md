@@ -1,7 +1,8 @@
 # Walkcast launch video
 
-`walkcast-launch.mp4`: 88 s, 1920×1080, 30 fps, H.264 + AAC stereo. `walkcast-launch-poster.jpg`
-is the thumbnail.
+`walkcast-launch.mp4`: 88 s, 1920×1080, 30 fps, H.264 + AAC stereo, narrated, with an English
+subtitle track. `walkcast-launch.vtt` holds the same captions for YouTube or LinkedIn uploads.
+`walkcast-launch-poster.jpg` is the thumbnail.
 
 ## Story
 
@@ -20,9 +21,17 @@ is the thumbnail.
 | 1:00 | Pipeline | Failed run → cause + evidence → fixture → replay × k; the cause taxonomy; `unexplained` stays unexplained. |
 | 1:08 | Results | v0 0/5, v1 5/5, v2 4/5 (regression caught), with Wilson intervals from `results/summary.md` and the scripted-agent caveat. |
 | 1:14 | Power cuts | Real browser. Real state. Real evidence. |
-| 1:20 | End card | Logo, "Show what actually happened.", MIT, the price is zero, the clone command. |
+| 1:20 | End card | Logo, "Show what actually happened.", MIT, the price is zero, walkcast.kunjshah.in. |
 
 Every number is taken from `results/` or from the Lab dashboard screenshots in `docs/screenshots/`. None are made up.
+
+## Voice-over
+
+The narration is spoken by Kokoro (`af_heart` voice), an open-weights neural TTS (Apache-2.0)
+that runs offline. `source/voiceover.py` holds the script as `(cue, end of window, line)`
+rows. It places each line on its cue, trims silence, and speeds a line up (to at most 1.3×) only
+when it would run past its window. It also writes the VTT. The music is sidechain-ducked under the
+voice, so speech stays 9 to 26 dB above it, and the mix is normalized to −14 LUFS.
 
 ## Music
 
@@ -40,9 +49,17 @@ cd docs/launch/source
 ./prepare.sh                                   # demo segments → frames/
 npm i playwright@1.56.1 && npx playwright install chromium
 python3 music.py score.wav
+python3 -m venv .venv && .venv/bin/pip install kokoro-onnx soundfile
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+.venv/bin/python voiceover.py kokoro-v1.0.onnx voices-v1.0.bin af_heart vo.wav ../walkcast-launch.vtt
 node render.mjs "$PWD/video.html" silent.mp4 30 0 88
-ffmpeg -i silent.mp4 -i score.wav -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p \
-  -c:a aac -b:a 192k -movflags +faststart -shortest ../walkcast-launch.mp4
+ffmpeg -i score.wav -i vo.wav -filter_complex "
+  [1:a]aresample=44100,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,pan=stereo|c0=c0|c1=c0,asplit=2[vo][key];
+  [0:a]volume=0.55[mus];[mus][key]sidechaincompress=threshold=0.02:ratio=10:attack=25:release=400[duck];
+  [duck][vo]amix=inputs=2:weights='1 1.25':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11" -ar 48000 mix.wav
+ffmpeg -i silent.mp4 -i mix.wav -i ../walkcast-launch.vtt -map 0:v -map 1:a -map 2 -c:v copy \
+  -c:a aac -b:a 192k -c:s mov_text -metadata:s:s:0 language=eng -movflags +faststart -t 88 ../walkcast-launch.mp4
 ```
 
 `video.html` is a deterministic timeline. `render(t)` sets every CSS animation's `currentTime`

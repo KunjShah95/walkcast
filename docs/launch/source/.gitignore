@@ -2,3 +2,5 @@ frames/
 node_modules/
 *.wav
 silent.mp4
+*.onnx
+*.bin

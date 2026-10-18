@@ -1,0 +1,114 @@
+WEBVTT
+
+1
+00:00:00.500 --> 00:00:03.786
+Every launch needs a walkthrough. Nobody enjoys making it.
+
+2
+00:00:04.100 --> 00:00:04.965
+Write the script.
+
+3
+00:00:06.050 --> 00:00:06.993
+Record the screen.
+
+4
+00:00:07.000 --> 00:00:07.923
+Retake. Retake.
+
+5
+00:00:08.050 --> 00:00:08.973
+Record the voice.
+
+6
+00:00:09.050 --> 00:00:09.979
+Sync the captions.
+
+7
+00:00:10.300 --> 00:00:12.747
+Then you ship one update, and it's already out of date.
+
+8
+00:00:14.200 --> 00:00:17.880
+Meanwhile, your browser agent says: done. The app says otherwise.
+
+9
+00:00:18.100 --> 00:00:20.414
+Seventy-six said success. The app disagreed.
+
+10
+00:00:20.450 --> 00:00:21.643
+No repro. Just flaky.
+
+11
+00:00:23.100 --> 00:00:24.082
+Meet Walkcast.
+
+12
+00:00:24.400 --> 00:00:27.630
+Paste a link. Get a narrated video walkthrough of your website.
+
+13
+00:00:30.400 --> 00:00:35.185
+One URL is the whole brief. Confirm you're allowed to test it, and press record.
+
+14
+00:00:36.600 --> 00:00:39.059
+Walkcast drives a real browser through your site.
+
+15
+00:00:40.300 --> 00:00:42.981
+Every line of narration comes from what actually happened.
+
+16
+00:00:43.300 --> 00:00:45.243
+Captions, chapters, and a transcript.
+
+17
+00:00:45.400 --> 00:00:48.175
+It never bypasses a captcha. It stops, and says so.
+
+18
+00:00:48.300 --> 00:00:52.448
+One URL in. A finished video out. Pick any voice, or use your own.
+
+19
+00:00:54.250 --> 00:00:55.135
+Same recorder.
+
+20
+00:00:55.450 --> 00:00:56.311
+Second job.
+
+21
+00:00:56.750 --> 00:01:00.087
+Walkcast Lab turns failed agent runs into regression tests.
+
+22
+00:01:00.400 --> 00:01:04.013
+Capture the failure. Classify the cause. Freeze it. Replay it.
+
+23
+00:01:04.400 --> 00:01:07.898
+Causes come from the app's real state, not an LLM judge.
+
+24
+00:01:08.200 --> 00:01:11.574
+Did the next version fix it, or break something else? Now you know.
+
+25
+00:01:14.100 --> 00:01:14.997
+Real browser.
+
+26
+00:01:16.100 --> 00:01:16.907
+Real state.
+
+27
+00:01:18.100 --> 00:01:19.058
+Real evidence.
+
+28
+00:01:20.700 --> 00:01:26.408
+Walkcast. Show what actually happened. Free and open source, at walkcast.kunjshah.in.
+
