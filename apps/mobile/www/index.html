@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src *" />
+  <title>Walkcast</title>
+  <style>
+    :root { --paper: #ffffff; --ink: #1b1a17; --ink-2: #4c4841; --line: #e7e3db; --signal: #9c5700; --fail: #b2261c; }
+    @media (prefers-color-scheme: dark) { :root { --paper: #15140f; --ink: #f2efe8; --ink-2: #b9b3a7; --line: #34312a; --signal: #e09a3e; --fail: #f08070; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; background: var(--paper); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      padding: calc(env(safe-area-inset-top) + 48px) 20px calc(env(safe-area-inset-bottom) + 24px); }
+    h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+    h1::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #c0321c; margin-right: 10px; vertical-align: middle; }
+    p { color: var(--ink-2); margin: 0 0 24px; }
+    label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+    input { width: 100%; height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; font: 15px ui-monospace, monospace; background: transparent; color: var(--ink); }
+    button { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 999px; background: var(--signal); color: #fff; font-weight: 600; font-size: 16px; }
+    button[disabled] { opacity: 0.6; }
+    .err { color: var(--fail); font-size: 14px; margin-top: 12px; min-height: 20px; }
+    .recent { margin-top: 28px; font-size: 14px; }
+    .recent a { color: var(--ink); display: block; padding: 10px 0; border-top: 1px solid var(--line); text-decoration: none; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Walkcast</h1>
+  <p>Connect to your Walkcast server to watch recordings and start runs from your phone.</p>
+  <form id="f">
+    <label for="url">Server address</label>
+    <input id="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://walkcast.example.com" required />
+    <button id="go" type="submit">Connect</button>
+    <div class="err" id="err" role="alert"></div>
+  </form>
+  <div class="recent" id="recent"></div>
+  <script>
+    // The companion is a native shell: it remembers servers and opens their mobile view
+    // (/app#mobile). Sign-in, recordings and runs all happen on the server, so the app holds no
+    // credentials of its own.
+    const KEY = "walkcast.servers";
+    const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+    const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, 5))); } catch {} };
+    const $ = (id) => document.getElementById(id);
+
+    function normalize(raw) {
+      let s = raw.trim();
+      if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+      const u = new URL(s);
+      return u.origin;
+    }
+
+    async function connect(origin) {
+      $("err").textContent = "";
+      $("go").disabled = true;
+      try {
+        // Any Walkcast server answers /healthz; a timeout or a non-Walkcast host stops here.
+        const res = await fetch(origin + "/healthz", { signal: AbortSignal.timeout(8000) });
+        const body = await res.json().catch(() => null);
+        if (!res.ok || !body || body.ok !== true) throw new Error("That address doesn't look like a Walkcast server.");
+        save([origin, ...read().filter((o) => o !== origin)]);
+        location.href = origin + "/app#mobile";
+      } catch (e) {
+        $("err").textContent = e && e.name === "TimeoutError" ? "The server didn't answer in time." : (e && e.message) || String(e);
+      } finally {
+        $("go").disabled = false;
+      }
+    }
+
+    $("f").addEventListener("submit", (e) => {
+      e.preventDefault();
+      try { connect(normalize($("url").value)); } catch { $("err").textContent = "Enter an address like walkcast.example.com"; }
+    });
+
+    const recent = read();
+    if (recent.length) {
+      $("recent").innerHTML = "<strong>Recent</strong>";
+      for (const origin of recent) {
+        const a = document.createElement("a");
+        a.href = "#"; a.textContent = origin;
+        a.addEventListener("click", (e) => { e.preventDefault(); connect(origin); });
+        $("recent").appendChild(a);
+      }
+    }
+  </script>
+</body>
+</html>

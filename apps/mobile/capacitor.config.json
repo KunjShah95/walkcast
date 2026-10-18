@@ -1,0 +1,9 @@
+{
+  "appId": "in.kunjshah.walkcast.companion",
+  "appName": "Walkcast",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["*"]
+  }
+}

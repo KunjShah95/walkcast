@@ -1,0 +1,19 @@
+{
+  "name": "walkcast-mobile",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Walkcast mobile companion: a native shell around a Walkcast server's mobile view.",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap sync android && cap open android",
+    "ios": "cap sync ios && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}
