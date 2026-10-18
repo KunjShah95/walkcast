@@ -47,6 +47,7 @@ const site = (env.LAB_SITE_URL ?? "").replace(/\/$/, "");
 /** Every place Walkcast's server sends Supabase back to (see apps/desktop/server/supabase-auth.ts). */
 const RETURN_URLS = [
   "http://127.0.0.1:4317/auth/**", // the desktop app (its fixed loopback port)
+  "walkcast://auth/callback", // the desktop app when it could not take 4317 (port-independent)
   "http://127.0.0.1:4320/auth/**", // `walkcast ui` / npm run ui
   "http://localhost:4320/auth/**",
   ...(site && !/127\.0\.0\.1|localhost/.test(site) ? [`${site}/auth/**`] : []),
