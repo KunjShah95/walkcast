@@ -25,6 +25,13 @@ export interface MediaResult {
 
 const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
 const FFPROBE = process.env.LAB_FFPROBE ?? "ffprobe";
+/**
+ * Hard cap on a single ffmpeg invocation. The job worker's stall guard is sized against this
+ * value (see `STALL_MS_DEFAULT`): an encode is the one step that can legitimately make no
+ * progress for minutes, so a stall budget shorter than one ffmpeg call would abort a healthy
+ * recording mid-encode — the same class of bug as a deadline that is too short overall.
+ */
+export const FFMPEG_TIMEOUT_MS = 5 * 60_000;
 /** The flite voices ffmpeg ships with. */
 export const VOICES = ["slt", "awb", "kal", "rms"] as const;
 export type Voice = (typeof VOICES)[number];
@@ -40,7 +47,7 @@ const VOICE: Voice = isVoice(process.env.LAB_VOICE) ? process.env.LAB_VOICE : "s
  * into one track, and muxed with the video plus a caption track. Without ffmpeg or any voice the
  * recording still has the WebM video and WebVTT captions for the dashboard player.
  */
-export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice)): Promise<MediaResult> {
+export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice), onProgress?: (p: string) => void): Promise<MediaResult> {
   const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
   const result: MediaResult = { video, mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
   const finish = (note: string) => {
@@ -53,7 +60,7 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   if (!engine) return finish("No voice is available (ffmpeg has no flite and this is not Windows); the recording has video and captions only.");
 
   try {
-    return await narrate(dir, video, captions, result, engine);
+    return await narrate(dir, video, captions, result, engine, onProgress);
   } catch (e) {
     // Keep what we have (video + captions) and say what went wrong.
     return finish(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the recording has video and captions only.`);
@@ -65,10 +72,13 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   }
 }
 
-async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult, engine: VoiceEngine): Promise<MediaResult> {
-  // 1. Speak each caption to its own clip.
+async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult, engine: VoiceEngine, onProgress?: (p: string) => void): Promise<MediaResult> {
+  // 1. Speak each caption to its own clip. One beat per line: this loop is one of only two long
+  // stretches of a recording that would otherwise report nothing at all, and a job the worker
+  // hears nothing from is a job its stall guard aborts.
   const clips: { file: string; seconds: number }[] = [];
   for (const [i, caption] of captions.entries()) {
+    onProgress?.(`Narrating line ${i + 1} of ${captions.length}`);
     const file = join(dir, `.tts-${i}.wav`);
     await engine.speak(caption.text.replace(/[{}]/g, ""), file, dir);
     clips.push({ file, seconds: wavSeconds(file) });
@@ -84,6 +94,7 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   }
 
   // 3. Mix into one narration track.
+  onProgress?.("Mixing the narration track");
   const audio = join(dir, "narration.wav");
   const inputs = clips.flatMap((c) => ["-i", c.file]);
   const delays = captions.map((c, i) => `[${i}:a]adelay=${Math.round(c.start * 1000)}:all=1[a${i}]`);
@@ -92,17 +103,18 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
 
   // 4. Mux: hold the last frame if the narration runs past the end of the video.
-  Object.assign(result, await mux(dir, video, audio, cursor));
+  Object.assign(result, await mux(dir, video, audio, cursor, onProgress));
   result.voice = "flite";
   result.note = `Narrated with the "${engine.id}" voice (${captions.length} lines).`;
   return result;
 }
 
 /** Video + narration track (+ captions) into the MP4 and the narrated WebM. */
-async function mux(dir: string, video: string, audio: string, audioSeconds: number): Promise<Pick<MediaResult, "mp4" | "webm" | "audio">> {
+async function mux(dir: string, video: string, audio: string, audioSeconds: number, onProgress?: (p: string) => void): Promise<Pick<MediaResult, "mp4" | "webm" | "audio">> {
   const videoSeconds = await probeSeconds(join(dir, video));
   const extra = Math.max(0, audioSeconds - videoSeconds + 0.5);
   const mp4 = join(dir, "recording.mp4");
+  onProgress?.("Encoding the MP4");
   await run([
     "-i", join(dir, video),
     "-i", audio,
@@ -116,6 +128,7 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
     mp4,
   ]);
   const webm = join(dir, "narrated.webm");
+  onProgress?.("Packaging the WebM");
   await run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
   return {
     webm: existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null,
@@ -230,7 +243,7 @@ const execFileAsync = promisify(execFile);
 
 /** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
 async function run(args: string[], opts: { cwd?: string } = {}): Promise<void> {
-  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL", windowsHide: true });
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: FFMPEG_TIMEOUT_MS, killSignal: "SIGKILL", windowsHide: true });
 }
 
 let encoder: boolean | undefined;

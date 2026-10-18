@@ -34,9 +34,14 @@ smoke-tests it, and the queue/store code is tested against Postgres 16.
   the queue and the recordings index. Any web task can serve any user; a redeploy loses nothing.
 - **Workers claim with `FOR UPDATE SKIP LOCKED`**, so any number poll the same table without
   taking the same job. A claim is a lease (60 s, renewed every 20 s); if a worker dies, its job
-  goes back to the queue when the lease lapses. Each job gets two attempts and a hard deadline
-  (`LAB_JOB_DEADLINE_MS`, default 6 min) after which the browser is killed, so a poison site
-  can't loop or hang a worker.
+  goes back to the queue when the lease lapses. Each job gets two attempts and a hard ceiling
+  after which the browser is killed, so a poison site can't loop or hang a worker. A record job's
+  ceiling scales with the pages it asked for (5 min + 45 s/page, so 30 pages gets ~27 min): a flat
+  cap cannot fit work that grows with the page count, and a real 30-page recording was being killed
+  one page from the end. On top of the ceiling a stall guard aborts a record job that reports no
+  progress for `LAB_JOB_STALL_MS` (default 5.5 min, deliberately longer than a single ffmpeg call),
+  which catches a wedged job long before its ceiling would. `LAB_JOB_DEADLINE_MS` still sets one
+  absolute cap across every job kind.
 - **Deploys don't lose work.** On SIGTERM a worker stops claiming, gives the running job
   `LAB_SHUTDOWN_GRACE_MS` (default 90 s) to finish, then aborts it and puts it back in the queue
   without using up an attempt. The web tier fails `/readyz` while draining so the ALB stops
@@ -110,7 +115,7 @@ variables, with secrets from Secrets Manager:
 | `LAB_TRUST_PROXY` | `1` (client IP from the ALB's `X-Forwarded-For`, for sign-in throttling) |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | sign-in through Supabase Auth (the anon/publishable key is public by design; it can't read the RLS-protected tables) |
 | Storage | the `SUPABASE_S3_*` or `MEDIA_S3_*` variables above |
-| Limits | `LAB_MAX_ACTIVE_JOBS` (1 per user), `LAB_RECORDINGS_PER_DAY` (20), `LAB_RUNS_PER_DAY` (100), `LAB_JOB_DEADLINE_MS` |
+| Limits | `LAB_MAX_ACTIVE_JOBS` (1 per user), `LAB_RECORDINGS_PER_DAY` (20), `LAB_RUNS_PER_DAY` (100), `LAB_JOB_DEADLINE_MS` (absolute cap for every kind), `LAB_JOB_STALL_MS` (silence before a record job counts as stuck) |
 
 **Networking.** Put workers in private subnets whose only route out is a NAT gateway, with a
 security group that allows outbound 443/80 and Postgres to Supabase and nothing inside the VPC.

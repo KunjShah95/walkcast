@@ -159,7 +159,9 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const engine = options.ttsProvider
     ? (engineFor(options.ttsProvider, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) ?? localVoice(options.voice ?? "slt"))
     : undefined;
-  const media = await buildMedia(dir, captions, options.voice ?? "slt", engine ?? undefined);
+  // The narration loop and the encode below are the longest stretch of a recording that has
+  // nothing to report, so they forward their own beats to the worker's stall guard.
+  const media = await buildMedia(dir, captions, options.voice ?? "slt", engine ?? undefined, options.onProgress);
   const result: RecordingResult = {
     ...(options.owner ? { owner: options.owner } : {}),
     ...(blockedRequests.length ? { blockedRequests } : {}),
