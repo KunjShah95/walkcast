@@ -155,6 +155,20 @@ export function App() {
     setIndex(next);
     return next;
   };
+  // The window can be closed for the length of a recording, and a hidden tab has its timers
+  // throttled, so pick up anything that landed in the background the moment it comes back.
+  useEffect(() => {
+    if (isSnapshot) return;
+    const onVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
 
   const sidebar = <Sidebar active={active} index={index} me={me} go={go} onClose={() => setDrawer(false)} closable={drawer} />;
 

@@ -349,7 +349,8 @@ function JobPanel({ job, target }: { job: JobStatus | null; target: string | nul
           )}
           {job && (job.status === "queued" || job.status === "running") && (
             <p className="mt-2 text-[11.5px] text-ink-3">
-              You can close this page — the recording finishes in the background and appears in your library.
+              Switch away or close this window — the recording keeps going, and the video, captions and transcript appear in your
+              library when it lands.
             </p>
           )}
           {!job && (
