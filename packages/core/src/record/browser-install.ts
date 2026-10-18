@@ -37,7 +37,7 @@ export function browserSetup(): BrowserSetup {
  * shell, FFMPEG, ...), each announced as "Downloading Chromium 141.0... (playwright build v1194)".
  */
 export function parseInstallItem(text: string): string | null {
-  const plain = text.replace(/\u001b\[[0-9;]*m/g, "");
+  const plain = text.replace(/\u001b\[[0-9;]*m/g, ""); // eslint-disable-line no-control-regex -- strips ANSI colour codes
   const last = [...plain.matchAll(/Downloading ([A-Za-z][A-Za-z ]*?)(?= v?\d| playwright build| \()/g)].at(-1);
   return last ? last[1]! : null;
 }

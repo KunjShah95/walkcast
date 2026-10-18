@@ -6,7 +6,7 @@ import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
 import { buildMedia, speechMs, localVoice, type MediaResult, type Voice } from "./media.ts";
-import { engineFor, type VoiceEngine } from "./voice.ts";
+import { engineFor } from "./voice.ts";
 import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";

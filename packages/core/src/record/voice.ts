@@ -28,8 +28,7 @@ export interface VoiceEngine {
   available(): boolean;
 }
 
-const VOICES = ["slt", "awb", "kal", "rms"] as const;
-export type FliteVoice = (typeof VOICES)[number];
+export type FliteVoice = "slt" | "awb" | "kal" | "rms";
 
 export function fliteEngine(voice: FliteVoice): VoiceEngine {
   return {
@@ -428,22 +427,8 @@ export function chooseVoiceEngine(): VoiceEngine {
   return fliteEngine(process.env.LAB_TTS_VOICE ? (process.env.LAB_TTS_VOICE as any) : "slt");
 }
 
+/** Sarvam transcript text (kept for callers that predate record/stt.ts). */
 export async function sarvamTranscribe(audioPath: string, language = "unknown"): Promise<string> {
-  const key = process.env.SARVAM_API_KEY?.trim();
-  if (!key) throw new Error("SARVAM_API_KEY is required for STT");
-  const { readFile } = await import("node:fs/promises");
-  const buf = await readFile(audioPath);
-  const form = new FormData();
-  form.append("file", new Blob([buf]), "audio.wav");
-  form.append("language_code", language);
-  form.append("model", "saaras:v1");
-  const res = await fetch("https://api.sarvam.ai/speech-to-text", {
-    method: "POST",
-    headers: { "api-subscription-key": key },
-    body: form,
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!res.ok) throw new Error(`sarvam STT failed (${res.status})`);
-  const json = (await res.json()) as { transcript?: string };
-  return json.transcript ?? "";
+  const { transcribe } = await import("./stt.ts");
+  return (await transcribe(audioPath, { language, provider: "sarvam" })).text;
 }

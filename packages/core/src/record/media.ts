@@ -5,7 +5,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
-import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, sapiAvailable, sapiEngine, sarvamTranscribe } from "./voice.ts";
+import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, sapiAvailable, sapiEngine } from "./voice.ts";
+import { transcribe } from "./stt.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -309,9 +310,14 @@ function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Auto-captions from recorded audio via Sarvam STT. Returns timed cues. */
-export async function generateCaptionsFromAudio(audioPath: string, language = "unknown"): Promise<{ start: number; end: number; text: string }[]> {
-  const transcript = (await sarvamTranscribe(audioPath, language)).trim();
+/**
+ * Auto-captions from recorded audio (record/stt.ts picks the provider). Providers with timestamps
+ * give timed cues directly; text-only transcripts are spread over the audio's duration.
+ */
+export async function generateCaptionsFromAudio(audioPath: string, language = "unknown", provider?: string | null): Promise<{ start: number; end: number; text: string }[]> {
+  const result = await transcribe(audioPath, { language, provider: provider ?? null });
+  if (result.segments?.length) return result.segments.map((s) => ({ start: round(s.start), end: round(Math.max(s.end, s.start + 0.3)), text: s.text }));
+  const transcript = result.text.trim();
   if (!transcript) return [];
   let duration = 0;
   try { duration = await probeSeconds(audioPath); } catch { duration = 0; }

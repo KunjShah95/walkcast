@@ -10,10 +10,11 @@ import type { Voice } from "../record/media.ts";
 import { RecordError, recordSite } from "../record/site.ts";
 import { closeWarmBrowser } from "../record/browser.ts";
 import { runOnce } from "../lab/runner.ts";
+import { CREDENTIALS, startApp } from "../app/server.ts";
+import { SEED_LEADS } from "../lab/task.ts";
 import { taskById } from "../lab/task.ts";
 import { withCredentials } from "../llm/credentials.ts";
 import type { Job, JobKind, Store } from "../store/types.ts";
-import { enqueueWebhook } from "../webhooks.ts";
 import { progressThrottle } from "./progress.ts";
 import { open } from "./secret-box.ts";
 
@@ -175,7 +176,6 @@ export class Worker {
     try {
       const result = job.kind === "record" ? await this.record(job, abort.signal, (p) => progress.push(p)) : await this.labRun(job);
       await finish({ status: "succeeded", result });
-      enqueueWebhook(this.o.root, "job.completed", { job: { id: job.id, kind: job.kind, status: "succeeded", result, owner: job.owner, finishedAt: new Date().toISOString() } });
       log.info("job.succeeded", { job: job.id, kind: job.kind, ms: Date.now() - started });
     } catch (e) {
       const message = e instanceof Error ? e.message.split("\n")[0]! : String(e);
@@ -184,7 +184,6 @@ export class Worker {
       const retry = !(e instanceof RecordError) && !abort.signal.aborted;
       const err = abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message;
       await finish({ status: "failed", error: err, retry }).catch(() => undefined);
-      enqueueWebhook(this.o.root, "job.completed", { job: { id: job.id, kind: job.kind, status: "failed", error: err, owner: job.owner, finishedAt: new Date().toISOString() } });
       log.warn("job.failed", { job: job.id, kind: job.kind, ms: Date.now() - started, error: message, retry });
     } finally {
       clearInterval(beat);
@@ -195,8 +194,12 @@ export class Worker {
   }
 
   private async record(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
-    const input = job.input as { url: string; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string };
-    const password = job.secret ? open(job.secret) : undefined;
+    const input = job.input as { url: string; demo?: boolean; username?: string; maxPages?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string };
+    // Sample-site job: this worker runs its own MiniCRM on loopback and records it, so the demo
+    // works wherever the worker runs (desktop in-process, or a separate fleet machine).
+    const sample = input.demo ? await startApp({ fault: "none", seed: 1, task: "create-lead", seedLeads: SEED_LEADS }) : null;
+    if (sample) Object.assign(input, { url: `${sample.url}/login`, username: CREDENTIALS.username, blockPrivate: false });
+    const password = sample ? CREDENTIALS.password : job.secret ? open(job.secret) : undefined;
     // Object storage: record into a temp dir and upload. Local: write straight into recordings/.
     const outDir = this.o.media.kind === "local" ? join(this.o.root, "recordings") : mkdtempSync(join(tmpdir(), "walkcast-"));
     try {
@@ -224,6 +227,7 @@ export class Worker {
       return { id: r.id, dir: `recordings/${r.id}` };
     } finally {
       if (this.o.media.kind !== "local" && existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+      await sample?.close().catch(() => undefined);
     }
   }
 
