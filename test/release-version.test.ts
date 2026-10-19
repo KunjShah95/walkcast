@@ -22,7 +22,7 @@ const sources = {
   "apps/desktop/src-tauri/Cargo.toml": () =>
     /^version\s*=\s*"([^"]+)"/m.exec(read("apps/desktop/src-tauri/Cargo.toml"))?.[1] ?? "",
   "apps/desktop/src-tauri/Cargo.lock": () =>
-    /name = "walkcast"\nversion = "([^"]+)"/.exec(read("apps/desktop/src-tauri/Cargo.lock"))?.[1] ?? "",
+    /name = "walkcast"\r?\nversion = "([^"]+)"/.exec(read("apps/desktop/src-tauri/Cargo.lock"))?.[1] ?? "",
   "apps/desktop/src-tauri/tauri.conf.json": () =>
     JSON.parse(read("apps/desktop/src-tauri/tauri.conf.json")).version as string,
 } satisfies Record<string, () => string>;
