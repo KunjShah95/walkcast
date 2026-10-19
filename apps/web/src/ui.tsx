@@ -62,9 +62,10 @@ export function DownloadButton({ big = false, label = "Download for Windows", cl
 export function BrandMark({ size = 26 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 26 26" aria-hidden="true">
-      <rect x=".5" y=".5" width="25" height="25" rx="7" fill="#874b00" />
-      <path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff" />
-      <circle cx="20.4" cy="5.6" r="2.6" fill="#c0321c" stroke="#fff" strokeWidth="1.2" />
+      <rect x=".5" y=".5" width="25" height="25" rx="7" fill="#1d5e58" />
+      <path d="M5.6 20.4c2.4-.6 4.6-2.6 6.1-5.6" fill="none" stroke="#f6d776" strokeWidth="1.9" strokeLinecap="round" strokeDasharray=".1 3" />
+      <path d="M11.6 6.4 20 10.1l-3.8 1.4-1.4 3.8z" fill="#fbf8f3" stroke="#fbf8f3" strokeWidth=".8" strokeLinejoin="round" />
+      <circle cx="20" cy="19.6" r="2.5" fill="#c0321c" stroke="#fbf8f3" strokeWidth="1.2" />
     </svg>
   );
 }

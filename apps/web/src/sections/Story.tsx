@@ -375,12 +375,12 @@ export function Flow() {
     <section className="sec">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow n={3}>Narration</Eyebrow>
+          <Eyebrow n={3}>The visit log</Eyebrow>
           <h2>
             Every <Tile icon={Globe} tone="blue" tilt={-6} /> page. <br />
-            <span className="dim">One <Tile icon={Captions} tone="ink" tilt={5} /> voice-over.</span>
+            <span className="dim">One <Tile icon={Captions} tone="ink" tilt={5} /> complete visit.</span>
           </h2>
-          <p className="lede">Lines are written from what the browser actually did: the page it opened, the field it typed into, what the site answered. Nothing is made up.</p>
+          <p className="lede">Every step of the visit becomes a caption: the page it opened, the field it typed into, what the site answered. Nothing is made up.</p>
         </Reveal>
         <Reveal className="flow" delay={0.1}>
           <div ref={ref} className="flow-in" style={{ height: H }}>
@@ -413,7 +413,7 @@ export function Flow() {
             ))}
             <div className="narr card">
               <div className="narr-head">
-                <span><Film size={15} /> Narration</span>
+                <span><Film size={15} /> Visit log</span>
                 <span className="live">REC</span>
               </div>
               <div className="narr-pin mono">walkthrough.mp4 · en · 13 lines</div>
@@ -431,8 +431,8 @@ export function Flow() {
                 </AnimatePresence>
               </ul>
               <div className="narr-foot">
-                <span>Voice</span>
-                <b className="mono">flite · slt</b>
+                <span>Captions</span>
+                <b className="mono">WebVTT · en</b>
               </div>
             </div>
           </div>

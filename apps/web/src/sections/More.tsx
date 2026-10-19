@@ -159,13 +159,13 @@ export function Bento() {
               ))}
             </div>
             <h3>files per run</h3>
-            <p>MP4, WebM, captions, transcript and the narration audio.</p>
+            <p>MP4, WebM, captions, a transcript and the page list.</p>
           </Card>
           <Card className="b-dark" delay={0.15}>
             <span className="rec-tag">REC</span>
             <div className="huge">HD</div>
-            <h3>Record and narrate</h3>
-            <p>H.264 video, AAC voice, captions on.</p>
+            <h3>The whole visit</h3>
+            <p>H.264 video with captions on, ready to share.</p>
           </Card>
           <Card className="b-setup">
             <h3>Works with your setup.</h3>
@@ -174,7 +174,7 @@ export function Bento() {
               {[
                 [<WindowsIcon key="w" />, "Windows 10 / 11", true],
                 [<AppWindow key="c" size={15} />, "Chromium", true],
-                [<AudioLines key="f" size={15} />, "ffmpeg voice", true],
+                [<Film key="f" size={15} />, "ffmpeg encoder", true],
                 [<GithubIcon key="g" />, "Open source", true],
                 [<Lock key="l" size={15} />, "Optional account", false],
               ].map(([icon, label, on]) => (
@@ -189,8 +189,8 @@ export function Bento() {
           <Card className="b-voice" delay={0.05}>
             <span className="soft-ic"><AudioLines size={18} /></span>
             <Wave />
-            <h3>A clear voice</h3>
-            <p>Four built-in voices. No microphone, no retakes.</p>
+            <h3>A voice, if you want one</h3>
+            <p>Add an ElevenLabs or OpenAI key, or upload your own recording. Without one, the video has captions.</p>
           </Card>
           <Card className="b-safe" delay={0.1}>
             <span className="soft-ic"><ShieldCheck size={18} /></span>
@@ -248,7 +248,7 @@ const USES: { title: string; text: string; art: ReactNode }[] = [
   },
   {
     title: "Product demos",
-    text: "A narrated tour for sales calls, from one link.",
+    text: "A full product tour for sales calls, from one link.",
     art: (
       <>
         <div className="bw" />
@@ -571,7 +571,7 @@ const HUB = [
   { label: "walkthrough.mp4", meta: "1:11 · H.264", icon: Film, color: "#c0321c", side: "l", y: 0.28 },
   { label: "captions.vtt", meta: "13 lines", icon: Captions, color: "#9c5700", side: "l", y: 0.72 },
   { label: "transcript.txt", meta: "6 pages", icon: FileText, color: "#2d4f73", side: "r", y: 0.28 },
-  { label: "narration.wav", meta: "voice · slt", icon: AudioLines, color: "#2c6a3d", side: "r", y: 0.72 },
+  { label: "narration.wav", meta: "optional voice", icon: AudioLines, color: "#2c6a3d", side: "r", y: 0.72 },
 ] as const;
 
 export function Closing() {
@@ -602,7 +602,7 @@ export function Closing() {
           <h2>
             Your site has <Tile icon={AppWindow} tone="ink" tilt={-6} /> pages.
             <br />
-            <span className="dim">Now it has a <Tile icon={AudioLines} tone="rec" tilt={5} /> voice.</span>
+            <span className="dim">Now it has a <Tile icon={Play} tone="rec" tilt={5} fill /> visitor.</span>
           </h2>
           <div ref={ref} className="hub" style={{ height: H }}>
             <svg width={w} height={H} aria-hidden="true">

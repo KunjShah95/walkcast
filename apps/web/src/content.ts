@@ -26,7 +26,7 @@ export const ROUTES: Route[] = [
     label: "Home",
     title: "Walkcast · Send a visitor to your website, get the whole visit on video",
     description:
-      "Send a visitor to your site, get the whole visit on video. A real browser signs in and clicks through your pages; you get an MP4 with voice-over, captions and transcript. Free for Windows.",
+      "Send a visitor to your site, get the whole visit on video. A real browser signs in and clicks through your pages. Free for Windows.",
   },
   {
     path: "/guides/narrated-website-walkthrough",
@@ -69,15 +69,15 @@ export const ROUTES: Route[] = [
 export const MORE_FAQ: [string, string][] = [
   [
     "What files does a recording produce?",
-    "An MP4 (H.264 video, AAC narration and an embedded caption track), a WebM copy with the narration, the narration as a WAV file, WebVTT captions, and a list of every page visited with its HTTP status.",
+    "An MP4 (H.264 video with an embedded caption track), the raw WebM, WebVTT captions, a transcript, and a list of every page visited with its HTTP status. With a voice key you also get the narration in the MP4, a narrated WebM and the narration as a WAV file.",
   ],
   [
     "How long does a recording take?",
-    "Usually a minute or two. A six-page site records, narrates and encodes in under a minute on an ordinary laptop; it scales with the number of pages, up to 30.",
+    "Usually a minute or two. A six-page site records and encodes in under a minute on an ordinary laptop; it scales with the number of pages, up to 30.",
   ],
   [
-    "Which voices does it use?",
-    "On Windows the narration is spoken by the voices built into Windows (a female or a male voice). When run from source on Linux or macOS it uses ffmpeg's flite voices. Nothing is sent to a speech service unless you configure one.",
+    "Does it add a voice-over?",
+    "Only if you want one. Add an ElevenLabs, OpenAI, Google, Azure or other voice key in Settings, or upload a recording of your own voice. Without one the video has captions and a transcript, and nothing is sent to a speech service.",
   ],
   [
     "Can I edit the narration?",
@@ -94,9 +94,9 @@ export const MORE_FAQ: [string, string][] = [
 ];
 export const TAGLINE = "Send a visitor to your website, get the whole visit on video";
 export const DESCRIPTION =
-  "Send a visitor to your website and get the whole visit on video. A real browser signs in, clicks through your pages like a first-time user and hands back the complete recording as an MP4, with voice-over, captions and a transcript. Free desktop app for Windows.";
+  "Send a visitor to your website and get the whole visit on video. A real browser signs in, clicks through your pages like a first-time user and hands back the complete recording as an MP4 with captions and a transcript. Free desktop app for Windows.";
 export const DEFINITION =
-  "Walkcast is a free, open-source Windows app that sends a visitor to your website and records the whole visit. From one link, a real browser signs in, visits up to 30 pages the way a first-time user would, and returns the complete recording as an MP4 with a voice-over, WebVTT captions and a transcript. Every line of narration comes from what the browser actually did.";
+  "Walkcast is a free, open-source Windows app that sends a visitor to your website and records the whole visit. From one link, a real browser signs in, visits up to 30 pages the way a first-time user would, and returns the complete recording as an MP4 with WebVTT captions and a transcript, plus a voice-over when you add a voice key. Every caption comes from what the browser actually did.";
 
 export const FAQ: [string, string][] = [
   ["What is Walkcast?", DEFINITION],
@@ -106,7 +106,7 @@ export const FAQ: [string, string][] = [
   ],
   [
     "How do I make a narrated video walkthrough of my website?",
-    "Install Walkcast, paste the site's link, add the username and password you normally sign in with, confirm you may test the site, and press Record. You get an MP4 with a spoken voice-over, a WebVTT caption file and a transcript.",
+    "Install Walkcast, paste the site's link, add the username and password you normally sign in with, confirm you may test the site, and press Record. You get an MP4 of the whole visit with a WebVTT caption file and a transcript, plus a voice-over if you added a voice key.",
   ],
   [
     "Can it record pages behind a login?",
@@ -135,7 +135,7 @@ export const FAQ: [string, string][] = [
 export const HOWTO: [string, string][] = [
   ["Install Walkcast", "Download the Windows installer and run it. WebView2 is fetched automatically if the PC does not have it yet."],
   ["Paste the link and sign-in", "Paste the site's address and the username and password you use. Confirm you own the site or may test it."],
-  ["Press Record", "A real browser signs in, visits up to 30 pages and returns the whole visit as an MP4 with voice-over, captions and a transcript."],
+  ["Press Record", "A real browser signs in, visits up to 30 pages and returns the whole visit as an MP4 with captions and a transcript."],
 ];
 
 /** The demo recording on the page, described for VideoObject and the video sitemap. */

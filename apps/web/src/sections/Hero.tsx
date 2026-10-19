@@ -84,7 +84,7 @@ const STRIP = [
   [Film, "WebM"],
   [Captions, "WebVTT captions"],
   [FileText, "Transcript"],
-  [AudioLines, "WAV narration"],
+  [AudioLines, "Optional voice-over"],
   [Globe, "Page list"],
 ] as const;
 
@@ -134,7 +134,7 @@ export function Hero() {
             Send a <Tile icon={Link} tone="ink" tilt={-6} /> visitor.
           </motion.span>
           <motion.span className="line" {...line(1)}>
-            Get the <Tile icon={Play} tone="rec" tilt={5} fill /> whole visit.
+            Get the <Tile icon={Play} tone="rec" tilt={5} fill /> <mark className="hl">whole visit</mark>.
           </motion.span>
           <motion.span className="line dim" {...line(2)}>
             No script. No <span className="strike">editor</span>.
@@ -142,8 +142,8 @@ export function Hero() {
         </h1>
         <motion.p className="lede" {...line(3)}>
           Paste a link and a real browser visits your site like a first-time user: it signs in <Ex n={1} at={0} seek={seek} />, clicks through your
-          pages <Ex n={5} at={4} seek={seek} /> and hands back the complete visit as an MP4, with voice-over, captions and a transcript
-          on top <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
+          pages <Ex n={5} at={4} seek={seek} /> and hands back the complete visit as an MP4, with captions and a transcript
+          of every step <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
         </motion.p>
         <motion.div className="actions" {...line(4)}>
           <DownloadButton big />
@@ -180,9 +180,9 @@ export function Hero() {
                   <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="Narration" default />
                 </video>
               </figure>
-              <aside className="side" aria-label="Narration transcript">
+              <aside className="side" aria-label="Visit log">
                 <div className="side-head">
-                  <span className="side-title"><BrandMark size={16} /> Narration</span>
+                  <span className="side-title"><BrandMark size={16} /> Visit log</span>
                   <span className="mono">click to seek</span>
                 </div>
                 <ol className="cues" ref={list}>
