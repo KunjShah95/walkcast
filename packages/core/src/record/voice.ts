@@ -4,7 +4,7 @@
  *
  * Backend selection honours `LAB_TTS_PROVIDER` (`sarvam`, `bhashini`, `elevenlabs`, ...). The
  * offline flite/Windows voice only speaks when `LAB_TTS_PROVIDER=flite` asks for it by name: by
- * default a recording uses the free trial voice (`trialEngine`) or ships silent with captions. Any failure to reach the provider throws so the recording still ships with video
+ * default a recording ships silent with captions. Any failure to reach the provider throws so the recording still ships with video
  * + captions (the existing `buildMedia` catch keeps what we have). Keys never leave the server.
  */
 import { execFile, spawnSync } from "node:child_process";
@@ -176,54 +176,6 @@ export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
       await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
       const { rmSync } = await import("node:fs");
       rmSync(tmp, { force: true });
-    },
-  };
-}
-
-/** Where the sign-in step left this account's free-voice ticket (see supabase/functions/tts-trial). */
-export const TRIAL_TICKET_ENV = "WALKCAST_TRIAL_TICKET";
-
-/** The tts-trial edge function: WALKCAST_TRIAL_URL, else the one beside this app's Supabase project. */
-export function trialUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const explicit = env.WALKCAST_TRIAL_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-  const supabase = env.SUPABASE_URL?.trim();
-  return supabase ? `${supabase.replace(/\/+$/, "")}/functions/v1/tts-trial` : null;
-}
-
-/** Thrown when the free recording is used up, so the recording can say why it went quiet. */
-export class TrialSpentError extends Error {}
-
-/**
- * The free voice: one recording per account, spoken by ElevenLabs through Walkcast's own key. The
- * key stays in the edge function; this side only holds the ticket minted at sign-in. `recording`
- * is what the trial is claimed for: every line of that recording may speak, no other recording can.
- */
-export function trialEngine(recording: string, cloudVoice?: string): VoiceEngine | null {
-  const ticket = process.env[TRIAL_TICKET_ENV]?.trim();
-  const base = trialUrl();
-  if (!ticket || !base) return null;
-  return {
-    id: "walkcast:free-voice",
-    kind: "cloud",
-    available: (): boolean => true,
-    async speak(text, outFile) {
-      const res = await fetch(`${base}/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ ticket, recording, text, ...(cloudVoice ? { voice: cloudVoice } : {}) }),
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (res.status === 402 || res.status === 401) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new TrialSpentError(body.error ?? "The free Walkcast voice is used up.");
-      }
-      if (!res.ok) throw new Error(`free voice failed (${res.status})`);
-      const tmp = outFile + ".mp3";
-      const { writeFile, rm } = await import("node:fs/promises");
-      await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
-      await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
-      await rm(tmp, { force: true });
     },
   };
 }

@@ -74,7 +74,7 @@ export function Settings({ me }: { me: Me | null }) {
                 onLanguage={(l) => setPrefs({ ttsLanguages: { ...prefs.ttsLanguages, [prefs.ttsProvider]: l } })}
                 localVoicePicker={<VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />}
               />
-              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. The default Walkcast voice narrates your first recording free; after that, recordings without a key have captions and a transcript, no voice.</p>
+              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. Without one, recordings have captions and a transcript, no voice.</p>
             </div>
           </div>
           <label className="grid gap-1.5">

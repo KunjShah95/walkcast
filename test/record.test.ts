@@ -42,8 +42,7 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
   assert.ok(r.captions.every((c) => !c.text.includes("demo-pass")));
   assert.ok(existsSync(join(r.dir, "captions.vtt")));
   assert.ok(existsSync(join(r.dir, "video.webm")));
-  console.log("MEDIA NOTE:", r.media.note);
-if (canNarrate()) {
+  if (canNarrate()) {
     assert.equal(r.media.mp4, "recording.mp4");
     assert.equal(r.media.voice, "flite");
     // Spoken lines never overlap.

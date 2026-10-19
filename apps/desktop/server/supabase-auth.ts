@@ -61,8 +61,6 @@ export function supabaseAuthConfig(env = process.env): SupabaseAuthConfig | null
 export class SupabaseAuth extends Sessions {
   readonly kind = "supabase" as const;
   private settings: { at: number; value: { google: boolean; confirmEmail: boolean; signupDisabled: boolean } } | undefined;
-  /** Runs with the Supabase access token while it is still valid, before adopt() signs it out. */
-  onSession?: (accessToken: string) => Promise<void>;
 
   constructor(
     store: Store,
@@ -317,10 +315,7 @@ export class SupabaseAuth extends Sessions {
   /** Turn a Supabase session into our user, then end the Supabase session (we keep our own). */
   private async adopt(session: SupabaseSession): Promise<User> {
     try {
-      const user = await this.link(session.user);
-      // Best effort: a sign-in must never fail because a side service (the free voice) is down.
-      await this.onSession?.(session.access_token).catch(() => undefined);
-      return user;
+      return await this.link(session.user);
     } finally {
       await this.call("POST", "/logout?scope=local", undefined, session.access_token).catch(() => undefined);
     }

@@ -49,7 +49,7 @@ export function TtsPicker({ provider, voice, language, onProvider, onVoice, onLa
         <ProviderSelect providers={providers} value={provider} onChange={onProvider} disabled={disabled} className={selectClassName} />
         {provider === "flite" ? (
           <p className="text-[12px] text-ink-3">
-            Your first recording is narrated free by a natural ElevenLabs voice. After that, recordings have captions and a transcript until you add a voice key in Settings.
+            Recordings get captions and a transcript, no voice. To narrate, pick a voice provider above and add its key in Settings.
           </p>
         ) : (
           localVoicePicker
@@ -178,7 +178,7 @@ function VoiceControl({ info, voice, language, onVoice, onLanguage, disabled }: 
       ) : (
         <p className="text-[12px] text-ink-3">This provider's voices aren't a public list, so its voice id goes here.</p>
       )}
-      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording falls back to the Walkcast voice (or captions only).</p>}
+      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording has captions only.</p>}
       {failed && <p className="text-[12px] text-fail">{failed}</p>}
     </div>
   );
