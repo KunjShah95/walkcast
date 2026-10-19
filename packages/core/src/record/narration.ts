@@ -30,9 +30,8 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
     if (step.type === "claim") {
       // The recorder's own bookkeeping ("Visited 5 pages", "Stopping at your … limit") becomes
       // a narrated line, so the video explains its own length and outcome.
-      const summary = typeof step.summary === "string" ? step.summary.trim() : "";
-      const at = typeof step.at === "number" ? step.at : (typeof step.startedAt === "number" ? step.startedAt : ctx.videoStart);
-      if (summary) say(at, summary);
+      const summary = step.summary.trim();
+      if (summary) say(step.at, summary);
       continue;
     }
     const name = typeof step.args.name === "string" && step.args.name ? `"${step.args.name}"` : "the control";
@@ -70,7 +69,10 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
     if (step.error) say(step.endedAt, `That step failed: ${step.error.slice(0, 120)}.`);
   }
   const last = steps.at(-1);
-  if (last) say(last.endedAt, `Recording finished. ${ctx.pages.length} page${ctx.pages.length === 1 ? "" : "s"} visited.`);
+  if (last) {
+    const endAt = last.type === "step" ? last.endedAt : last.at;
+    say(endAt, `Recording finished. ${ctx.pages.length} page${ctx.pages.length === 1 ? "" : "s"} visited.`);
+  }
 
   out.sort((a, b) => a.at - b.at);
   return out.map((c, i) => ({ start: round(c.at), end: round(Math.max(c.at + 1.5, out[i + 1]?.at ?? c.at + 3)), text: c.text }));
