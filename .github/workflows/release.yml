@@ -60,6 +60,8 @@ jobs:
 
   build:
     needs: verify
+    # A hung step (v0.3.4 sat six hours) should fail in an hour, not hold the release all day.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
