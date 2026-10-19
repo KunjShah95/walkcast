@@ -62,7 +62,7 @@ export function sarvamEngine(cloudVoice?: string, cloudLanguage?: string): Voice
         body: JSON.stringify({ inputs: [text], target_language_code: language, speaker, model: "bulbul:v2" }),
         signal: AbortSignal.timeout(30_000),
       });
-      if (!res.ok) throw new Error(`sarvam TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("sarvam", res);
       const json = (await res.json()) as { audios?: string[] };
       const encoded = json.audios?.[0];
       if (!encoded) throw new Error("sarvam returned no audio");
@@ -142,7 +142,7 @@ export function bhashiniEngine(cloudVoice?: string, cloudLanguage?: string): Voi
         body: JSON.stringify({ modelId: serviceId, task: "tts", input: [{ source: text }], config: { language: { sourceLanguage: language } } }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`bhashini TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("bhashini", res);
       const json = (await res.json()) as { audio?: Array<{ audioContent?: string }> };
       const encoded = json.audio?.[0]?.audioContent;
       if (!encoded) throw new Error("bhashini returned no audio");
@@ -155,14 +155,20 @@ export function bhashiniEngine(cloudVoice?: string, cloudLanguage?: string): Voi
 /** A premade ElevenLabs voice (Sarah): usable on every plan, including free API keys. */
 const ELEVENLABS_PREMADE = "EXAVITQu4vr4xnSDxMaL";
 
-/** ElevenLabs' own explanation of a failure ("quota exceeded", "invalid key"), kept short. */
+/** A provider's own explanation of a failure ("quota exceeded", "invalid key"), kept short. */
 function elevenLabsMessage(body: string): string {
   try {
-    const d = (JSON.parse(body) as { detail?: { message?: string } | string }).detail;
-    const msg = typeof d === "string" ? d : d?.message;
+    const j = JSON.parse(body) as { detail?: { message?: string } | string; error?: { message?: string } | string; message?: string };
+    const pick = (v: unknown) => (typeof v === "string" ? v : v && typeof v === "object" && "message" in v && typeof v.message === "string" ? v.message : undefined);
+    const msg = pick(j.detail) ?? pick(j.error) ?? pick(j.message);
     if (msg) return msg.slice(0, 160);
   } catch { /* not JSON */ }
-  return body.slice(0, 160) || "no details";
+  return body.replace(/\s+/g, " ").trim().slice(0, 160) || "no details";
+}
+
+/** The error a failed provider call throws: its name, the status, and what the provider said. */
+async function ttsError(provider: string, res: Response): Promise<Error> {
+  return new Error(`${provider} TTS failed (${res.status}): ${elevenLabsMessage(await res.text().catch(() => ""))}`);
 }
 
 export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
@@ -228,7 +234,7 @@ export function googleCloudTtsEngine(cloudVoice?: string, cloudLanguage?: string
         body: JSON.stringify({ input: { text }, voice: { languageCode: language, name: voice }, audioConfig: { audioEncoding: "LINEAR16", sampleRateHertz: 22050 } }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`google TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("google", res);
       const json = (await res.json()) as { audioContent?: string };
       if (!json.audioContent) throw new Error("google TTS returned no audio");
       const { writeFile } = await import("node:fs/promises");
@@ -258,7 +264,7 @@ export function azureTtsEngine(cloudVoice?: string, cloudLanguage?: string): Voi
         body: ssml,
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`azure TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("azure", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
     },
@@ -309,7 +315,7 @@ export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
         body: JSON.stringify({ model, input: text, voice, response_format: "wav" }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`openai TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("openai", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
     },
@@ -332,7 +338,7 @@ export function murfEngine(cloudVoice?: string): VoiceEngine | null {
         body: JSON.stringify({ text, voiceId: voice, format: "WAV" }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`murf TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("murf", res);
       const json = (await res.json()) as { audioFile?: string };
       if (!json.audioFile) throw new Error("murf returned no audio");
       const audioRes = await fetch(json.audioFile);
@@ -360,7 +366,7 @@ export function reverieEngine(cloudVoice?: string, cloudLanguage?: string): Voic
         body: JSON.stringify({ text, speaker }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`reverie TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("reverie", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
     },
@@ -385,7 +391,7 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
         body: JSON.stringify({ text, language, voice }),
         signal: AbortSignal.timeout(60_000),
       });
-      if (!res.ok) throw new Error(`custom TTS failed (${res.status})`);
+      if (!res.ok) throw await ttsError("custom", res);
       const ct = res.headers.get("content-type") ?? "";
       const { writeFile } = await import("node:fs/promises");
       if (ct.includes("application/json")) {

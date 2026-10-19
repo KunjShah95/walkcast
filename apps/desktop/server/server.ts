@@ -12,7 +12,7 @@ import { configuredProviders } from "../../../packages/core/src/llm/providers.ts
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
+import { configuredCloudProviders, engineFor } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -711,7 +711,12 @@ export function createApp(o: ServeOptions = {}): App {
         const b = await readJson(req, 500_000);
         const captions = validateCaptions(b.captions);
         const voice = isVoice(b.voice) ? b.voice : "slt";
-        result = await renarrate(dir, captions, voice);
+        // Re-speak with the voice the recording was made in ("elevenlabs:<voice id>"), so fixing
+        // one line doesn't swap a natural voice for the offline one.
+        const spoke = typeof (summary as { narration?: { spoke?: unknown } }).narration?.spoke === "string" ? String((summary as { narration: { spoke: string } }).narration.spoke) : "";
+        const [spokeProvider = "", ...spokeVoice] = spoke.split(":");
+        const cloud = spokeProvider && isCloudProvider(spokeProvider) ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined) : null;
+        result = await renarrate(dir, captions, voice, cloud);
         summary.captions = captions;
       } else {
         const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");

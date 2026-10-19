@@ -165,13 +165,30 @@ async function muxSilent(dir: string, video: string, onProgress?: (p: string) =>
  * Re-speak an edited script over an existing recording. Needs the raw browser video, which only
  * a recording kept on local disk still has.
  */
-export async function renarrate(dir: string, captions: Caption[], voice: Voice): Promise<MediaResult> {
+export async function renarrate(dir: string, captions: Caption[], voice: Voice, cloud: VoiceEngine | null = null): Promise<MediaResult> {
   if (!existsSync(join(dir, "video.webm"))) throw new Error("The original browser video isn't kept for this recording, so it can't be re-narrated.");
-  const engine = localVoice(voice);
-  if (!canEncode() || !engine) throw new Error("This machine has no narration voice (ffmpeg with flite, or Windows speech).");
-  const result: MediaResult = { video: "video.webm", mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
+  // The voice the recording was made with (an ElevenLabs voice stays ElevenLabs after an edit);
+  // the offline voice when it was offline, or when that cloud voice can't speak any more.
+  const local = localVoice(voice);
+  if (!canEncode() || (!cloud && !local)) throw new Error("This machine has no narration voice (ffmpeg with flite, or Windows speech).");
+  const fresh = (): MediaResult => ({ video: "video.webm", mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" });
   try {
-    return await narrate(dir, "video.webm", captions, result, engine);
+    if (cloud) {
+      try {
+        // narrate() retimes the captions it speaks; work on a copy so a failed attempt leaves
+        // the caller's untouched for the offline retry.
+        const attempt = captions.map((c) => ({ ...c }));
+        const r = await narrate(dir, "video.webm", attempt, fresh(), cloud);
+        captions.splice(0, captions.length, ...attempt);
+        return r;
+      } catch (e) {
+        if (!local) throw e;
+        const r = await narrate(dir, "video.webm", captions, fresh(), local);
+        r.note = `${r.note} The recording's own voice failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so the offline voice spoke.`;
+        return r;
+      }
+    }
+    return await narrate(dir, "video.webm", captions, fresh(), local!);
   } finally {
     for (const [i] of captions.entries()) {
       rmSync(join(dir, `.tts-${i}.wav`), { force: true });
