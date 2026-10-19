@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { loadTtsProviders } from "../lib/api.ts";
+import { cloudVoicePreviewUrl, loadCapabilities, loadTtsProviders } from "../lib/api.ts";
 import { cn } from "../lib/format.ts";
 import type { TtsProvider } from "../lib/prefs.ts";
 import { Button, fieldClass } from "./ui.tsx";
@@ -17,12 +17,21 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
   const [natural, setNatural] = useState<Natural>("elevenlabs");
   const [configured, setConfigured] = useState<Record<Natural, boolean>>({ elevenlabs: false, openai: false });
   const [editable, setEditable] = useState(true);
+  // The offline voice needs ffmpeg's flite or Windows speech; macOS and most Linux builds have neither.
+  const [offline, setOffline] = useState(true);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
+    void loadCapabilities()
+      .then((caps) => {
+        if (!live || caps.voices?.available !== false) return;
+        setOffline(false);
+        setChoice((c) => (c === "flite" ? "none" : c));
+      })
+      .catch(() => undefined);
     void loadTtsProviders().then((list) => {
       if (!live) return;
       const has = (id: Natural) => Boolean(list.find((p) => p.id === id)?.configured);
@@ -61,6 +70,13 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
       const res = await fetch("/api/credentials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ env: KEY_ENV[natural], value: key.trim() }) });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `Couldn't save the key (${res.status}).`);
+      // Speak one short sample now: a mistyped key or an account without credits should show up
+      // here, not minutes into the first recording.
+      const check = await fetch(cloudVoicePreviewUrl(natural, ""));
+      if (!check.ok) {
+        const why = ((await check.json().catch(() => ({}))) as { error?: string }).error;
+        throw new Error(`${NATURAL_LABEL[natural]} didn't accept that key${why ? `: ${why}` : "."} Check the key, or pick another option.`);
+      }
       onChoose(natural);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -98,7 +114,7 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
               {needsKey && editable && <p className="text-[12px] text-ink-3">Saved on this computer only, in Walkcast's settings.</p>}
             </div>
           )}
-          <Option checked={choice === "flite"} onSelect={() => setChoice("flite")} title="Basic offline voice" note="Works right away, no key. Sounds robotic." />
+          <Option checked={choice === "flite"} onSelect={() => setChoice("flite")} title="Basic offline voice" note={offline ? "Works right away, no key. Sounds robotic." : "Not available on this computer."} disabled={!offline} />
           <Option checked={choice === "none"} onSelect={() => setChoice("none")} title="No voice" note="Captions and a transcript only." />
         </div>
 
@@ -109,7 +125,7 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
             Cancel
           </Button>
           <Button tone="record" onClick={() => void confirm()} disabled={saving || (needsKey && !editable)}>
-            {saving ? "Saving key…" : "Continue and record"}
+            {saving ? "Checking key…" : "Continue and record"}
           </Button>
         </div>
       </div>
@@ -117,10 +133,10 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
   );
 }
 
-function Option({ checked, onSelect, title, note, autoFocus }: { checked: boolean; onSelect: () => void; title: string; note: string; autoFocus?: boolean }) {
+function Option({ checked, onSelect, title, note, autoFocus, disabled }: { checked: boolean; onSelect: () => void; title: string; note: string; autoFocus?: boolean; disabled?: boolean }) {
   return (
-    <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors", checked ? "border-signal bg-signal-soft" : "border-line hover:bg-panel-2")}>
-      <input type="radio" name="voice-choice" checked={checked} onChange={onSelect} autoFocus={autoFocus} className="mt-1 accent-[var(--signal)]" />
+    <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors", checked ? "border-signal bg-signal-soft" : "border-line hover:bg-panel-2", disabled && "cursor-not-allowed opacity-50 hover:bg-transparent")}>
+      <input type="radio" name="voice-choice" checked={checked} onChange={onSelect} autoFocus={autoFocus} disabled={disabled} className="mt-1 accent-[var(--signal)]" />
       <span className="grid gap-0.5">
         <span className="text-[14px] font-medium">{title}</span>
         <span className="text-[12.5px] text-ink-3">{note}</span>

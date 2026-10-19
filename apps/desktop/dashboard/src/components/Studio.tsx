@@ -5,6 +5,21 @@ import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
 import type { RecordingSummary } from "../lib/types.ts";
 import { Button, ExhibitTag, Panel, PlayMark, Stamp } from "./ui.tsx";
 
+/** How a cloud provider is named in the voice line under the player. */
+const PROVIDER_NAME: Record<string, string> = {
+  elevenlabs: "ElevenLabs",
+  openai: "OpenAI",
+  google: "Google",
+  azure: "Azure",
+  awspolly: "AWS Polly",
+  sarvam: "Sarvam",
+  bhashini: "Bhashini",
+  murf: "Murf",
+  reverie: "Reverie",
+  custom: "Custom",
+  "custom-voice": "Uploaded",
+};
+
 export const OUTCOME: Record<string, { text: string; tone: "pass" | "fail" | "muted" }> = {
   "signed-in": { text: "Signed in", tone: "pass" },
   "not-attempted": { text: "No sign-in", tone: "muted" },
@@ -98,15 +113,21 @@ export function Studio({
   };
 
   const outcome = OUTCOME[r.signIn.outcome] ?? { text: r.signIn.outcome, tone: "muted" as const };
-  const engine = r.media.note.match(/"([\w:]+)" voice/)?.[1] ?? "";
+  const engine = r.media.note.match(/"([\w:.-]+)" voice/)?.[1] ?? "";
+  const provider = engine.split(":")[0] ?? "";
   const voiceLine =
     r.media.voice === "own"
       ? "Your voice"
       : r.media.voice === "flite"
-        ? engine.startsWith("windows:")
+        ? provider === "windows"
           ? `Windows voice (${engine.slice("windows:".length)})`
-          : engine.replace(/^flite:/, "").toUpperCase() || "Synthetic voice"
+          : provider === "flite" || !provider
+            ? `Offline voice${engine ? ` (${engine.slice("flite:".length).toUpperCase()})` : ""}`
+            : `${PROVIDER_NAME[provider] ?? provider} voice`
         : "Captions only";
+  // Say why a recording sounds different from what was picked: a voice that failed part-way, or a
+  // fallback that spoke instead. Without this a silent video gives no reason at all.
+  const voiceTrouble = /failed|instead|could not reach/i.test(r.media.note) ? r.media.note : "";
 
   return (
     <div className={cn("grid min-w-0 gap-4", !compact && "xl:grid-cols-[minmax(0,1fr)_380px]")}>
@@ -174,10 +195,15 @@ export function Studio({
             {r.pages.length} pages · {ms(r.durationMs)} · {voiceLine}
             {r.stopped?.reason === "time" ? ` · stopped at ${lengthLabel(r.stopped.limitSeconds ?? 0)}` : ""}
           </span>
-          {r.narration && !r.narration.reachable && (
-            <span className="text-[12px] text-warn">
-              {r.narration.asked} was selected but couldn’t be reached, so it didn’t narrate this recording.
-            </span>
+          {voiceTrouble ? (
+            <span className="text-[12px] text-warn">{voiceTrouble}</span>
+          ) : (
+            r.narration &&
+            !r.narration.reachable && (
+              <span className="text-[12px] text-warn">
+                {r.narration.asked} was selected but couldn’t be reached, so it didn’t narrate this recording.
+              </span>
+            )
           )}
           <span className="ml-auto flex items-center gap-1.5">
             <button
