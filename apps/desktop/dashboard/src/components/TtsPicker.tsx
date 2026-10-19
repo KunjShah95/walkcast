@@ -5,7 +5,7 @@ import type { TtsProvider } from "../lib/prefs.ts";
 import { PlayMark } from "./ui.tsx";
 
 /** Providers that speak from the machine itself, so the flite picker is the right control for them. */
-const LOCAL = new Set(["flite", "custom-voice"]);
+const LOCAL = new Set(["flite", "none", "custom-voice"]);
 
 export interface TtsPickerProps {
   provider: TtsProvider;
@@ -47,12 +47,13 @@ export function TtsPicker({ provider, voice, language, onProvider, onVoice, onLa
     return (
       <div className={cn("grid gap-2", className)}>
         <ProviderSelect providers={providers} value={provider} onChange={onProvider} disabled={disabled} className={selectClassName} />
-        {provider === "flite" ? (
-          <p className="text-[12px] text-ink-3">
-            Recordings get captions and a transcript, no voice. To narrate, pick a voice provider above and add its key in Settings.
-          </p>
+        {provider === "none" ? (
+          <p className="text-[12px] text-ink-3">Recordings get captions and a transcript, no voice.</p>
         ) : (
-          localVoicePicker
+          <>
+            {localVoicePicker}
+            {provider === "flite" && <p className="text-[12px] text-ink-3">Sounds robotic. For a natural voice, pick ElevenLabs or OpenAI and add its key in Settings.</p>}
+          </>
         )}
       </div>
     );
@@ -178,7 +179,7 @@ function VoiceControl({ info, voice, language, onVoice, onLanguage, disabled }: 
       ) : (
         <p className="text-[12px] text-ink-3">This provider's voices aren't a public list, so its voice id goes here.</p>
       )}
-      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording has captions only.</p>}
+      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording falls back to the basic offline voice.</p>}
       {failed && <p className="text-[12px] text-fail">{failed}</p>}
     </div>
   );

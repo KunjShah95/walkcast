@@ -143,10 +143,11 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
 ];
 
 /** Every narration provider the dashboard may select, local ones first. */
-const TTS_PROVIDERS = ["flite", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
+const TTS_PROVIDERS = ["flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
 
 const TTS_PROVIDER_LABEL: Record<string, string> = {
-  flite: "Walkcast voice (captions only)",
+  flite: "Basic offline voice (robotic, works offline)",
+  none: "No voice (captions only)",
   sarvam: "Sarvam (Indian)",
   bhashini: "Bhashini (Indian, govt)",
   custom: "Custom / Maya",
@@ -774,7 +775,7 @@ try {
       if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
         const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
         const env = credentialFor(input.ttsProvider);
-        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the Walkcast voice.`);
+        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the basic offline voice.`);
       }
       // A retried submit (double-click, network retry) gets the job it already created.
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;

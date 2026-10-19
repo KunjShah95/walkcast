@@ -5,7 +5,7 @@ import { type Page } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
-import { buildMedia, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
+import { buildMedia, localVoice, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
 import { engineFor } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser } from "./browser.ts";
@@ -171,12 +171,13 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
   options.onProgress?.("Adding narration and encoding the video");
   // A selected provider that can't be reached must not pass for one that spoke: ask for it, then
-  // keep whichever engine actually narrates, and say so in the recording itself. "flite" is the
-  // dashboard's default choice: captions only (the free trial voice sounded robotic, so it is no
-  // longer used; the offline voice only with LAB_ROBOT_VOICE=1, see pickEngine).
-  const chose = options.ttsProvider && options.ttsProvider !== "flite" ? options.ttsProvider : undefined;
+  // keep whichever engine actually narrates, and say so in the recording itself. The dashboard asks
+  // each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on purpose)
+  // or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
+  const picked = options.ttsProvider;
+  const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
   const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
-  const engine = askedEngine ?? pickEngine(options.voice ?? "slt");
+  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
   // The narration loop and the encode below are the longest stretch of a recording that has
   // nothing to report, so they forward their own beats to the worker's stall guard.
   const media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);

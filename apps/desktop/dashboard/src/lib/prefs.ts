@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Voice } from "./api.ts";
 
 /** Recording defaults, kept in this browser (Settings → Recording defaults). */
-export type TtsProvider = "flite" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom" | "custom-voice";
+export type TtsProvider = "flite" | "none" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom" | "custom-voice";
 export interface RecordingPrefs {
   voice: Voice;
   ttsProvider: TtsProvider;
@@ -15,11 +15,13 @@ export interface RecordingPrefs {
   /** Stop the walk at this many seconds. 0 means no limit: the page count decides. */
   maxSeconds: number;
   captions: boolean;
+  /** The person answered the first-recording voice question (natural voice, offline voice or none). */
+  voiceChosen: boolean;
 }
 
 const KEY = "walkcast:recording-prefs";
-const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, ttsLanguages: {}, maxPages: 8, maxSeconds: 120, captions: true };
-const PROVIDERS: TtsProvider[] = ["flite", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
+const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, ttsLanguages: {}, maxPages: 8, maxSeconds: 120, captions: true, voiceChosen: false };
+const PROVIDERS: TtsProvider[] = ["flite", "none", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
 
 export function readPrefs(): RecordingPrefs {
   try {
@@ -32,6 +34,7 @@ export function readPrefs(): RecordingPrefs {
       maxPages: Number.isFinite(raw.maxPages) ? Math.max(1, Math.min(30, Math.trunc(raw.maxPages!))) : DEFAULTS.maxPages,
       maxSeconds: Number.isFinite(raw.maxSeconds) ? Math.max(0, Math.min(3600, Math.trunc(raw.maxSeconds!))) : DEFAULTS.maxSeconds,
       captions: typeof raw.captions === "boolean" ? raw.captions : DEFAULTS.captions,
+      voiceChosen: raw.voiceChosen === true,
     };
   } catch {
     return DEFAULTS;

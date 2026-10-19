@@ -3,6 +3,7 @@ import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
 import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
+import { VoiceChooser } from "../components/VoiceChooser.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, type JobStatus, SignInRequired, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
@@ -37,6 +38,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [job, setJob] = useState<JobStatus | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const busy = job !== null;
 
   useEffect(() => {
@@ -53,9 +55,27 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const blocked = isSnapshot ? "This is a snapshot: it plays recordings but can't make new ones." : (caps?.jobsUnavailable ?? (limitHit ? "You've reached today's recording limit. It resets 24 hours after your oldest recording today." : null));
   const ready = Boolean(target) && authorized && !blocked && !busy;
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready || !target) return;
+    // The first recording asks how it should sound; after that the saved choice applies.
+    if (!prefs.voiceChosen) return setChoosing(true);
+    void record(ttsProvider, ttsVoice, ttsLanguage);
+  };
+
+  const chooseVoice = (p: TtsProvider) => {
+    const v = prefs.ttsVoices[p] ?? "";
+    const l = prefs.ttsLanguages[p] ?? "";
+    setChoosing(false);
+    setTtsProvider(p);
+    setTtsVoice(v);
+    setTtsLanguage(l);
+    setPrefs({ ttsProvider: p, voiceChosen: true });
+    void record(p, v, l);
+  };
+
+  const record = async (ttsProvider: TtsProvider, ttsVoice: string, ttsLanguage: string) => {
+    if (!target) return;
     setError(null);
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
@@ -82,7 +102,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
 
   return (
     <div className="grid gap-6">
-      <PageHead title="Record a" dim="walkthrough" description="Paste a link. A real browser walks the site and narrates what it actually did, line by line, with captions and a transcript." />
+      <PageHead title="Record a" dim="walkthrough" description="Paste a link. A real browser visits the site like a first-time user and records the whole visit, with captions, a transcript and the voice you pick." />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="overflow-hidden">
@@ -247,7 +267,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 {caps?.limits && caps.usage ? `${caps.usage.recordingsToday} of ${caps.limits.recordingsPerDay} recordings used today` : " "}
               </span>
               <Button type="submit" tone="record" disabled={!ready} className="h-11 px-5 text-[14px]">
-                {busy ? "Recording…" : "Record with narration"}
+                {busy ? "Recording…" : "Record"}
               </Button>
             </div>
           </form>
@@ -290,6 +310,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
           )}
         </div>
       </div>
+      {choosing && <VoiceChooser onChoose={chooseVoice} onCancel={() => setChoosing(false)} />}
     </div>
   );
 }

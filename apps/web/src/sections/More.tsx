@@ -190,7 +190,7 @@ export function Bento() {
             <span className="soft-ic"><AudioLines size={18} /></span>
             <Wave />
             <h3>A voice, if you want one</h3>
-            <p>Add an ElevenLabs or OpenAI key, or upload your own recording. Without one, the video has captions.</p>
+            <p>Pick it before your first recording: your own ElevenLabs or OpenAI key, a basic offline voice, or captions only.</p>
           </Card>
           <Card className="b-safe" delay={0.1}>
             <span className="soft-ic"><ShieldCheck size={18} /></span>

@@ -77,7 +77,7 @@ export const MORE_FAQ: [string, string][] = [
   ],
   [
     "Does it add a voice-over?",
-    "Only if you want one. Add an ElevenLabs, OpenAI, Google, Azure or other voice key in Settings, or upload a recording of your own voice. Without one the video has captions and a transcript, and nothing is sent to a speech service.",
+    "You choose before your first recording: a natural voice with your own ElevenLabs or OpenAI key, a basic offline voice that works with no key, or no voice at all. Change it any time in Settings, or replace the voice with your own recording in Studio. Nothing is sent to a speech service unless you add a key.",
   ],
   [
     "Can I edit the narration?",

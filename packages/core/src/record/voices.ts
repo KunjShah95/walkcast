@@ -110,7 +110,8 @@ export function credentialFor(provider: string): string {
 
 /** How each provider is named in the dashboard, the errors and the narration notes. */
 const LABEL: Record<string, string> = {
-  flite: "Walkcast voice",
+  flite: "Basic offline voice",
+  none: "No voice",
   elevenlabs: "ElevenLabs",
   openai: "OpenAI",
   google: "Google Cloud",
@@ -144,7 +145,7 @@ export function hasVoiceList(provider: string): boolean {
 
 /** Local (offline) providers speak from ffmpeg's flite names or an uploaded sample, not a list. */
 export function isCloudProvider(provider: string): boolean {
-  return !["", "flite", "local", "custom-voice", "custom_voice"].includes(provider.trim().toLowerCase());
+  return !["", "flite", "none", "local", "custom-voice", "custom_voice"].includes(provider.trim().toLowerCase());
 }
 
 /**
