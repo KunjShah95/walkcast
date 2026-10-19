@@ -23,15 +23,19 @@ export interface CloudVoice {
 }
 
 const CATALOG: Record<string, CloudVoice[]> = {
+  // ElevenLabs' premade voices: the only ones a free account may use through the API (library
+  // voices answer 402 "paid_plan_required" there). Checked against /v2/voices, October 2026.
   elevenlabs: [
-    { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", note: "US English, female, warm narration" },
-    { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", note: "US English, male, documentary" },
-    { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", note: "US English, female, soft" },
-    { id: "ErXwobaYiN019PkySvjV", name: "Antoni", note: "US English, male, conversational" },
-    { id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli", note: "US English, female, young" },
-    { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", note: "US English, male, deep" },
-    { id: "VR6AewLTigWG4xSOukaG", name: "Arnold", note: "US English, male, narration" },
-    { id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam", note: "US English, male, raspy" },
+    { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", note: "US English, female, confident narration" },
+    { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", note: "British English, male, warm storyteller" },
+    { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", note: "British English, female, clear educator" },
+    { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", note: "British English, male, steady broadcaster" },
+    { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", note: "US English, female, professional" },
+    { id: "cjVigY5qzO86Huf0OWal", name: "Eric", note: "US English, male, smooth" },
+    { id: "SAz9YHcvj6GT2YYXdXww", name: "River", note: "US English, neutral, relaxed" },
+    { id: "nPczCjzI2devNBz1zQrb", name: "Brian", note: "US English, male, deep" },
+    { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", note: "US English, female, bright" },
+    { id: "bIHbv24MWmeRgasZH58o", name: "Will", note: "US English, male, relaxed" },
   ],
   openai: [
     { id: "alloy", name: "Alloy", note: "Neutral, balanced" },

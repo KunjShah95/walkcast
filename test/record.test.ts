@@ -87,9 +87,9 @@ test("choosing a cloud voice picks that provider's voice, not the flite names", 
   process.env.ELEVENLABS_API_KEY = "test-key";
   process.env.OPENAI_API_KEY = "test-key";
   try {
-    const eleven = engineFor("elevenlabs", "slt", "pNInz6obpgDQGcFmaJgB");
+    const eleven = engineFor("elevenlabs", "slt", "JBFqnCBsd6RMkjVDRZzb");
     assert.equal(eleven?.kind, "cloud");
-    assert.equal(eleven?.id, "elevenlabs:pNInz6obpgDQGcFmaJgB");
+    assert.equal(eleven?.id, "elevenlabs:JBFqnCBsd6RMkjVDRZzb");
     const openai = engineFor("openai", "slt", "onyx");
     assert.equal(openai?.id, "openai:onyx");
     // No key, no engine: the recorder falls back rather than speaking with the wrong voice.
@@ -128,7 +128,7 @@ test("the voice a person picks decides the language, not the deployment default"
   assert.equal(languageFor("awspolly", "Joanna", env), "en-US");
   assert.equal(languageFor("awspolly", "Kajal", env), "en-IN");
   // A provider that infers language from the text is never sent one.
-  assert.equal(languageFor("elevenlabs", "21m00Tcm4TlvDq8ikWAM", env), "");
+  assert.equal(languageFor("elevenlabs", "EXAVITQu4vr4xnSDxMaL", env), "");
   assert.equal(languageFor("openai", "onyx", env), "");
   // Free-text ids fall back to the deployment's language, then the provider's own default.
   assert.equal(languageFor("sarvam", "anushka", env), "en-IN");

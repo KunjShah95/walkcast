@@ -180,7 +180,23 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
   // The narration loop and the encode below are the longest stretch of a recording that has
   // nothing to report, so they forward their own beats to the worker's stall guard.
-  const media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
+  let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
+  // Someone who chose a voice should get one: when the cloud voice fails part-way (no credits,
+  // a revoked key, the service down), narrate with the offline voice and say why, rather than
+  // handing back a silent video.
+  let spokeEngine = engine;
+  if (media.voice === "none" && engine?.kind === "cloud") {
+    const backup = localVoice(options.voice ?? "slt");
+    if (backup) {
+      const why = media.note.replace(/; the video has captions and a transcript.$/, ".");
+      options.onProgress?.("The chosen voice failed; narrating with the offline voice");
+      media = await buildMedia(dir, captions, options.voice ?? "slt", backup, options.onProgress);
+      if (media.voice !== "none") {
+        media.note = `${why} Narrated with the basic offline voice instead.`;
+        spokeEngine = backup;
+      }
+    }
+  }
   if (chose && !askedEngine) {
     const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
     media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
@@ -206,7 +222,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
             /** What was asked for, and what spoke — they differ when a provider is unreachable. */
             asked: providerLabel(options.ttsProvider),
             askedVoice: options.ttsVoice ?? defaultVoiceFor(options.ttsProvider),
-            spoke: media.voice === "none" ? "none" : (askedEngine?.id ?? engine?.id ?? "none"),
+            spoke: media.voice === "none" ? "none" : (spokeEngine?.id ?? "none"),
             reachable: !chose || askedEngine !== null,
           },
         }

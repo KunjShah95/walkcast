@@ -152,23 +152,52 @@ export function bhashiniEngine(cloudVoice?: string, cloudLanguage?: string): Voi
   };
 }
 
+/** A premade ElevenLabs voice (Sarah): usable on every plan, including free API keys. */
+const ELEVENLABS_PREMADE = "EXAVITQu4vr4xnSDxMaL";
+
+/** ElevenLabs' own explanation of a failure ("quota exceeded", "invalid key"), kept short. */
+function elevenLabsMessage(body: string): string {
+  try {
+    const d = (JSON.parse(body) as { detail?: { message?: string } | string }).detail;
+    const msg = typeof d === "string" ? d : d?.message;
+    if (msg) return msg.slice(0, 160);
+  } catch { /* not JSON */ }
+  return body.slice(0, 160) || "no details";
+}
+
 export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
   if (!key) return null;
-  const voiceId = resolveVoice("elevenlabs", cloudVoice);
+  let voiceId = resolveVoice("elevenlabs", cloudVoice);
   const model = process.env.ELEVENLABS_MODEL?.trim() || "eleven_multilingual_v2";
+  const say = (text: string) =>
+    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "xi-api-key": key, "Accept": "audio/mpeg" },
+      body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      signal: AbortSignal.timeout(60_000),
+    });
   return {
-    id: `elevenlabs:${voiceId}`,
+    get id() {
+      return `elevenlabs:${voiceId}`;
+    },
     kind: "cloud",
     available: (): boolean => Boolean(key),
     async speak(text, outFile) {
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "xi-api-key": key, "Accept": "audio/mpeg" },
-        body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!res.ok) throw new Error(`elevenlabs TTS failed (${res.status})`);
+      let res = await say(text);
+      // Free accounts may only use premade voices through the API; a library voice (one picked
+      // in an older build, or set in ELEVENLABS_VOICE_ID) answers 402. Switch to a premade voice
+      // for the rest of the recording rather than losing the narration.
+      if (res.status === 402 && voiceId !== ELEVENLABS_PREMADE) {
+        const body = await res.text();
+        if (/paid_plan_required|library voice/i.test(body)) {
+          voiceId = ELEVENLABS_PREMADE;
+          res = await say(text);
+        } else {
+          throw new Error(`elevenlabs TTS failed (402): ${elevenLabsMessage(body)}`);
+        }
+      }
+      if (!res.ok) throw new Error(`elevenlabs TTS failed (${res.status}): ${elevenLabsMessage(await res.text())}`);
       const buf = Buffer.from(await res.arrayBuffer());
       const tmp = outFile + ".mp3";
       const { writeFile } = await import("node:fs/promises");
