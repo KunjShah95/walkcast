@@ -11,7 +11,55 @@ permissions:
   contents: write
 
 jobs:
+  # The gates run here, once, rather than inside the build matrix. `npm test` needs Postgres and a
+  # browser, and macOS/Windows runners cannot declare `services:` at all — run there, the step hung
+  # for six hours until GitHub's job limit cancelled every build. A tag can be pushed at any time,
+  # so the release still cannot assume ci passed; `build` waits on this job instead.
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: walkcast
+          POSTGRES_PASSWORD: walkcast
+          POSTGRES_DB: walkcast_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U walkcast" --health-interval 2s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://walkcast:walkcast@127.0.0.1:5432/walkcast_test
+      LAB_LOG: "off"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: ffmpeg with the flite voice (narration tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # Stagehand v4 loads its runtime as an extension over CDP, which needs a recent Chrome.
+      - name: Install Chrome for Testing
+        run: |
+          npx -y @puppeteer/browsers install chrome@stable --path "$HOME/cft" | tail -1 > cft.txt
+          echo "LAB_CHROME_PATH=$(awk '{print $2}' cft.txt)" >> "$GITHUB_ENV"
+      - name: Lint, typecheck and unit tests
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run ui:build
+          npm run web:build
+          npm test
+      - name: Migrations apply cleanly and are idempotent
+        env:
+          SUPABASE_DB_URL: ${{ env.TEST_DATABASE_URL }}
+        run: npm run lab -- db migrate && npm run lab -- db migrate
+
   build:
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
@@ -58,14 +106,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: npm ci
-      # A tag can be pushed at any time, so the release cannot assume CI passed. These were the
-      # only quality gates anywhere on the tag path before: release.yml never ran lint, types or
-      # tests, so a broken build could ship.
-      - name: Lint, typecheck and unit tests
-        run: |
-          npm run lint
-          npm run typecheck
-          npm test
+      # Lint, typecheck and tests happen once in the `verify` job this build depends on; running
+      # them per-platform is what hung the matrix.
       - run: npm run ui:build
       # stage-sidecar copies this into the installer: without it the app records video and captions
       # only, because nothing on a user's machine is guaranteed to have ffmpeg.
