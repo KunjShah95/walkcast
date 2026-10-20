@@ -135,7 +135,7 @@ export function analyzeRecording(facts: RecordingFacts, events: TraceEvent[]): R
   const segments = segmentsOf(steps, events);
   const pages = facts.pages.map((page, i) => {
     const segment = matchSegment(page.url, segments, i);
-    return pageInsight(page, segment, facts);
+    return pageInsight(page, segment);
   });
 
   const consoleErrors = groupConsoleErrors(segments);
@@ -427,7 +427,6 @@ function segmentsOf(steps: StepEvent[], events: TraceEvent[]): Segment[] {
     const observes = steps.filter((s) => s.tool === "observe" && s.startedAt >= start && s.startedAt < end);
     const observe = observes.at(-1);
     const linkStep = steps.find((s) => s.tool === "collectLinks" && s.startedAt >= start && s.startedAt < end);
-    const document = requests.find((r) => r.method === "GET" && r.at >= start && r.at < end && sameUrl(r.url, url));
     segments.push({
       url,
       title: observe?.after?.title ?? step.after?.title ?? "",
@@ -519,12 +518,6 @@ function stringAt(result: unknown, key: string): string | null {
   return typeof value === "string" ? value : null;
 }
 
-/** The page the recorder was on when something happened. */
-function pageOf(segments: Segment[], at: number): string | null {
-  const segment = segments.find((s) => at >= s.start && at < s.end);
-  return segment ? shortPath(segment.url) : null;
-}
-
 function groupConsoleErrors(segments: Segment[]): ConsoleErrorInsight[] {
   const byText = new Map<string, ConsoleErrorInsight>();
   for (const segment of segments) {
@@ -589,7 +582,7 @@ function byPath(pages: PageInsight[]): Map<string, PageInsight> {
   return new Map(pages.map((p) => [p.path, p]));
 }
 
-function pageInsight(page: RecordingFacts["pages"][number], segment: Segment | undefined, facts: RecordingFacts): PageInsight {
+function pageInsight(page: RecordingFacts["pages"][number], segment: Segment | undefined): PageInsight {
   const document = segment?.requests.find((r) => r.method === "GET" && sameUrl(r.url, page.url));
   return {
     url: page.url,

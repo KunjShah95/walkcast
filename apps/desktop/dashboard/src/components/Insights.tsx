@@ -170,7 +170,7 @@ export function Insights({ recording, others }: { recording: RecordingSummary; o
         )}
       </Panel>
 
-      <Changes recording={recording} others={others} />
+      <Changes recording={recording} others={others} insights={insights} />
     </div>
   );
 }
@@ -183,7 +183,7 @@ export function Insights({ recording, others }: { recording: RecordingSummary; o
  * person, because "compared with the last one" and "compared with the one before the
  * redesign" are different questions.
  */
-function Changes({ recording, others }: { recording: RecordingSummary; others: RecordingSummary[] }) {
+function Changes({ recording, others, insights }: { recording: RecordingSummary; others: RecordingSummary[]; insights: RecordingInsights | null }) {
   const candidates = useMemo(
     () =>
       others
@@ -193,13 +193,8 @@ function Changes({ recording, others }: { recording: RecordingSummary; others: R
   );
   const [selected, setSelected] = useState<string>("");
   const [before, setBefore] = useState<RecordingInsights | null>(null);
-  const [after, setAfter] = useState<RecordingInsights | null>(recording.insights ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAfter(recording.insights ?? null);
-  }, [recording.id, recording.insights]);
 
   useEffect(() => {
     let alive = true;
@@ -227,8 +222,8 @@ function Changes({ recording, others }: { recording: RecordingSummary; others: R
 
   const other = candidates.find((c) => c.id === selected);
   const diff: RecordingDiff | null =
-    before && after && other
-      ? diffRecordings({ id: other.id, url: other.url, createdAt: other.createdAt, insights: before }, { id: recording.id, url: recording.url, createdAt: recording.createdAt, insights: after })
+    before && insights && other
+      ? diffRecordings({ id: other.id, url: other.url, createdAt: other.createdAt, insights: before }, { id: recording.id, url: recording.url, createdAt: recording.createdAt, insights })
       : null;
 
   return (
@@ -242,7 +237,9 @@ function Changes({ recording, others }: { recording: RecordingSummary; others: R
         <ul className="grid gap-1.5">
           {[recording, ...candidates].map((r) => {
             const isCurrent = r.id === recording.id;
-            const health = r.insights;
+            // The selected one has been read from its trace; the others show what their
+            // summary already knew.
+            const health = isCurrent ? insights : r.id === selected ? before : r.insights;
             return (
               <li key={r.id}>
                 <button

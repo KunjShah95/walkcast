@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
 import { analyzeRecording, diffRecordings, summaryMarkdown, type RecordingFacts, type RecordingInsights } from "../packages/core/src/record/insights.ts";
 import type { TraceEvent } from "../packages/core/src/capture/recorder.ts";
+import { serveDashboard } from "../apps/desktop/server/server.ts";
+
+const roots: string[] = [];
+after(() => {
+  for (const r of roots) rmSync(r, { recursive: true, force: true });
+});
 
 /**
  * What the recorder found, and what changed between two walkthroughs.
@@ -196,10 +205,38 @@ test("controls a person cannot name are reported, and links that say nothing are
   assert.deepEqual(page.vagueLinks, ["Click here"]);
 });
 
-test("the notes read as a note someone can paste into a ticket", () => {  const { facts, events } = walk([{ path: "/pricing", title: "Pricing", status: 200, controls: [], loadMs: 1200, links: 2 }]);
+test("the notes read as a note someone can paste into a ticket", () => {
+  const { facts, events } = walk([{ path: "/pricing", title: "Pricing", status: 200, controls: [], loadMs: 1200, links: 2 }]);
   const insights = analyzeRecording(facts, events);
   const md = summaryMarkdown(facts, insights);
   assert.match(md, /# Walkthrough — shop\.example/);
   assert.match(md, /- `\/pricing` — Pricing/);
   assert.match(md, /## What the recorder found/);
+});
+
+test("a walkthrough made before this existed is read from the trace it left behind", async () => {
+  const root = mkdtempSync(join(tmpdir(), "walkcast-insights-"));
+  roots.push(root);
+  const id = "shop.example-old1";
+  const dir = join(root, "recordings", id);
+  mkdirSync(dir, { recursive: true });
+  const { facts, events } = walk([{ path: "/", title: "Shop", status: 500, controls: [{ role: "textbox", name: "" }], loadMs: 300, links: 5 }], [
+    { type: "console", stepId: 1, at: 100, level: "pageerror", text: "Boom" },
+  ]);
+  // An old walkthrough: no insights in its summary, but the trace is on disk.
+  writeFileSync(join(dir, "recording.json"), JSON.stringify({ ...facts, id, dir: `recordings/${id}`, media: { video: null, mp4: null, audio: null, captions: "captions.vtt", voice: "flite", note: "" } }));
+  writeFileSync(join(dir, "trace.jsonl"), events.map((e) => JSON.stringify(e)).join("\n"));
+
+  const srv = await serveDashboard(6800 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  try {
+    const res = await fetch(`${srv.url}/api/recordings/${id}/insights`);
+    assert.equal(res.status, 200, await res.clone().text());
+    const body = (await res.json()) as { insights: RecordingInsights };
+    const said = body.insights.findings.map((f) => f.text).join("\n");
+    assert.match(said, /1 console error/);
+    assert.match(said, /\/ answered 500/);
+    assert.equal(body.insights.pages[0]!.loadMs, 300);
+  } finally {
+    await srv.close?.();
+  }
 });
