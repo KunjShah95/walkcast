@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+# The agent harness commits with an explicit identity override
+# (`git -c user.name="Claude" -c user.email="noreply@anthropic.com" commit`),
+# which overrides the repo's configured user, and appends AI attribution
+# trailers. Both are corrected here so the history belongs to the repo owner.
+#
+# `git commit --amend` is safe in post-commit: the commit object already
+# exists, so this only rewrites its identity and message. The amended commit
+# is already attributed to the owner, so re-entering this hook is a no-op.
+set -e
+
+expected_name="KunjShah95"
+expected_email="kkshah05072005@gmail.com"
+
+author=$(git log -1 --format='%an|%ae')
+name=${author%%|*}
+email=${author##*|}
+
+message=$(git log -1 --format=%B)
+cleaned=$(printf '%s\n' "$message" | grep -v -E '^(Co-Authored-By: Claude |Claude-Session: |Generated with )' || true)
+
+identity_ok=0
+if [ "$name" = "$expected_name" ] && [ "$email" = "$expected_email" ]; then
+	identity_ok=1
+fi
+
+message_ok=0
+if [ "$cleaned" = "$message" ]; then
+	message_ok=1
+fi
+
+if [ "$identity_ok" = "1" ] && [ "$message_ok" = "1" ]; then
+	exit 0
+fi
+
+if [ "$message_ok" = "1" ]; then
+	GIT_COMMITTER_NAME="$expected_name" \
+	GIT_COMMITTER_EMAIL="$expected_email" \
+		git commit --amend --no-edit --quiet \
+		--author="$expected_name <$expected_email>"
+else
+	printf '%s\n' "$cleaned" | GIT_COMMITTER_NAME="$expected_name" \
+	GIT_COMMITTER_EMAIL="$expected_email" \
+		git commit --amend --quiet -F - \
+		--author="$expected_name <$expected_email>"
+fi
