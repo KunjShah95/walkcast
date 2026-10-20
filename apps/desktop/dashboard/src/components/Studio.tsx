@@ -85,6 +85,13 @@ export function Studio({
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
   const chapters = useMemo(() => chaptersOf(r), [r]);
+  // A picture of each page, in the order the walkthrough opened them. The video says what it
+  // shows; the pictures say what it contains.
+  const pictures = useMemo(
+    () => r.pages.map((p, i) => ({ page: p, at: chapters[i]?.start ?? 0 })).filter((x) => Boolean(x.page.screenshot)),
+    [r.pages, chapters],
+  );
+  const poster = pictures[0]?.page.screenshot ? mediaUrl(r.dir, pictures[0].page.screenshot) : undefined;
   const active = r.captions.findIndex((c) => time >= c.start && time < c.end);
   const chapter = chapters.reduce((at, c, i) => (time >= c.start ? i : at), 0);
   // Bust the browser cache after a re-render (same file names, new content).
@@ -143,6 +150,7 @@ export function Studio({
               controls
               playsInline
               preload="metadata"
+              poster={poster}
               className="aspect-[16/10] w-full"
               onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
               onLoadedMetadata={(e) => {
@@ -189,6 +197,41 @@ export function Studio({
               </span>
               <span className="min-w-0 truncate text-ink-2">{chapters[chapter]?.title}</span>
             </div>
+          </div>
+        )}
+
+        {pictures.length > 0 && (
+          <div className="border-t border-line px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-2 pb-1.5">
+              <span className="text-[12.5px] text-ink-2">Pages</span>
+              <span className="text-[11.5px] text-ink-3">Click a page to jump to it</span>
+            </div>
+            <ul className="flex gap-2 overflow-x-auto pb-1">
+              {pictures.map(({ page, at }, i) => {
+                const on = time >= at && (pictures[i + 1]?.at ?? Infinity) > time;
+                return (
+                  <li key={page.url + i} className="w-[132px] shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => seek(at)}
+                      title={page.title || page.url}
+                      className={cn(
+                        "block w-full overflow-hidden rounded-lg border text-left transition-colors",
+                        on ? "border-signal/70" : "border-line hover:border-line-strong",
+                      )}
+                    >
+                      <img
+                        src={mediaUrl(r.dir, page.screenshot!)}
+                        alt={page.title || page.url}
+                        loading="lazy"
+                        className="aspect-[16/10] w-full bg-panel-2 object-cover object-top"
+                      />
+                      <span className="block truncate px-1.5 py-1 text-[11px] text-ink-3">{page.title || page.url}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
 

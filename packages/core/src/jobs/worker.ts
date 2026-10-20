@@ -348,7 +348,10 @@ export class Worker {
         onProgress,
       });
       onProgress("Saving");
-      const files = [r.media.mp4, r.media.webm, r.media.captions, r.media.audio, r.media.mp4 || r.media.webm ? null : r.media.video, "recording.json"].filter((f): f is string => Boolean(f));
+      // The page pictures travel with the recording: a walkthrough in object storage without
+      // them can only be watched, never skimmed.
+      const pictures = r.pages.map((p) => p.screenshot).filter((f): f is string => Boolean(f));
+      const files = [r.media.mp4, r.media.webm, r.media.captions, r.media.audio, r.media.mp4 || r.media.webm ? null : r.media.video, ...pictures, "recording.json"].filter((f): f is string => Boolean(f));
       await this.o.media.publish(r.id, r.dir, files);
       // The scrubbed copy written by the recorder is what gets indexed.
       const summary = JSON.parse(readFileSync(join(r.dir, "recording.json"), "utf8")) as Record<string, unknown>;

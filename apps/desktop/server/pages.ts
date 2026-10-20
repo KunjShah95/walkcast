@@ -132,6 +132,10 @@ export function sharePage(o: {
   durationMs: number;
   sources: { url: string; type: string }[];
   captions: string | null;
+  /** A picture of the first page, shown before the video is played. */
+  poster?: string | null;
+  /** A picture of each page, so the page says what the walkthrough contains. */
+  pictures?: { url: string; title: string }[];
   chapters: { start: number; title: string }[];
   transcript: { start: number; text: string }[];
   expiresAt: string;
@@ -149,11 +153,12 @@ export function sharePage(o: {
 </div></section>
 <section class="share"><div class="wrap narrow">
   <div class="frame"><div class="win">
-    <video id="v" controls playsinline preload="metadata" class="share-video">
+    <video id="v" controls playsinline preload="metadata" class="share-video"${o.poster ? ` poster="${esc(o.poster)}"` : ""}>
       ${o.sources.map((s) => `<source src="${esc(s.url)}" type="${esc(s.type)}">`).join("")}
       ${o.captions ? `<track kind="captions" src="${esc(o.captions)}" srclang="en" label="Narration" default>` : ""}
     </video>
   </div></div>
+  ${o.pictures && o.pictures.length > 1 ? `<ul class="share-pages">${o.pictures.map((p) => `<li><img src="${esc(p.url)}" alt="${esc(p.title)}" loading="lazy"></li>`).join("")}</ul>` : ""}
   ${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}
   <div class="share-grid">
     <section>
@@ -177,6 +182,8 @@ export function sharePage(o: {
 .share-head .lede{margin-inline:auto}
 .share .frame{margin-top:clamp(20px,3vw,34px)}
 .share-video{display:block;width:100%;background:#000;aspect-ratio:16/10}
+.share-pages{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.share-pages img{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-radius:var(--r-sm);box-shadow:inset 0 0 0 1px var(--line);background:var(--panel-2)}
 .share-grid{display:grid;gap:clamp(20px,3vw,34px);margin-top:34px;grid-template-columns:1fr}
 @media (min-width:860px){.share-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .share-grid h2{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 10px}

@@ -62,6 +62,8 @@ export interface PageVisit {
   status: number | null;
   controls: number;
   skipped?: string;
+  /** A picture of the page, taken at the top of it before the walk scrolled down. */
+  screenshot?: string;
 }
 
 export interface RecordingResult {
@@ -170,7 +172,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       // The budget covers the walk itself, starting the moment recording begins — browser launch and
       // sign-in still happen, but the cap is about the video the person watches, not our overhead.
       try {
-        stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds);
+        stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds, dir);
       } catch (e) {
         // A blank tab (the first page never loaded) says nothing; only keep a page that drew.
         if (page.url() !== "about:blank") {
@@ -320,6 +322,7 @@ async function browse(
   setSignIn: (s: RecordingResult["signIn"]) => void,
   getSignIn: () => RecordingResult["signIn"],
   maxSeconds: number | undefined,
+  dir: string,
 ): Promise<"pages" | "time" | "no-more-links"> {
   options.onProgress?.("Opening the site");
   const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
@@ -360,9 +363,18 @@ async function browse(
       await tools.waitForQuiet(400, 8000);
     }
     const status = await lastDocumentStatus(recorder, next);
+    // One picture of each page, at the top of it, before the scroll.
+    //
+    // The video says what the walkthrough shows; a picture says what it contains. Without one,
+    // the only way to know that a walkthrough visited a page is to watch the whole thing.
+    const shot = `page-${String(pages.length + 1).padStart(2, "0")}.jpg`;
+    const shotOk = await page.screenshot({ path: join(dir, shot), type: "jpeg", quality: 72 }).then(
+      () => true,
+      () => false,
+    );
     await scrollThrough(tools);
     const obs = await tools.observe();
-    pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length });
+    pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length, ...(shotOk ? { screenshot: shot } : {}) });
     if (outOfTime()) {
       reason = "time";
       break;

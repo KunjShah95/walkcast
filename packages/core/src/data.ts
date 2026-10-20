@@ -121,7 +121,7 @@ export interface RecordingSummary {
   createdAt: string;
   durationMs: number;
   signIn: { attempted: boolean; outcome: string; detail: string };
-  pages: { url: string; title: string; status: number | null; controls: number }[];
+  pages: { url: string; title: string; status: number | null; controls: number; screenshot?: string }[];
   skipped: { url: string; reason: string }[];
   captions: { start: number; end: number; text: string }[];
   media: { video: string | null; mp4: string | null; webm?: string | null; audio: string | null; captions: string; voice: string; note: string };

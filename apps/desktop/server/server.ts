@@ -953,7 +953,14 @@ try {
       if (file) {
         // Only the files this walkthrough published can be fetched through the link.
         const allowed = new Set(
-          [summary.media.mp4, summary.media.webm, summary.media.video, summary.media.captions, summary.media.audio].filter((f): f is string => Boolean(f)),
+          [
+            summary.media.mp4,
+            summary.media.webm,
+            summary.media.video,
+            summary.media.captions,
+            summary.media.audio,
+            ...summary.pages.map((p) => p.screenshot),
+          ].filter((f): f is string => Boolean(f)),
         );
         if (!allowed.has(file)) return json(404, { error: "not found" });
         const where = await media.locate(id, file);
@@ -971,6 +978,9 @@ try {
       const captions = summary.captions ?? [];
       // A chapter starts where the recorder opened a page, exactly as it does in the app.
       const chapters = captions.flatMap((c) => (/^Opening\b/.test(c.text) ? [{ start: c.start, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
+      // A picture of each page: the page says what the walkthrough contains, not only that it
+      // exists. Only the pictures this walkthrough took are offered.
+      const pictures = summary.pages.filter((p) => Boolean(p.screenshot)).map((p) => ({ url: `${base}/${p.screenshot}`, title: p.title || p.url }));
       return send(
         200,
         "text/html; charset=utf-8",
@@ -982,6 +992,8 @@ try {
           durationMs: summary.durationMs,
           sources,
           captions: summary.media.captions ? `${base}/${summary.media.captions}` : null,
+          poster: pictures[0]?.url ?? null,
+          pictures,
           chapters: chapters.length ? chapters : captions.length ? [{ start: 0, title: hostOf(summary.url) }] : [],
           transcript: captions.map((c) => ({ start: c.start, text: c.text })),
           expiresAt: share.expiresAt.slice(0, 10),
