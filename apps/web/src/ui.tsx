@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { Download, type LucideIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { WINDOWS_EXE_URL } from "./site.ts";
+import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
+import { LINUX_APPIMAGE_URL, MACOS_DMG_URL, WINDOWS_EXE_URL } from "./site.ts";
 
 export type Tone = "ink" | "ochre" | "rec" | "yellow" | "blue" | "violet" | "pink" | "green" | "orange";
 
@@ -50,10 +50,33 @@ export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-export function DownloadButton({ big = false, label = "Download for Windows", className = "" }: { big?: boolean; label?: string; className?: string }) {
+type Platform = "windows" | "mac" | "linux";
+const INSTALLERS: Record<Platform, { label: string; url: string }> = {
+  windows: { label: "Download for Windows", url: WINDOWS_EXE_URL },
+  mac: { label: "Download for Mac", url: MACOS_DMG_URL },
+  linux: { label: "Download for Linux", url: LINUX_APPIMAGE_URL },
+};
+
+/**
+ * The visitor's desktop OS. Prerendered pages say Windows (most visitors, and what crawlers see);
+ * after hydration a Mac or Linux visitor gets their own installer instead of a Windows .exe.
+ */
+function usePlatform(): Platform {
+  const [p, setP] = useState<Platform>("windows");
+  useEffect(() => {
+    const ua = `${navigator.userAgent} ${(navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? ""}`;
+    if (/Android|iPhone|iPad/i.test(ua)) return; // a phone can't install it; keep the default link
+    if (/Mac/i.test(ua)) setP("mac");
+    else if (/Linux|X11/i.test(ua)) setP("linux");
+  }, []);
+  return p;
+}
+
+export function DownloadButton({ big = false, label, className = "" }: { big?: boolean; label?: string; className?: string }) {
+  const installer = INSTALLERS[usePlatform()];
   return (
-    <motion.a className={`pill rec ${big ? "big" : ""} ${className}`} href={WINDOWS_EXE_URL} whileTap={{ scale: 0.96 }}>
-      {label}
+    <motion.a className={`pill rec ${big ? "big" : ""} ${className}`} href={installer.url} whileTap={{ scale: 0.96 }}>
+      {label ?? installer.label}
       <Download size={big ? 17 : 15} strokeWidth={2.2} />
     </motion.a>
   );

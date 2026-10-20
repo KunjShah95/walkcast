@@ -51,7 +51,7 @@ export function Outputs() {
     <section className="sec" id="features">
       <div className="wrap split">
         <Reveal>
-          <Eyebrow n={1}>One take</Eyebrow>
+          <Eyebrow n={2}>One take</Eyebrow>
           <h2>
             Record once. Get the <Tile icon={Play} tone="ochre" tilt={-6} fill /> video and the <Tile icon={Captions} tone="yellow" tilt={5} /> words.{" "}
             <span className="dim">Same run.</span>
@@ -183,7 +183,7 @@ export function Recorder() {
     <section className="sec" id="login">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow n={2}>Behind the login</Eyebrow>
+          <Eyebrow n={3}>Behind the login</Eyebrow>
           <h2>
             Records the pages <Tile icon={Lock} tone="ink" tilt={-6} /> only users see. <span className="dim">Your password <Tile icon={KeyRound} tone="green" tilt={5} /> never hits disk.</span>
           </h2>
@@ -375,7 +375,7 @@ export function Flow() {
     <section className="sec">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow n={3}>The visit log</Eyebrow>
+          <Eyebrow n={4}>The visit log</Eyebrow>
           <h2>
             Every <Tile icon={Globe} tone="blue" tilt={-6} /> page. <br />
             <span className="dim">One <Tile icon={Captions} tone="ink" tilt={5} /> complete visit.</span>

@@ -10,7 +10,7 @@ export const SITE_ORIGIN = "https://walkcast.kunjshah.in";
 /** Who builds it: named on every page and in the JSON-LD, so engines can attribute the answers. */
 export const AUTHOR = { name: "Kunj Shah", url: "https://github.com/KunjShah95" };
 /** When the page copy last changed in substance (dateModified, sitemap lastmod). */
-export const UPDATED = "2026-10-17";
+export const UPDATED = "2026-10-20";
 
 /** Every prerendered page: the landing page plus the documents engines can cite on their own. */
 export interface Route {
@@ -24,9 +24,9 @@ export const ROUTES: Route[] = [
   {
     path: "/",
     label: "Home",
-    title: "Walkcast · Send a visitor to your website, get the whole visit on video",
+    title: "Walkcast · Paste a link, get a video tour of your website",
     description:
-      "Send a visitor to your site, get the whole visit on video. A real browser signs in and clicks through your pages. Free for Windows.",
+      "Paste a link, get a video tour of your website. A real browser signs in, clicks through your pages and records it, with captions. Free for Windows, Mac, Linux.",
   },
   {
     path: "/guides/narrated-website-walkthrough",
@@ -52,9 +52,9 @@ export const ROUTES: Route[] = [
   {
     path: "/download",
     label: "Download",
-    title: "Download Walkcast for Windows (free) · Walkcast",
+    title: "Download Walkcast for Windows, Mac and Linux (free) · Walkcast",
     description:
-      "Download Walkcast free for Windows 10 and 11: the .exe installer (no admin rights) or the .msi package. Requirements, SmartScreen and running from source.",
+      "Download Walkcast free: Windows .exe (no admin rights) or .msi, macOS .dmg for Apple Silicon, Linux AppImage or .deb. Requirements and first-run notes.",
   },
   {
     path: "/privacy",
@@ -92,17 +92,58 @@ export const MORE_FAQ: [string, string][] = [
     "Yes. Because it runs on your PC, it can record any site that PC can reach, including localhost and company intranets, as long as you may test it.",
   ],
 ];
-export const TAGLINE = "Send a visitor to your website, get the whole visit on video";
+export const TAGLINE = "Paste a link, get a video tour of your website";
 export const DESCRIPTION =
-  "Send a visitor to your website and get the whole visit on video. A real browser signs in, clicks through your pages like a first-time user and hands back the complete recording as an MP4 with captions and a transcript. Free desktop app for Windows.";
+  "Paste a link and get a video tour of your website. A real browser signs in, clicks through your pages like a first-time user and hands back the whole visit as an MP4 with captions and a transcript. Free desktop app for Windows, Mac and Linux.";
 export const DEFINITION =
-  "Walkcast is a free, open-source Windows app that sends a visitor to your website and records the whole visit. From one link, a real browser signs in, visits up to 30 pages the way a first-time user would, and returns the complete recording as an MP4 with WebVTT captions and a transcript, plus a voice-over when you add a voice key. Every caption comes from what the browser actually did.";
+  "Walkcast is a free, open-source desktop app (Windows, macOS and Linux) that makes a video tour of your website from one link. From one link, a real browser signs in, visits up to 30 pages the way a first-time user would, and returns the complete recording as an MP4 with WebVTT captions and a transcript, plus a voice-over when you add a voice key. Every caption comes from what the browser actually did.";
+
+/**
+ * The plainest true sentence about the product, for the visitor who has no idea what this is.
+ * Every other page writes around this; this one says it outright.
+ */
+export const PLAIN =
+  "Walkcast opens your website in a real browser, signs in, clicks through your pages and records the whole visit as a video file you can share.";
+
+/** The three steps of a recording, said without metaphors. */
+export const STEPS: [string, string][] = [
+  ["Paste a link", "Give it the address of a site you own or may test, and the sign-in details if the site needs one."],
+  [
+    "It signs in and walks the site",
+    "A real Chromium browser opens the page, signs in like a first-time user, and visits up to 30 pages, scrolling each one. It never submits a form.",
+  ],
+  [
+    "You get the files",
+    "An MP4 of the whole visit, WebVTT captions, a transcript, the page list with HTTP status, and a voice-over if you asked for one.",
+  ],
+];
+
+/** What a recording is not: the three confusions a first-time visitor actually has. */
+export const NOT: [string, string][] = [
+  [
+    "Not a screen recorder",
+    "A screen recorder films your screen while you drive it. Walkcast drives its own browser, so there is no camera, no performance and no editing afterwards.",
+  ],
+  ["Not a mockup generator", "Every frame is your live site loaded in a real browser, not a picture of one."],
+  [
+    "Not a video editor",
+    "It does not cut, splice or add motion graphics. It records one continuous visit and hands it over.",
+  ],
+];
 
 export const FAQ: [string, string][] = [
   ["What is Walkcast?", DEFINITION],
   [
+    "Is Walkcast a screen recorder?",
+    "No. A screen recorder films what happens on your screen while you drive it. Walkcast drives its own browser: it opens your site, signs in and clicks through your pages on its own, so there is nothing to set up, nothing to perform and nothing to edit afterwards.",
+  ],
+  [
+    "What is Walkcast Lab?",
+    "The same recorder, used by teams that build browser AI agents. A failed agent run becomes a classified, reproducible regression test: you get the cause, the evidence it points at, and a fixture you can replay against the next agent version. It lives in the same app, under Lab in the sidebar.",
+  ],
+  [
     "Which computers does Walkcast run on?",
-    "The desktop app installs on Windows 10 or 11, 64-bit. On macOS and Linux you can run it from source with Node.js 22, Rust and ffmpeg.",
+    "Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, and most 64-bit Linux distributions (AppImage or .deb). It is a desktop app because it runs a real browser on your computer; it does not run on phones.",
   ],
   [
     "How do I make a narrated video walkthrough of my website?",
