@@ -85,6 +85,8 @@ test("the sample site records with the voice that was picked, and the length tha
   assert.equal(input.ttsProvider, "openai");
   assert.equal(input.ttsVoice, "onyx");
   assert.equal(input.maxSeconds, 45);
+  // Only the input matters here: don't leave a real recording queued ahead of the next test's job.
+  assert.equal((await call(c, `/api/jobs/${job.id}/cancel`, { method: "POST" })).status, 200);
 });
 
 test("a cloud provider this server has no key for is refused, not silently swapped for the built-in voice", async () => {

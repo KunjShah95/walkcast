@@ -52,8 +52,11 @@ export class FileStore implements Store {
     const cleanup = () => { try { if (existsSync(lock) && readFileSync(lock, "utf8").trim() === String(process.pid)) unlinkSync(lock); } catch { /* best effort */ } };
     const flushOnExit = () => { try { this.flushSync(); } catch { /* best effort */ } cleanup(); };
     this.exitHandler = flushOnExit;
-    this.sigintHandler = () => { flushOnExit(); process.exit(0); };
-    this.sigtermHandler = () => { flushOnExit(); process.exit(0); };
+    // Flush on a signal, but only exit when nothing else is listening: the server registers its
+    // own handler to drain (let a recording finish or hand it back), and exiting here first cut
+    // that short. With no other listener this keeps the default "signal ends the process".
+    this.sigintHandler = () => { flushOnExit(); if (process.listenerCount("SIGINT") <= 1) process.exit(0); };
+    this.sigtermHandler = () => { flushOnExit(); if (process.listenerCount("SIGTERM") <= 1) process.exit(0); };
     process.on("exit", this.exitHandler);
     process.on("SIGINT", this.sigintHandler);
     process.on("SIGTERM", this.sigtermHandler);
@@ -113,7 +116,10 @@ export class FileStore implements Store {
         break;
       } catch (e) {
         const code = (e as NodeJS.ErrnoException).code;
-        if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || ++tries > 4) throw e;
+        if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || ++tries > 4) {
+          try { unlinkSync(tmp); } catch { /* best effort: don't leave the temp file behind */ }
+          throw e;
+        }
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * 2 ** (tries - 1));
       }
     }
@@ -181,6 +187,14 @@ export class FileStore implements Store {
     return this.data.limits[key]!.count;
   }
 
+  insertFailed(job: Pick<NewJob, "kind" | "owner" | "input">, error: string) {
+    return this.write(() => {
+      const now = new Date().toISOString();
+      const row = { ...newJobRow({ ...job, secret: null }), status: "failed" as const, error, finishedAt: now };
+      this.data.jobs.push(row);
+      return strip(row);
+    });
+  }
   enqueue(job: NewJob) {
     return this.write(() => {
       if (job.idempotencyKey) {
@@ -274,6 +288,14 @@ export class FileStore implements Store {
       }
     });
   }
+  cancel(jobId: string) {
+    return this.write(() => {
+      const job = this.data.jobs.find((j) => j.id === jobId && (j.status === "queued" || j.status === "running"));
+      if (!job) return null;
+      Object.assign(job, { status: "cancelled", secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
+      return strip(job);
+    });
+  }
   release(jobId: string, workerId: string) {
     return this.write(() => {
       const job = this.data.jobs.find((j) => j.id === jobId && j.lockedBy === workerId && j.status === "running");
@@ -287,6 +309,13 @@ export class FileStore implements Store {
   async jobByKey(owner: string | null, idempotencyKey: string) {
     const j = this.data.jobs.find((x) => x.owner === owner && x.idempotencyKey === idempotencyKey);
     return j ? strip(j) : null;
+  }
+  async failedJobs(owner: string | null, kind: JobKind, limit: number) {
+    return this.data.jobs
+      .filter((j) => j.kind === kind && j.status === "failed" && (owner === null || j.owner === owner))
+      .sort((a, b) => (b.finishedAt ?? b.createdAt).localeCompare(a.finishedAt ?? a.createdAt))
+      .slice(0, limit)
+      .map(strip);
   }
   async activeJobs(owner: string | null) {
     return this.data.jobs.filter((j) => j.owner === owner && (j.status === "queued" || j.status === "running")).length;
@@ -354,6 +383,11 @@ export class FileStore implements Store {
   }
   async recording(id: string) {
     return this.data.recordings.find((r) => r.id === id) ?? null;
+  }
+  deleteRecording(id: string) {
+    return this.write(() => {
+      this.data.recordings = this.data.recordings.filter((r) => r.id !== id);
+    });
   }
 
   async schedules(owner: string | null) {

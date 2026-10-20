@@ -103,6 +103,14 @@ export class PgStore implements Store {
 
   // ---------------------------------------------------------------- jobs
 
+  async insertFailed(job: Pick<NewJob, "kind" | "owner" | "input">, error: string) {
+    const [r] = await this.sql`
+      insert into jobs (kind, owner, input, status, error, attempts, finished_at)
+      values (${job.kind}, ${job.owner}, ${this.sql.json(job.input as postgres.JSONValue)}, 'failed', ${error}, 0, now())
+      returning *`;
+    return toJob(r!);
+  }
+
   async enqueue(job: NewJob) {
     const [inserted] = await this.sql`
       insert into jobs (kind, owner, input, secret, idempotency_key, max_attempts)
@@ -204,6 +212,15 @@ export class PgStore implements Store {
     });
   }
 
+  async cancel(jobId: string) {
+    if (!/^[0-9a-f-]{36}$/i.test(jobId)) return null;
+    const [r] = await this.sql`
+      update jobs set status = 'cancelled', secret = null, finished_at = now(), locked_by = null, lease_until = null
+      where id = ${jobId} and status in ('queued', 'running')
+      returning *`;
+    return r ? toJob(r) : null;
+  }
+
   async release(jobId: string, workerId: string) {
     await this.sql`update jobs set status = 'queued', attempts = greatest(attempts - 1, 0), locked_by = null, lease_until = null
       where id = ${jobId} and locked_by = ${workerId} and status = 'running'`;
@@ -217,6 +234,12 @@ export class PgStore implements Store {
   async jobByKey(owner: string | null, idempotencyKey: string) {
     const [r] = await this.sql`select * from jobs where owner is not distinct from ${owner} and idempotency_key = ${idempotencyKey}`;
     return r ? toJob(r) : null;
+  }
+  async failedJobs(owner: string | null, kind: JobKind, limit: number) {
+    const rows = owner === null
+      ? await this.read`select * from jobs where kind = ${kind} and status = 'failed' order by finished_at desc nulls last limit ${limit}`
+      : await this.read`select * from jobs where kind = ${kind} and status = 'failed' and owner = ${owner} order by finished_at desc nulls last limit ${limit}`;
+    return rows.map(toJob);
   }
   async activeJobs(owner: string | null) {
     const [r] = await this.sql`select count(*)::int as n from jobs where owner is not distinct from ${owner} and status in ('queued', 'running')`;
@@ -282,6 +305,9 @@ export class PgStore implements Store {
   async recording(id: string) {
     const [r] = await this.sql`select * from recordings where id = ${id}`;
     return r ? toRecording(r) : null;
+  }
+  async deleteRecording(id: string) {
+    await this.sql`delete from recordings where id = ${id}`;
   }
 
   // ---------------------------------------------------------------- schedules

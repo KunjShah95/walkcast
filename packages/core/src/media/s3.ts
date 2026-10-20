@@ -105,6 +105,14 @@ function toReadableStream(buf: Buffer): ReadableStream<Uint8Array> {
   });
 }
 
+/** Delete one object. S3 answers 204 whether or not it existed, so a retry is harmless. */
+export async function deleteObject(cfg: S3Config, key: string): Promise<void> {
+  const url = objectUrl(cfg, key);
+  const headers = signHeaders(cfg, "DELETE", url, sha256(""));
+  const res = await fetch(url, { method: "DELETE", headers, signal: AbortSignal.timeout(30_000) });
+  if (!res.ok && res.status !== 404) throw new Error(`Delete of ${key} failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
 export async function putObject(cfg: S3Config, key: string, body: Buffer | Readable | ReadableStream<Uint8Array>, contentType: string): Promise<void> {
   const buf = await toBuffer(body);
   const url = objectUrl(cfg, key);

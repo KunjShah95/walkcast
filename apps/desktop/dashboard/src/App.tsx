@@ -17,6 +17,7 @@ import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
 import { FaultReplay } from "./views/FaultReplay.tsx";
+import { Failures } from "./views/Failures.tsx";
 import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
@@ -31,6 +32,7 @@ export type Route =
   | { view: "settings" }
   | { view: "schedules" }
   | { view: "runs" }
+  | { view: "failures" }
   | { view: "fixtures" }
   | { view: "experiments" }
   | { view: "run"; dir: string }
@@ -50,7 +52,7 @@ function parse(hash: string): Route {
   // `#simulator?scenario=…` picks a scenario; the query is read by the view itself.
   const bare = h.split("?")[0] ?? h;
   if (h === "mobile") return { view: "mobile" };
-  if (bare === "runs" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
+  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
     return { view: bare } as Route;
   return { view: "dashboard" };
 }
@@ -77,6 +79,7 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
     name: "Lab",
     items: [
       { view: "runs", label: "Runs", count: (i) => i.runs.length },
+      { view: "failures", label: "Failures", count: (i) => i.failedRecordings ?? 0 },
       { view: "fixtures", label: "Fixtures", count: (i) => i.fixtures.length },
       { view: "experiments", label: "Experiments", count: (i) => i.experiments.length },
       { view: "simulator", label: "Fault replay" },
@@ -91,6 +94,7 @@ const TITLES: Record<Route["view"], string> = {
   settings: "Settings",
   schedules: "Schedules",
   runs: "Runs",
+  failures: "Failures",
   run: "Run",
   compare: "Compare",
   simulator: "Fault replay",
@@ -281,6 +285,7 @@ export function App() {
                 {!index && !error && <Loading />}
                 {index && route.view === "dashboard" && <Dashboard index={index} me={me} go={go} />}
                 {index && route.view === "runs" && <Runs index={index} go={go} />}
+                {index && route.view === "failures" && <Failures go={go} />}
                 {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
                 {index && route.view === "experiments" && <Experiments index={index} go={go} />}
                 {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}

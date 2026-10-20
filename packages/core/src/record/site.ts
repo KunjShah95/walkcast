@@ -11,6 +11,7 @@ import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";
+import { attachEvidence } from "./failure.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -126,111 +127,131 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   // Why the walk ended: the page cap, the length cap, or the site running out of links.
   let stopReason: "pages" | "time" | "no-more-links" = "pages";
 
-  options.signal?.throwIfAborted();
-  // Reuse a warm Chromium instance for the worker/process lifetime; this is the 1–2 s launch
-  // that decided whether a recording "starts" instantly (docs/SCALING.md §4.3).
-  const browser = await getBrowser();
-  let contextRef: Awaited<ReturnType<typeof browser.newContext>> | null = null;
-  const abort = () => void contextRef?.close().catch(() => undefined);
-  options.signal?.addEventListener("abort", abort, { once: true });
+  // A failure keeps what it knew (pages, sign-in, a screenshot, the partial video) on the error,
+  // so the Lab can show why it failed instead of a one-line message.
+  let screenshot: string | null = null;
   try {
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-      recordVideo: { dir, size: { width: 1920, height: 1080 } },
-      serviceWorkers: "block",
-    });
-    contextRef = context;
-    if (options.blockPrivate) blockedRequests = await guardContext(context);
-    await context.addInitScript("window.__name = (fn) => fn;");
-    const page = await context.newPage();
-    videoStart = recorder.now();
-    recorder.attach(context, page);
-    const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }));
+    options.signal?.throwIfAborted();
+    // Reuse a warm Chromium instance for the worker/process lifetime; this is the 1–2 s launch
+    // that decided whether a recording "starts" instantly (docs/SCALING.md §4.3).
+    options.onProgress?.("Starting the browser");
+    const browser = await getBrowser();
+    let contextRef: Awaited<ReturnType<typeof browser.newContext>> | null = null;
+    const abort = () => void contextRef?.close().catch(() => undefined);
+    options.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const context = await browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        recordVideo: { dir, size: { width: 1920, height: 1080 } },
+        serviceWorkers: "block",
+      });
+      contextRef = context;
+      if (options.blockPrivate) blockedRequests = await guardContext(context);
+      await context.addInitScript("window.__name = (fn) => fn;");
+      const page = await context.newPage();
+      videoStart = recorder.now();
+      recorder.attach(context, page);
+      const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }));
 
-    // The budget covers the walk itself, starting the moment recording begins — browser launch and
-    // sign-in still happen, but the cap is about the video the person watches, not our overhead.
-        try {
-      stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds);
+      // The budget covers the walk itself, starting the moment recording begins — browser launch and
+      // sign-in still happen, but the cap is about the video the person watches, not our overhead.
+      try {
+        stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds);
+      } catch (e) {
+        // A blank tab (the first page never loaded) says nothing; only keep a page that drew.
+        if (page.url() !== "about:blank") {
+          screenshot = await page.screenshot({ path: join(dir, "failure.png"), timeout: 5000 }).then(
+            () => "failure.png",
+            () => null,
+          );
+        }
+        throw e;
+      } finally {
+        const video = page.video();
+        await context.close().catch(() => undefined);
+        contextRef = null;
+        const raw = video ? await video.path().catch(() => null) : null;
+        if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
+      }
     } finally {
-      const video = page.video();
-      await context.close().catch(() => undefined);
-      contextRef = null;
-      const raw = video ? await video.path().catch(() => null) : null;
-      if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
+      if (contextRef) await contextRef.close().catch(() => undefined);
+      options.signal?.removeEventListener("abort", abort);
+      // Only in disabled mode does this process own a browser; warm mode keeps it ready for
+      // the next recording (docs/SCALING.md §4.3).
+      if (process.env.LAB_WARM_BROWSER === "0") await browser.close().catch(() => undefined);
     }
-  } finally {
-    if (contextRef) await contextRef.close().catch(() => undefined);
-    options.signal?.removeEventListener("abort", abort);
-    // Only in disabled mode does this process own a browser; warm mode keeps it ready for
-    // the next recording (docs/SCALING.md §4.3).
-    if (process.env.LAB_WARM_BROWSER === "0") await browser.close().catch(() => undefined);
-  }
-  options.signal?.throwIfAborted();
+    options.signal?.throwIfAborted();
 
-  recorder.flush();
-  const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
-  options.onProgress?.("Adding narration and encoding the video");
-  // A selected provider that can't be reached must not pass for one that spoke: ask for it, then
-  // keep whichever engine actually narrates, and say so in the recording itself. The dashboard asks
-  // each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on purpose)
-  // or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
-  const picked = options.ttsProvider;
-  const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
-  const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
-  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
-  // The narration loop and the encode below are the longest stretch of a recording that has
-  // nothing to report, so they forward their own beats to the worker's stall guard.
-  let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
-  // Someone who chose a voice should get one: when the cloud voice fails part-way (no credits,
-  // a revoked key, the service down), narrate with the offline voice and say why, rather than
-  // handing back a silent video.
-  let spokeEngine = engine;
-  if (media.voice === "none" && engine?.kind === "cloud") {
-    const backup = localVoice(options.voice ?? "slt");
-    if (backup) {
-      const why = media.note.replace(/; the video has captions and a transcript.$/, ".");
-      options.onProgress?.("The chosen voice failed; narrating with the offline voice");
-      media = await buildMedia(dir, captions, options.voice ?? "slt", backup, options.onProgress);
-      if (media.voice !== "none") {
-        media.note = `${why} Narrated with the basic offline voice instead.`;
-        spokeEngine = backup;
+    recorder.flush();
+    const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
+    options.onProgress?.("Adding narration and encoding the video");
+    // A selected provider that can't be reached must not pass for one that spoke: ask for it, then
+    // keep whichever engine actually narrates, and say so in the recording itself. The dashboard asks
+    // each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on purpose)
+    // or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
+    const picked = options.ttsProvider;
+    const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
+    const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
+    const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
+    // The narration loop and the encode below are the longest stretch of a recording that has
+    // nothing to report, so they forward their own beats to the worker's stall guard.
+    let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
+    // Someone who chose a voice should get one: when the cloud voice fails part-way (no credits,
+    // a revoked key, the service down), narrate with the offline voice and say why, rather than
+    // handing back a silent video.
+    let spokeEngine = engine;
+    if (media.voice === "none" && engine?.kind === "cloud") {
+      const backup = localVoice(options.voice ?? "slt");
+      if (backup) {
+        const why = media.note.replace(/; the video has captions and a transcript.$/, ".");
+        options.onProgress?.("The chosen voice failed; narrating with the offline voice");
+        media = await buildMedia(dir, captions, options.voice ?? "slt", backup, options.onProgress);
+        if (media.voice !== "none") {
+          media.note = `${why} Narrated with the basic offline voice instead.`;
+          spokeEngine = backup;
+        }
       }
     }
+    if (chose && !askedEngine) {
+      const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
+      media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
+    }
+    const result: RecordingResult = {
+      ...(options.owner ? { owner: options.owner } : {}),
+      ...(blockedRequests.length ? { blockedRequests } : {}),
+      kind: "recording",
+      id,
+      url: start.toString(),
+      origin: start.origin,
+      createdAt: new Date().toISOString(),
+      durationMs: Date.now() - started,
+      signIn,
+      pages,
+      skipped,
+      captions,
+      media,
+      dir,
+      ...(options.ttsProvider
+        ? {
+            narration: {
+              /** What was asked for, and what spoke — they differ when a provider is unreachable. */
+              asked: providerLabel(options.ttsProvider),
+              askedVoice: options.ttsVoice ?? defaultVoiceFor(options.ttsProvider),
+              spoke: media.voice === "none" ? "none" : (spokeEngine?.id ?? "none"),
+              reachable: !chose || askedEngine !== null,
+            },
+          }
+        : {}),
+      stopped: { reason: stopReason, pages: pages.length, seconds: Math.round((Date.now() - started) / 1000), ...(maxSeconds ? { limitSeconds: maxSeconds } : {}) },
+    };
+    writeFileSync(join(dir, "recording.json"), JSON.stringify(scrub(result), null, 2));
+    return result;
+  } catch (e) {
+    // Same for the video: without a page it is seconds of white.
+    const video = existsSync(join(dir, "video.webm")) && (screenshot || pages.length > 0) ? "video.webm" : null;
+    attachEvidence(e, { dir, pages, signIn, skipped, durationMs: Date.now() - started, screenshot, video });
+    throw e;
   }
-  if (chose && !askedEngine) {
-    const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
-    media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
-  }
-  const result: RecordingResult = {
-    ...(options.owner ? { owner: options.owner } : {}),
-    ...(blockedRequests.length ? { blockedRequests } : {}),
-    kind: "recording",
-    id,
-    url: start.toString(),
-    origin: start.origin,
-    createdAt: new Date().toISOString(),
-    durationMs: Date.now() - started,
-    signIn,
-    pages,
-    skipped,
-    captions,
-    media,
-    dir,
-    ...(options.ttsProvider
-      ? {
-          narration: {
-            /** What was asked for, and what spoke — they differ when a provider is unreachable. */
-            asked: providerLabel(options.ttsProvider),
-            askedVoice: options.ttsVoice ?? defaultVoiceFor(options.ttsProvider),
-            spoke: media.voice === "none" ? "none" : (spokeEngine?.id ?? "none"),
-            reachable: !chose || askedEngine !== null,
-          },
-        }
-      : {}),
-    stopped: { reason: stopReason, pages: pages.length, seconds: Math.round((Date.now() - started) / 1000), ...(maxSeconds ? { limitSeconds: maxSeconds } : {}) },
-  };
-  writeFileSync(join(dir, "recording.json"), JSON.stringify(scrub(result), null, 2));
-  return result;
 }
 
 /**
@@ -284,6 +305,7 @@ async function browse(
   getSignIn: () => RecordingResult["signIn"],
   maxSeconds: number | undefined,
 ): Promise<"pages" | "time" | "no-more-links"> {
+  options.onProgress?.("Opening the site");
   const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
   await tools.goto(start.toString());
   await tools.waitForQuiet(400, 8000);
@@ -344,7 +366,7 @@ async function browse(
     }
   }
   if (reason !== "time" && deadline !== null && Date.now() >= deadline) reason = "time";
-if (reason !== "time" && queue.length === 0) reason = "no-more-links";
+  if (reason !== "time" && queue.length === 0) reason = "no-more-links";
   const ok = !signIn.attempted || signIn.outcome === "signed-in";
   // The closing line says why the walk stopped, so the video itself explains its own length.
   const tail =

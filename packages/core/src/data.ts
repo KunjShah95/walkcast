@@ -129,6 +129,8 @@ export interface LabIndex {
   runs: RunSummary[];
   fixtures: FixtureSummary[];
   experiments: ExperimentSummary[];
+  /** Failed recordings and agent runs the viewer can see (the server fills this in; Lab → Failures). */
+  failedRecordings?: number;
 }
 
 export class LabData {

@@ -3,7 +3,7 @@ import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
 import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
+import { type Capabilities, deleteRecording, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
 
@@ -13,6 +13,8 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<Record<string, RecordingSummary>>({});
   const [transcriptFmt, setTranscriptFmt] = useState<"srt" | "vtt" | "json">("srt");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
   }, []);
@@ -90,8 +92,32 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
                 >
                   Transcript
                 </a>
+                {!isSnapshot && caps?.live && (
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete the walkthrough of ${hostOf(current.url)}? Its video, audio and captions are removed for good.`)) return;
+                      setDeleting(true);
+                      setDeleteError(null);
+                      try {
+                        await deleteRecording(current.id);
+                        await refresh();
+                        go({ view: "library" });
+                      } catch (e) {
+                        setDeleteError(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setDeleting(false);
+                      }
+                    }}
+                    className="inline-flex h-8 items-center rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-fail/60 hover:text-fail disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting…" : "Delete"}
+                  </button>
+                )}
               </div>
             </div>
+            {deleteError && <p className="rounded-xl border border-fail/30 bg-fail-soft px-4 py-3 text-[13px] text-fail">{deleteError}</p>}
             <Studio
               key={current.dir}
               recording={current}
