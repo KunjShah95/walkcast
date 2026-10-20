@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { LengthPicker, VoicePicker, lengthLabel } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
@@ -225,7 +225,7 @@ function Providers({ caps }: { caps: Capabilities }) {
   );
 }
 
-interface CredKey { env: string; label: string; set: boolean }
+interface CredKey { env: string; label: string; group: string; set: boolean }
 
 interface CredTest { ok: boolean; message: string }
 
@@ -238,6 +238,15 @@ function Credentials({ onChange }: { onChange: () => void }) {
   const [testing, setTesting] = useState<string | null>(null);
   // What the provider said about each key: saved is not the same as accepted.
   const [tests, setTests] = useState<Record<string, CredTest>>({});
+
+  // The keys grouped by what they are for, so the panel reads as three short lists rather than
+  // one long one.
+  const groups = useMemo(() => {
+    const order = ["Model", "Voice", "Storage"];
+    const byGroup = new Map<string, CredKey[]>();
+    for (const k of keys) byGroup.set(k.group, [...(byGroup.get(k.group) ?? []), k]);
+    return order.filter((g) => byGroup.has(g)).map((g) => [g, byGroup.get(g)!] as const);
+  }, [keys]);
 
   async function load() {
     try {
@@ -319,56 +328,61 @@ function Credentials({ onChange }: { onChange: () => void }) {
             : "These keys belong to the server, so only its operator can change them. They apply to every account here."}
         </p>
         {status && <p className="text-[12.5px] text-ink-2">{status}</p>}
-        <ul className="grid gap-2">
-          {keys.map((k) => (
-            <li key={k.env} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-center">
-              <span className="text-[12.5px]">
-                <span className="font-medium">{k.label}</span>
-                <span className="ml-2 font-mono text-[11px] text-ink-3">{k.env}</span>
-                {k.set && !tests[k.env] && <span className="ml-2 text-[11px] text-pass">saved</span>}
-                {tests[k.env] && <span className={`ml-2 text-[11px] ${tests[k.env]!.ok ? "text-pass" : "text-fail"}`}>{tests[k.env]!.ok ? "works" : "not working"}</span>}
-                {tests[k.env] && <span className={`mt-0.5 block text-[11.5px] ${tests[k.env]!.ok ? "text-ink-3" : "text-fail"}`}>{tests[k.env]!.message}</span>}
-              </span>
-              <input
-                type="password"
-                placeholder={k.set ? "•••••••• (leave blank to keep)" : "paste key"}
-                value={values[k.env] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [k.env]: e.target.value }))}
-                className="h-9 rounded-lg border border-line bg-panel px-3 text-[13px]"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={saving === k.env}
-                  onClick={() => void save(k.env)}
-                  className="h-9 rounded-lg border border-line-strong px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
-                >
-                  {saving === k.env ? "Saving…" : testing === k.env ? "Testing…" : "Save"}
-                </button>
-                {k.set && (
-                  <button
-                    type="button"
-                    disabled={testing === k.env || saving === k.env}
-                    onClick={() => void test(k.env)}
-                    className="h-9 rounded-lg border border-line px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
-                  >
-                    Test
-                  </button>
-                )}
-                {k.set && editable && (
-                  <button
-                    type="button"
-                    disabled={saving === k.env}
-                    onClick={() => void remove(k.env)}
-                    className="h-9 rounded-lg px-2 text-[13px] text-ink-3 hover:text-fail disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        {groups.map(([group, groupKeys]) => (
+          <section key={group} className="grid gap-2">
+            <h3 className="eyebrow mt-1">{group}</h3>
+            <ul className="grid gap-2">
+              {groupKeys.map((k) => (
+                <li key={k.env} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-center">
+                  <span className="text-[12.5px]">
+                    <span className="font-medium">{k.label}</span>
+                    <span className="ml-2 font-mono text-[11px] text-ink-3">{k.env}</span>
+                    {k.set && !tests[k.env] && <span className="ml-2 text-[11px] text-pass">saved</span>}
+                    {tests[k.env] && <span className={`ml-2 text-[11px] ${tests[k.env]!.ok ? "text-pass" : "text-fail"}`}>{tests[k.env]!.ok ? "works" : "not working"}</span>}
+                    {tests[k.env] && <span className={`mt-0.5 block text-[11.5px] ${tests[k.env]!.ok ? "text-ink-3" : "text-fail"}`}>{tests[k.env]!.message}</span>}
+                  </span>
+                  <input
+                    type="password"
+                    placeholder={k.set ? "•••••••• (leave blank to keep)" : "paste key"}
+                    value={values[k.env] ?? ""}
+                    onChange={(e) => setValues((v) => ({ ...v, [k.env]: e.target.value }))}
+                    className="h-9 rounded-lg border border-line bg-panel px-3 text-[13px]"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={saving === k.env}
+                      onClick={() => void save(k.env)}
+                      className="h-9 rounded-lg border border-line-strong px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
+                    >
+                      {saving === k.env ? "Saving…" : testing === k.env ? "Testing…" : "Save"}
+                    </button>
+                    {k.set && (
+                      <button
+                        type="button"
+                        disabled={testing === k.env || saving === k.env}
+                        onClick={() => void test(k.env)}
+                        className="h-9 rounded-lg border border-line px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
+                      >
+                        Test
+                      </button>
+                    )}
+                    {k.set && editable && (
+                      <button
+                        type="button"
+                        disabled={saving === k.env}
+                        onClick={() => void remove(k.env)}
+                        className="h-9 rounded-lg px-2 text-[13px] text-ink-3 hover:text-fail disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </Panel>
   );

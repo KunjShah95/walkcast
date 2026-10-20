@@ -292,7 +292,10 @@ export async function speechMs(text: string, engine?: VoiceEngine | null): Promi
   }
   const local = engine ?? localVoice(VOICE);
   if (!local) return words * 380 + 400;
-  const cached = spoken.get(text);
+  // The cache is per voice: the same line measured by flite and by Windows speech is two
+  // different lengths, and a recording paced by the wrong one drifts.
+  const key = `${local.id}|${text}`;
+  const cached = spoken.get(key);
   if (cached !== undefined) return cached;
   cacheDir ??= mkdtempSync(join(tmpdir(), "lab-tts-"));
   const i = spoken.size;
@@ -303,7 +306,7 @@ export async function speechMs(text: string, engine?: VoiceEngine | null): Promi
   const ms = Math.round(wavSeconds(wav) * 1000);
   rmSync(txt, { force: true });
   rmSync(wav, { force: true });
-  spoken.set(text, ms);
+  spoken.set(key, ms);
   return ms;
 }
 

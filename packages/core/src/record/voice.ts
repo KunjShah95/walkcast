@@ -106,16 +106,22 @@ async function ensureWav(file: string, cwd: string): Promise<void> {
   if (isRiffWav(file)) return;
   const out = `${file}.wav`;
   try {
-    await run(["-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+    try {
+      await run(["-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+    } catch (e) {
+      // Headerless PCM: ffmpeg has nothing to detect the format from, so say what it is. Only
+      // when the bytes look like samples and not like an error page: reading a page of text as
+      // noise turns the provider's failure into a recording that claims to have spoken.
+      const size = statSync(file).size;
+      if (size % 2 !== 0 || size === 0 || looksLikeText(file)) throw e;
+      await run(["-f", "s16le", "-ar", "22050", "-ac", "1", "-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+    }
+    renameSync(out, file);
   } catch (e) {
-    // Headerless PCM: ffmpeg has nothing to detect the format from, so say what it is. Only
-    // when the bytes look like samples and not like an error page: reading a page of text as
-    // noise turns the provider's failure into a recording that claims to have spoken.
-    const size = statSync(file).size;
-    if (size % 2 !== 0 || size === 0 || looksLikeText(file)) throw e;
-    await run(["-f", "s16le", "-ar", "22050", "-ac", "1", "-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+    // A half-written conversion must not be left behind in the recording's folder.
+    rmSync(out, { force: true });
+    throw e;
   }
-  renameSync(out, file);
 }
 
 export interface VoiceEngine {

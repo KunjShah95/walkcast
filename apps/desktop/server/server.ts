@@ -114,44 +114,47 @@ const LIMITS = {
  * returns 202 with a job id at once and the browser polls /api/jobs/:id, so nothing depends on a
  * request staying open for minutes behind a load balancer.
  */
-export const CREDENTIAL_KEYS: { env: string; label: string }[] = [
-  { env: "ANTHROPIC_API_KEY", label: "Anthropic API key" },
-  { env: "OPENAI_API_KEY", label: "OpenAI API key" },
-  { env: "OPENROUTER_API_KEY", label: "OpenRouter API key" },
-  { env: "AI_GATEWAY_API_KEY", label: "Vercel AI Gateway key" },
-  { env: "GEMINI_API_KEY", label: "Google Gemini API key" },
-  { env: "GOOGLE_API_KEY", label: "Google API key (alt)" },
-  { env: "GROQ_API_KEY", label: "Groq API key" },
-  { env: "MISTRAL_API_KEY", label: "Mistral API key" },
-  { env: "DEEPSEEK_API_KEY", label: "DeepSeek API key" },
-  { env: "HF_TOKEN", label: "Hugging Face token" },
-  { env: "XAI_API_KEY", label: "xAI API key" },
-  { env: "TOGETHER_API_KEY", label: "Together AI API key" },
-  { env: "FIREWORKS_API_KEY", label: "Fireworks API key" },
-  { env: "CEREBRAS_API_KEY", label: "Cerebras API key" },
-  { env: "OLLAMA_API_KEY", label: "Ollama API key (local models)" },
-  { env: "SARVAM_API_KEY", label: "Sarvam API key" },
-  { env: "BHASHINI_API_KEY", label: "Bhashini API key" },
-  { env: "BHASHINI_USER_ID", label: "Bhashini user id" },
-  { env: "ELEVENLABS_API_KEY", label: "ElevenLabs API key" },
-  { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key" },
-  { env: "AZURE_TTS_KEY", label: "Azure TTS key" },
-  { env: "AZURE_TTS_REGION", label: "Azure TTS region" },
-  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly and S3)" },
-  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly and S3)" },
-  { env: "AWS_SESSION_TOKEN", label: "AWS session token (temporary keys only)" },
-  { env: "AWS_REGION", label: "AWS region (Polly)" },
-  { env: "MEDIA_S3_BUCKET", label: "Media bucket (S3 storage)" },
-  { env: "MEDIA_S3_REGION", label: "Media region (S3 storage)" },
-  { env: "MURF_API_KEY", label: "Murf API key" },
-  { env: "REVERIE_API_KEY", label: "Reverie API key" },
-  { env: "REVERIE_APP_ID", label: "Reverie app id" },
-  { env: "LAB_TTS_API_KEY", label: "Custom TTS API key" },
-  { env: "LAB_TTS_ENDPOINT", label: "Custom TTS endpoint" },
-  { env: "LAB_STT_BASE_URL", label: "Custom speech-to-text base URL" },
-  { env: "LAB_STT_API_KEY", label: "Custom speech-to-text API key" },
-  { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key" },
-  { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL" },
+/** What a credential is for, so the panel groups them instead of running one long list. */
+export type CredentialGroup = "Model" | "Voice" | "Storage";
+
+export const CREDENTIAL_KEYS: { env: string; label: string; group: CredentialGroup }[] = [
+  { env: "ANTHROPIC_API_KEY", label: "Anthropic API key", group: "Model" },
+  { env: "OPENAI_API_KEY", label: "OpenAI API key", group: "Model" },
+  { env: "OPENROUTER_API_KEY", label: "OpenRouter API key", group: "Model" },
+  { env: "AI_GATEWAY_API_KEY", label: "Vercel AI Gateway key", group: "Model" },
+  { env: "GEMINI_API_KEY", label: "Google Gemini API key", group: "Model" },
+  { env: "GOOGLE_API_KEY", label: "Google API key (alt)", group: "Model" },
+  { env: "GROQ_API_KEY", label: "Groq API key", group: "Model" },
+  { env: "MISTRAL_API_KEY", label: "Mistral API key", group: "Model" },
+  { env: "DEEPSEEK_API_KEY", label: "DeepSeek API key", group: "Model" },
+  { env: "HF_TOKEN", label: "Hugging Face token", group: "Model" },
+  { env: "XAI_API_KEY", label: "xAI API key", group: "Model" },
+  { env: "TOGETHER_API_KEY", label: "Together AI API key", group: "Model" },
+  { env: "FIREWORKS_API_KEY", label: "Fireworks API key", group: "Model" },
+  { env: "CEREBRAS_API_KEY", label: "Cerebras API key", group: "Model" },
+  { env: "OLLAMA_API_KEY", label: "Ollama API key (local models)", group: "Model" },
+  { env: "SARVAM_API_KEY", label: "Sarvam API key", group: "Voice" },
+  { env: "BHASHINI_API_KEY", label: "Bhashini API key", group: "Voice" },
+  { env: "BHASHINI_USER_ID", label: "Bhashini user id", group: "Voice" },
+  { env: "ELEVENLABS_API_KEY", label: "ElevenLabs API key", group: "Voice" },
+  { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key", group: "Voice" },
+  { env: "AZURE_TTS_KEY", label: "Azure TTS key", group: "Voice" },
+  { env: "AZURE_TTS_REGION", label: "Azure TTS region", group: "Voice" },
+  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly and S3)", group: "Voice" },
+  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly and S3)", group: "Voice" },
+  { env: "AWS_SESSION_TOKEN", label: "AWS session token (temporary keys only)", group: "Voice" },
+  { env: "AWS_REGION", label: "AWS region (Polly)", group: "Voice" },
+  { env: "MEDIA_S3_BUCKET", label: "Media bucket (S3 storage)", group: "Storage" },
+  { env: "MEDIA_S3_REGION", label: "Media region (S3 storage)", group: "Storage" },
+  { env: "MURF_API_KEY", label: "Murf API key", group: "Voice" },
+  { env: "REVERIE_API_KEY", label: "Reverie API key", group: "Voice" },
+  { env: "REVERIE_APP_ID", label: "Reverie app id", group: "Voice" },
+  { env: "LAB_TTS_API_KEY", label: "Custom TTS API key", group: "Voice" },
+  { env: "LAB_TTS_ENDPOINT", label: "Custom TTS endpoint", group: "Voice" },
+  { env: "LAB_STT_BASE_URL", label: "Custom speech-to-text base URL", group: "Voice" },
+  { env: "LAB_STT_API_KEY", label: "Custom speech-to-text API key", group: "Voice" },
+  { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key", group: "Model" },
+  { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL", group: "Model" },
 ];
 
 /**
@@ -748,7 +751,7 @@ export function createApp(o: ServeOptions = {}): App {
     // ---------------------------------------------------------------- credentials
     if (url.pathname === "/api/credentials" && req.method === "GET") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: credentialSet(k.env) })) });
+      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, group: k.group, set: credentialSet(k.env) })) });
     }
     if (url.pathname === "/api/credentials" && req.method === "POST") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
