@@ -401,6 +401,10 @@ async fn update_at_launch(app: &AppHandle, window: &WebviewWindow) -> bool {
   stop_sidecar(app);
   if let Err(e) = update.install(bytes) {
     log::error!("update install failed: {e}");
+    // The server was stopped for the installer. Let its exit arrive while QUITTING still marks it
+    // expected; the caller then starts a new one. (It used to open the app on a dead server: the
+    // splash said "stopped while starting" until the next launch.)
+    std::thread::sleep(Duration::from_millis(1500));
     QUITTING.store(false, Ordering::SeqCst);
     return false;
   }
@@ -591,8 +595,16 @@ pub fn run() {
       }
       // The splash (apps/desktop/splash) shows at once; the app replaces it when the server answers.
       let window = open_window(&handle, WebviewUrl::App("index.html".into()))?;
-      let exited = Arc::new(AtomicBool::new(false));
-      let port = match start_sidecar(&handle, exited.clone()) {
+      // An AppImage has no installer to register walkcast://, so the running app does it.
+      #[cfg(target_os = "linux")]
+      {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        if let Err(e) = handle.deep_link().register_all() {
+          log::warn!("could not register the walkcast:// scheme: {e}");
+        }
+      }
+      let mut exited = Arc::new(AtomicBool::new(false));
+      let mut port = match start_sidecar(&handle, exited.clone()) {
         Ok(port) => port,
         Err(e) => {
           log::error!("could not start the app server: {e}");
@@ -607,6 +619,21 @@ pub fn run() {
         // the app restarts and never gets past here.
         if !tauri::async_runtime::block_on(update_at_launch(&handle, &window)) {
           set_splash(&window, "Starting…");
+        }
+        // A failed install at launch stopped the server: start a fresh one.
+        if handle.state::<Sidecar>().0.lock().unwrap().is_none() {
+          exited = Arc::new(AtomicBool::new(false));
+          match start_sidecar(&handle, exited.clone()) {
+            Ok(p) => {
+              port = p;
+              *handle.state::<Port>().0.lock().unwrap() = p;
+            }
+            Err(e) => {
+              log::error!("could not restart the app server after a failed update: {e}");
+              show_failure(&window, &format!("Walkcast could not start its server: {e}"));
+              return;
+            }
+          }
         }
         let started = Instant::now();
         while started.elapsed() < STARTUP_TIMEOUT && !exited.load(Ordering::SeqCst) {

@@ -30,7 +30,10 @@ tauri-plugin-process = "2"
 # taken port 4317 can no longer strand the flow. One instance only, so a second launch focuses the
 # first instead of quietly stealing the preferred port.
 tauri-plugin-deep-link = "2"
-tauri-plugin-single-instance = "2"
+# "deep-link": on Windows and Linux a walkcast:// link starts a second process; this hands its URL
+# to the deep-link plugin of the running app. Without it the URL was dropped and the window only
+# came to the front, so browser sign-in never finished.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [dev-dependencies]
 # Only so the tests can exercise Tauri's own capability-URL matcher against the pattern in
