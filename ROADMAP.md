@@ -53,6 +53,12 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 - [x] HAR-based network replay for third-party responses (ASSESSMENT §8): runs record non-app traffic to `network.har` (scripted and plugin agents), fixtures carry it, replays serve it and abort anything unrecorded.
 - [x] Lint actually runs: eslint 9 + typescript-eslint flat config, clean, enforced in CI and the pre-commit hook.
 
+## Walkthrough insights & sharing (2026-10-20)
+- [x] What the recorder found, per walkthrough: console errors, failed requests, page load times, links found vs pages visited, controls with no name, links whose text says nothing. Measured from the trace it captured (`packages/core/src/record/insights.ts`); older walkthroughs are read from their trace on demand.
+- [x] What changed between two walkthroughs of the same site: pages added or gone, titles, statuses, controls that came and went, errors new or fixed. The question a scheduled recording exists to answer.
+- [x] Share links: a public page that plays the walkthrough with its captions, chapters and transcript, for anyone who has the link. The token is the permission, links expire, and the owner can stop one.
+- [x] Copy the failure (a lab run) as a note for a ticket: what the application recorded, what the agent claimed, the rules' findings, and the command that reproduces it.
+
 ## Up next (v0.6+)
 - [x] Voice cloning / custom voice upload for narration (upload + playback fallback).
 - [ ] Code-signed installers (Windows/macOS) to remove SmartScreen warnings. Blocked on buying certificates; unsigned by decision for now (docs/SIGNING.md).

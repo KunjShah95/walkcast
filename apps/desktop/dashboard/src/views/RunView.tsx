@@ -5,7 +5,7 @@ import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/F
 import { ReplayFixture } from "../components/ReplayFixture.tsx";
 import { FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { fileUrl, loadRun } from "../lib/api.ts";
-import { faultLabel, cn, ms, pathOf } from "../lib/format.ts";
+import { faultLabel, cn, label, ms, pathOf } from "../lib/format.ts";
 import type { ClaimEvent, ConsoleEvent, Finding, LabIndex, ModelCallEvent, NetworkEvent, RunDetail, StepEvent } from "../lib/types.ts";
 
 type Node =
@@ -17,6 +17,7 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false; // clicking Older/Newer quickly must show the run that was clicked last
@@ -110,7 +111,25 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
             <Meta k="browser" v={result.browserVersion ?? "–"} />
           </dl>
         </div>
-        <Verdict verdict={run.verdict} size="lg" />
+        <div className="flex flex-wrap items-center gap-3">
+          <Verdict verdict={run.verdict} size="lg" />
+          <button
+            type="button"
+            onClick={async () => {
+              const note = failureNote(detail, fixture);
+              try {
+                await navigator.clipboard.writeText(note);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              } catch {
+                setCopied(false);
+              }
+            }}
+            className="rounded-full border border-line-strong px-3.5 py-1.5 text-[12.5px] font-medium text-ink-2 hover:border-signal hover:text-signal"
+          >
+            {copied ? "Copied" : "Copy the failure"}
+          </button>
+        </div>
       </header>
 
       <SaidRecorded detail={detail} />
@@ -166,6 +185,48 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
       </details>
     </div>
   );
+}
+
+/**
+ * The failure, as a note someone can paste into a ticket.
+ *
+ * The plain-text report below is the whole run, in order: it is what you read when you are
+ * debugging. A ticket wants the opposite — what broke, what the application recorded, what
+ * the agent claimed, and the one command that reproduces it. All of that is here already.
+ */
+function failureNote(detail: RunDetail, fixture?: { dir: string; id: string }): string {
+  const { summary: run, result } = detail;
+  const lines: string[] = [];
+  lines.push(`# ${run.agent} on "${faultLabel(run.fault)}" — ${run.verdict === "pass" ? "passed" : "failed"}`);
+  lines.push("");
+  lines.push(`- Run: ${run.id}`);
+  lines.push(`- Seed: ${run.seed} · ${run.steps} steps · ${ms(run.durationMs)}`);
+  if (result.model) lines.push(`- Model: ${result.model.mode} (${result.model.calls} calls)`);
+  lines.push("");
+  lines.push("## What the application recorded");
+  for (const check of result.oracle?.checks ?? []) {
+    lines.push(`- ${check.passed ? "✓" : "✗"} ${check.name}${check.actual !== undefined ? ` — ${String(check.actual)}` : ""}`);
+  }
+  if (run.claim) {
+    lines.push("");
+    lines.push("## What the agent said");
+    lines.push(`- "${run.claim.summary}" (claimed ${run.claim.success ? "success" : "failure"})`);
+  }
+  const findings = result.diagnosis.findings;
+  if (findings.length) {
+    lines.push("");
+    lines.push("## What the rules found");
+    for (const f of findings) {
+      const steps = f.evidenceSteps.length ? ` (steps ${f.evidenceSteps.join(", ")})` : "";
+      lines.push(`- **${label(f.label)}** — ${f.explanation}${steps}`);
+    }
+  }
+  if (fixture) {
+    lines.push("");
+    lines.push("## Reproduce");
+    lines.push(`npm run lab -- replay ${fixture.dir} --agent ${run.agent} --trials 3 --model-mode replay`);
+  }
+  return lines.join("\n");
 }
 
 function Meta({ k, v }: { k: string; v: ReactNode }) {

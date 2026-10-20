@@ -114,7 +114,7 @@ test("a share link stops working on the day it names", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ days: 1 }),
     });
-    const body = (await made.json()) as { url: string; share: { expiresAt: string } };
+    const body = (await made.json()) as { url: string; share: { token: string; createdAt: string; expiresAt: string } };
     const days = Math.round((Date.parse(body.share.expiresAt) - Date.now()) / 86_400_000);
     assert.ok(days >= 0 && days <= 1, `the link was given ${days} days`);
 

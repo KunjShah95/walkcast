@@ -41,6 +41,10 @@ export interface PageInsight {
   errors: number;
   /** Requests that failed (a 4xx/5xx answer, or a network failure). */
   failures: number;
+  /** Controls a person could not tell what they were: no label, no name. */
+  unnamed: { role: string; count: number }[];
+  /** Links whose text says nothing: "click here", "read more", "here". */
+  vagueLinks: string[];
 }
 
 /** A console error, with the page it happened on. */
@@ -108,10 +112,16 @@ interface Segment {
   end: number;
   loadMs: number | null;
   links: number;
-  controls: string[];
+  controls: ControlEntry[];
   fingerprint: string | null;
   requests: NetworkEvent[];
   consoleErrors: ConsoleEvent[];
+}
+
+/** One interactive control, as the recorder saw it. */
+export interface ControlEntry {
+  role: string;
+  name: string;
 }
 
 /**
@@ -195,6 +205,22 @@ export function findingsFor(insights: RecordingInsights, facts: RecordingFacts):
       notes.push({ level: "info", text: `${page.path} redirected (${page.status}).` });
     }
     if (!page.title.trim()) problems.push({ level: "warn", text: `${page.path} has no title, so the page reads as blank in a player's chapter list.` });
+    // A control with no name is a field nobody can fill in by sight, or a button nobody can
+    // find. The recorder read every control on every page, so this is counted, not guessed.
+    for (const group of page.unnamed) {
+      const what = group.role === "textbox" ? "form field" : group.role === "link" ? "link" : group.role === "button" ? "button" : group.role;
+      problems.push({
+        level: "warn",
+        text: `${page.path}: ${group.count} ${what}${group.count === 1 ? "" : "s"} with no name — a screen reader announces nothing for ${group.count === 1 ? "it" : "them"}.`,
+      });
+    }
+    if (page.vagueLinks.length > 0) {
+      const words = [...new Set(page.vagueLinks)].slice(0, 3).map((w) => `“${w}”`).join(", ");
+      notes.push({
+        level: "info",
+        text: `${page.path}: ${page.vagueLinks.length} link${page.vagueLinks.length === 1 ? "" : "s"} whose text says nothing on its own (${words}).`,
+      });
+    }
   }
   if (insights.totals.links > insights.totals.pages * 4 && insights.totals.pages > 0) {
     notes.push({
@@ -409,7 +435,7 @@ function segmentsOf(steps: StepEvent[], events: TraceEvent[]): Segment[] {
       end,
       loadMs: step.endedAt > step.startedAt ? step.endedAt - step.startedAt : null,
       links: numberAt(linkStep?.result, "links") ?? 0,
-      controls: controlNames(observe?.result),
+      controls: controlEntries(observe?.result),
       fingerprint: stringAt(observe?.result, "fingerprint"),
       requests: requests.filter((r) => r.at >= start && r.at < end),
       consoleErrors: consoles.filter((c) => c.at >= start && c.at < end),
@@ -427,19 +453,56 @@ function gotoUrl(step: StepEvent): string {
   return after || path;
 }
 
-/** The controls the recorder saw, as readable labels, for comparing two walkthroughs. */
-function controlNames(result: unknown): string[] {
+/**
+ * The controls the recorder saw, with the names it read off them.
+ *
+ * A control with no name is not a broken control: it is a field with no label, or a button
+ * with nothing on it. Both are worth telling the person who owns the page about, and both
+ * were in the trace all along.
+ */
+function controlEntries(result: unknown): ControlEntry[] {
   if (!result || typeof result !== "object") return [];
   const controls = (result as { controls?: unknown }).controls;
   if (!Array.isArray(controls)) return [];
-  const out: string[] = [];
+  const out: ControlEntry[] = [];
   for (const control of controls) {
     if (!control || typeof control !== "object") continue;
     const { role, name } = control as { role?: unknown; name?: unknown };
-    const label = typeof name === "string" ? name.trim() : "";
-    const kind = typeof role === "string" ? role : "control";
-    if (!label) continue;
-    out.push(`${kind} “${label}”`);
+    out.push({ role: typeof role === "string" ? role : "control", name: typeof name === "string" ? name.trim() : "" });
+  }
+  return out;
+}
+
+/** The controls as readable labels, for comparing two walkthroughs. */
+function controlLabels(controls: ControlEntry[]): string[] {
+  return controls.filter((c) => c.name).map((c) => `${c.role} “${c.name}”`);
+}
+
+/** Controls with no name at all, counted by kind. */
+function unnamedControls(controls: ControlEntry[]): { role: string; count: number }[] {
+  const byRole = new Map<string, number>();
+  for (const control of controls) {
+    if (control.name) continue;
+    byRole.set(control.role, (byRole.get(control.role) ?? 0) + 1);
+  }
+  return [...byRole.entries()].map(([role, count]) => ({ role, count }));
+}
+
+/**
+ * Link text that says nothing on its own.
+ *
+ * "Click here" works when you can see the page and cannot when you cannot, and a screen
+ * reader reads it out as a list of identical links. The list is short on purpose: the point
+ * is to name the habit, not to run an audit.
+ */
+const VAGUE_LINK_TEXT = /^(click here|here|read more|more|learn more|link|this|this page|details|see more|continue)$/i;
+
+function vagueLinks(controls: ControlEntry[]): string[] {
+  const out: string[] = [];
+  for (const control of controls) {
+    if (control.role !== "link") continue;
+    if (!VAGUE_LINK_TEXT.test(control.name)) continue;
+    out.push(control.name);
   }
   return out;
 }
@@ -534,7 +597,9 @@ function pageInsight(page: RecordingFacts["pages"][number], segment: Segment | u
     title: page.title || segment?.title || "",
     status: page.status,
     controls: page.controls,
-    controlNames: segment?.controls ?? [],
+    controlNames: controlLabels(segment?.controls ?? []),
+    unnamed: unnamedControls(segment?.controls ?? []),
+    vagueLinks: vagueLinks(segment?.controls ?? []),
     fingerprint: segment?.fingerprint ?? null,
     loadMs: segment?.loadMs ?? null,
     firstResponseMs: document && document.respondedAt !== undefined ? document.respondedAt - document.at : null,

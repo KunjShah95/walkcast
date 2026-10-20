@@ -167,8 +167,36 @@ test("two walkthroughs that saw the same site differ in nothing", () => {
   assert.match(diff.summary[0]!, /Nothing changed/);
 });
 
-test("the notes read as a note someone can paste into a ticket", () => {
-  const { facts, events } = walk([{ path: "/pricing", title: "Pricing", status: 200, controls: [], loadMs: 1200, links: 2 }]);
+test("controls a person cannot name are reported, and links that say nothing are noted", () => {
+  const { facts, events } = walk([
+    {
+      path: "/contact",
+      title: "Contact",
+      status: 200,
+      // Two fields with no label, a button with nothing on it, and a link that says "click here".
+      controls: [
+        { role: "textbox", name: "" },
+        { role: "textbox", name: "" },
+        { role: "button", name: "" },
+        { role: "link", name: "Click here" },
+        { role: "link", name: "Pricing" },
+      ],
+      loadMs: 100,
+      links: 2,
+    },
+  ]);
+  const insights = analyzeRecording(facts, events);
+  const said = insights.findings.map((f) => f.text).join("\n");
+  assert.match(said, /2 form fields with no name/);
+  assert.match(said, /1 button with no name/);
+  assert.match(said, /1 link whose text says nothing/);
+  // The page row carries the same counts, so the table can show them.
+  const page = insights.pages[0]!;
+  assert.deepEqual(page.unnamed, [{ role: "textbox", count: 2 }, { role: "button", count: 1 }]);
+  assert.deepEqual(page.vagueLinks, ["Click here"]);
+});
+
+test("the notes read as a note someone can paste into a ticket", () => {  const { facts, events } = walk([{ path: "/pricing", title: "Pricing", status: 200, controls: [], loadMs: 1200, links: 2 }]);
   const insights = analyzeRecording(facts, events);
   const md = summaryMarkdown(facts, insights);
   assert.match(md, /# Walkthrough — shop\.example/);

@@ -117,6 +117,7 @@ export function Insights({ recording, others }: { recording: RecordingSummary; o
                           {p.controls}
                           {p.errors > 0 && <span className="ml-1 text-fail">{p.errors} err</span>}
                           {p.failures > 0 && <span className="ml-1 text-fail">{p.failures} failed</span>}
+                          {p.unnamed.length > 0 && <span className="ml-1 text-warn">{p.unnamed.reduce((n, u) => n + u.count, 0)} unnamed</span>}
                         </td>
                         <td className="py-1.5 pr-3 font-mono text-[11.5px] text-ink-3">{p.links || "—"}</td>
                         <td className="py-1.5 font-mono text-[11.5px] text-ink-3">{p.requests || "—"}</td>
