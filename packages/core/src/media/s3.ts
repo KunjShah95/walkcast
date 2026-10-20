@@ -14,6 +14,8 @@ export interface S3Config {
   sessionToken?: string;
   /** Custom endpoint (Supabase, MinIO). Absent = AWS S3 virtual-hosted URLs. */
   endpoint?: string;
+  /** The AWS service the signature is scoped to. Absent = "s3"; Polly narration signs as "polly". */
+  service?: string;
 }
 
 const enc = (s: string) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -29,7 +31,7 @@ function objectUrl(cfg: S3Config, key: string): URL {
 }
 
 function signingKey(cfg: S3Config, date: string): Buffer {
-  return hmac(hmac(hmac(hmac(`AWS4${cfg.secretAccessKey}`, date), cfg.region), "s3"), "aws4_request");
+  return hmac(hmac(hmac(hmac(`AWS4${cfg.secretAccessKey}`, date), cfg.region), cfg.service ?? "s3"), "aws4_request");
 }
 
 function canonicalQuery(params: URLSearchParams): string {
@@ -68,7 +70,7 @@ export function presignGet(cfg: S3Config, key: string, expiresIn: number, now = 
 /** Header-signed request. Returns the headers to send (everything signed except `host`). */
 export function signHeaders(cfg: S3Config, method: string, url: URL, payloadHash: string, extra: Record<string, string> = {}, now = new Date()): Record<string, string> {
   const { stamp, date } = amzDate(now);
-  const scope = `${date}/${cfg.region}/s3/aws4_request`;
+  const scope = `${date}/${cfg.region}/${cfg.service ?? "s3"}/aws4_request`;
   const headers: Record<string, string> = {
     ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k.toLowerCase(), v])),
     host: url.host,

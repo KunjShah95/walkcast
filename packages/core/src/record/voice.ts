@@ -8,9 +8,11 @@
  * + captions (the existing `buildMedia` catch keeps what we have). Keys never leave the server.
  */
 import { execFile, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { signHeaders } from "../media/s3.ts";
 import { resolveLanguage, resolveVoice } from "./voices.ts";
 
 const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
@@ -271,31 +273,59 @@ export function azureTtsEngine(cloudVoice?: string, cloudLanguage?: string): Voi
   };
 }
 
-/** AWS Polly (Indian English + Hindi). Uses env credentials; signs with SigV4 is overkill, so this
- *  uses the simpler presigned Polly endpoint via the AWS SDK-less REST with basic auth-less flow.
- *  For production, set AWS credentials and use the AWS CLI/SDK; here we hit Polly's synthesize
- *  endpoint with the standard AWS4 signing via fetch is not trivial, so this engine is a thin
- *  wrapper that shells out to the AWS CLI when available. */
+/** AWS Polly, called directly with a SigV4-signed request: no AWS CLI or SDK on the machine. Needs
+ *  AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (plus AWS_SESSION_TOKEN for temporary keys). */
 export function awsPollyEngine(cloudVoice?: string, cloudLanguage?: string): VoiceEngine | null {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!accessKeyId || !secretAccessKey) return null;
+  const sessionToken = process.env.AWS_SESSION_TOKEN?.trim() || undefined;
   const voice = resolveVoice("awspolly", cloudVoice) || "Aditi";
   const region = process.env.AWS_REGION?.trim() || "ap-south-1";
   // Polly ids carry no locale, so the catalog maps each voice to the language it may be used with.
-  const lang = resolveLanguage("awspolly", cloudLanguage, voice);
+  // Only the bilingual voices take a LanguageCode; any other voice rejects one it wasn't built for.
+  const lang = POLLY_BILINGUAL.has(voice) ? resolveLanguage("awspolly", cloudLanguage, voice) : undefined;
+  const say = async (text: string, engine: "neural" | "standard") => {
+    const url = new URL(`https://polly.${region}.amazonaws.com/v1/speech`);
+    const body = JSON.stringify({ Engine: engine, OutputFormat: "mp3", Text: text, VoiceId: voice, ...(lang ? { LanguageCode: lang } : {}) });
+    const headers = signHeaders({ bucket: "", region, accessKeyId, secretAccessKey, sessionToken, service: "polly" }, "POST", url, createHash("sha256").update(body).digest("hex"), { "content-type": "application/json" });
+    return fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(60_000) });
+  };
   return {
     id: `awspolly:${voice}`,
     kind: "cloud",
-    available: (): boolean => Boolean(process.env.AWS_ACCESS_KEY_ID || process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI),
+    available: (): boolean => true,
     async speak(text, outFile) {
-      const { execFile } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const run = promisify(execFile);
+      const first = POLLY_STANDARD_ONLY.has(voice) ? "standard" : "neural";
+      let res = await say(text, first);
+      // A voice that exists on only one engine answers 400 on the other: try that one once.
+      if (res.status === 400) {
+        const why = await res.text();
+        if (!/engine/i.test(why)) throw new Error(`awspolly TTS failed (400): ${pollyMessage(why)}`);
+        res = await say(text, first === "neural" ? "standard" : "neural");
+      }
+      if (!res.ok) throw new Error(`awspolly TTS failed (${res.status}): ${pollyMessage(await res.text())}`);
       const tmp = outFile + ".mp3";
-      await run("aws", ["polly", "synthesize-speech", "--region", region, "--output-format", "mp3", "--voice-id", voice, "--language-code", lang, "--text", text, tmp]);
-      await run(process.env.LAB_FFMPEG ?? "ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
+      await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
       const { rmSync } = await import("node:fs");
       rmSync(tmp, { force: true });
     },
   };
+}
+
+const POLLY_BILINGUAL = new Set(["Aditi", "Kajal"]);
+const POLLY_STANDARD_ONLY = new Set(["Aditi"]);
+
+/** Polly's error body is JSON with a `message` (or `Message`); show that, not the raw payload. */
+function pollyMessage(body: string): string {
+  try {
+    const j = JSON.parse(body) as { message?: string; Message?: string };
+    return (j.message ?? j.Message ?? body).slice(0, 300);
+  } catch {
+    return body.slice(0, 300);
+  }
 }
 
 /** OpenAI TTS (gpt-4o-mini-tts / tts-1). */

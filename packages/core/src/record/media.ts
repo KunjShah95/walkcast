@@ -228,6 +228,10 @@ export async function voicePreview(voice: Voice): Promise<Buffer> {
 }
 
 const cloudPreviews = new Map<string, Buffer>();
+/** Forget cached samples: after a key changes, a sample must come from the new key, not the old one. */
+export function clearVoicePreviews(): void {
+  cloudPreviews.clear();
+}
 /**
  * A short sample synthesized through a cloud TTS provider, for choosing one before recording.
  * `voice` is that provider's own voice id (see `voices.ts`); for the local provider it is a flite

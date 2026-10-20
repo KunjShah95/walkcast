@@ -10,6 +10,8 @@ import { useI18n, LANGS } from "../lib/i18n.tsx";
 /** Account, recording defaults, connected providers, and what the day allows. */
 export function Settings({ me }: { me: Me | null }) {
   const [caps, setCaps] = useState<Capabilities | null>(null);
+  // Bumped when a key is saved, so the voice picker and the provider list re-read what's configured.
+  const [keysVersion, setKeysVersion] = useState(0);
   const [prefs, setPrefs] = usePrefs();
   const { t, lang, setLang } = useI18n();
   useEffect(() => {
@@ -65,6 +67,7 @@ export function Settings({ me }: { me: Me | null }) {
             <p className="text-[12.5px] text-ink-3">Used for every new walkthrough. You can change it per recording afterwards.</p>
             <div className="mt-1 grid max-w-md gap-3">
               <TtsPicker
+                key={keysVersion}
                 provider={prefs.ttsProvider}
                 voice={prefs.ttsVoices[prefs.ttsProvider] ?? ""}
                 language={prefs.ttsLanguages[prefs.ttsProvider] ?? ""}
@@ -102,7 +105,14 @@ export function Settings({ me }: { me: Me | null }) {
       </Panel>
 
       {!isSnapshot && <CustomVoices />}
-      {!isSnapshot && <Credentials />}
+      {!isSnapshot && (
+        <Credentials
+          onChange={() => {
+            setKeysVersion((v) => v + 1);
+            void loadCapabilities().then(setCaps);
+          }}
+        />
+      )}
       {caps && <Providers caps={caps} />}
       {caps && <Usage caps={caps} />}
     </div>
@@ -217,12 +227,17 @@ function Providers({ caps }: { caps: Capabilities }) {
 
 interface CredKey { env: string; label: string; set: boolean }
 
-function Credentials() {
+interface CredTest { ok: boolean; message: string }
+
+function Credentials({ onChange }: { onChange: () => void }) {
   const [keys, setKeys] = useState<CredKey[]>([]);
   const [editable, setEditable] = useState(true);
   const [values, setValues] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  // What the provider said about each key: saved is not the same as accepted.
+  const [tests, setTests] = useState<Record<string, CredTest>>({});
 
   async function load() {
     try {
@@ -235,7 +250,22 @@ function Credentials() {
   }
   useEffect(() => { void load(); }, []);
 
+  async function test(env: string) {
+    setTesting(env);
+    try {
+      const res = await fetch("/api/credentials/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ env }) });
+      const body = (await res.json().catch(() => ({}))) as Partial<CredTest> & { error?: string };
+      setTests((t) => ({ ...t, [env]: res.ok ? { ok: Boolean(body.ok), message: body.message ?? "" } : { ok: false, message: body.error ?? `Test failed (${res.status})` } }));
+    } catch (e) {
+      setTests((t) => ({ ...t, [env]: { ok: false, message: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      setTesting(null);
+    }
+  }
+
   async function save(env: string) {
+    // A blank box on a saved key means "keep it", as the placeholder says, not "delete it".
+    if (!(values[env] ?? "").trim() && keys.find((k) => k.env === env)?.set) return setStatus(`${env}: unchanged. Use Remove to delete it.`);
     setSaving(env);
     setStatus(null);
     try {
@@ -244,7 +274,34 @@ function Credentials() {
       if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
       setStatus(`${env}: ${body.set ? "saved" : "cleared"}`);
       setValues((v) => ({ ...v, [env]: "" }));
+      setTests((t) => {
+        const { [env]: _gone, ...rest } = t;
+        return rest;
+      });
       await load();
+      onChange();
+      if (body.set) await test(env);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function remove(env: string) {
+    setSaving(env);
+    setStatus(null);
+    try {
+      const res = await fetch(`/api/credentials?env=${encodeURIComponent(env)}`, { method: "DELETE" });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Failed (${res.status})`);
+      setStatus(`${env}: removed`);
+      setTests((t) => {
+        const { [env]: _gone, ...rest } = t;
+        return rest;
+      });
+      await load();
+      onChange();
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {
@@ -268,7 +325,9 @@ function Credentials() {
               <span className="text-[12.5px]">
                 <span className="font-medium">{k.label}</span>
                 <span className="ml-2 font-mono text-[11px] text-ink-3">{k.env}</span>
-                {k.set && <span className="ml-2 text-[11px] text-pass">configured</span>}
+                {k.set && !tests[k.env] && <span className="ml-2 text-[11px] text-pass">saved</span>}
+                {tests[k.env] && <span className={`ml-2 text-[11px] ${tests[k.env]!.ok ? "text-pass" : "text-fail"}`}>{tests[k.env]!.ok ? "works" : "not working"}</span>}
+                {tests[k.env] && <span className={`mt-0.5 block text-[11.5px] ${tests[k.env]!.ok ? "text-ink-3" : "text-fail"}`}>{tests[k.env]!.message}</span>}
               </span>
               <input
                 type="password"
@@ -284,8 +343,28 @@ function Credentials() {
                   onClick={() => void save(k.env)}
                   className="h-9 rounded-lg border border-line-strong px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
                 >
-                  {saving === k.env ? "Saving…" : "Save"}
+                  {saving === k.env ? "Saving…" : testing === k.env ? "Testing…" : "Save"}
                 </button>
+                {k.set && (
+                  <button
+                    type="button"
+                    disabled={testing === k.env || saving === k.env}
+                    onClick={() => void test(k.env)}
+                    className="h-9 rounded-lg border border-line px-3 text-[13px] hover:bg-panel-2 disabled:opacity-50"
+                  >
+                    Test
+                  </button>
+                )}
+                {k.set && editable && (
+                  <button
+                    type="button"
+                    disabled={saving === k.env}
+                    onClick={() => void remove(k.env)}
+                    className="h-9 rounded-lg px-2 text-[13px] text-ink-3 hover:text-fail disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             </li>
           ))}

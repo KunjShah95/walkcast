@@ -10,10 +10,10 @@ import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secre
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
 import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
 import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
-import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
+import { PROVIDERS, apiKey, baseURL, configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
-import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
+import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
 import { configuredCloudProviders, engineFor } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
@@ -133,13 +133,17 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key" },
   { env: "AZURE_TTS_KEY", label: "Azure TTS key" },
   { env: "AZURE_TTS_REGION", label: "Azure TTS region" },
-  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id" },
-  { env: "AWS_REGION", label: "AWS region" },
+  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly)" },
+  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly)" },
+  { env: "AWS_SESSION_TOKEN", label: "AWS session token (temporary keys only)" },
+  { env: "AWS_REGION", label: "AWS region (Polly)" },
   { env: "MURF_API_KEY", label: "Murf API key" },
   { env: "REVERIE_API_KEY", label: "Reverie API key" },
   { env: "REVERIE_APP_ID", label: "Reverie app id" },
   { env: "LAB_TTS_API_KEY", label: "Custom TTS API key" },
   { env: "LAB_TTS_ENDPOINT", label: "Custom TTS endpoint" },
+  { env: "LAB_STT_BASE_URL", label: "Custom speech-to-text base URL" },
+  { env: "LAB_STT_API_KEY", label: "Custom speech-to-text API key" },
   { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key" },
   { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL" },
 ];
@@ -172,6 +176,18 @@ function applyCredentialsFile(root: string): void {
   } catch { /* ignore */ }
 }
 
+/**
+ * A key as people paste it: copied with its quotes from a .env file, with "Bearer " from a curl
+ * example, or with a trailing newline. Providers reject all of those, and the key then looked
+ * saved but never worked.
+ */
+export function cleanCredential(value: string): string {
+  let v = value.trim();
+  const quoted = /^(["'`])([\s\S]*)\1$/.exec(v);
+  if (quoted) v = quoted[2]!.trim();
+  return v.replace(/^Bearer\s+/i, "").trim();
+}
+
 function saveCredential(root: string, env: string, value: string): void {
   const p = credentialsPath(root);
   let data: Record<string, string> = {};
@@ -179,8 +195,54 @@ function saveCredential(root: string, env: string, value: string): void {
   if (value) data[env] = value; else delete data[env];
   writeFileSync(p, JSON.stringify(data, null, 2));
   if (value) process.env[env] = value; else delete process.env[env];
-  // Capabilities depend on which credentials are set; drop cached responses.
+  // Capabilities depend on which credentials are set; drop cached responses, and voice samples
+  // spoken with the old key.
   capabilitiesCache.clear();
+  clearVoicePreviews();
+}
+
+/** The narration provider each voice credential belongs to (OpenAI's key is checked as a model key). */
+const TTS_FOR_KEY: Record<string, string> = {
+  ELEVENLABS_API_KEY: "elevenlabs", GOOGLE_TTS_API_KEY: "google", AZURE_TTS_KEY: "azure", AZURE_TTS_REGION: "azure",
+  AWS_ACCESS_KEY_ID: "awspolly", AWS_SECRET_ACCESS_KEY: "awspolly", AWS_SESSION_TOKEN: "awspolly", AWS_REGION: "awspolly",
+  SARVAM_API_KEY: "sarvam", BHASHINI_API_KEY: "bhashini", BHASHINI_USER_ID: "bhashini", MURF_API_KEY: "murf",
+  REVERIE_API_KEY: "reverie", REVERIE_APP_ID: "reverie", LAB_TTS_API_KEY: "custom", LAB_TTS_ENDPOINT: "custom",
+};
+
+/**
+ * Ask the provider whether a saved key works: list models for a model key (free), speak one short
+ * sample for a voice key. "Saved" only ever meant "present"; a mistyped key used to surface minutes
+ * into a recording or a run.
+ */
+async function testCredential(env: string): Promise<{ ok: boolean; message: string }> {
+  const llm = Object.values(PROVIDERS).find((p) => p.apiKeyEnv.includes(env) || (p.id === "custom" && env === "LAB_CUSTOM_BASE_URL"));
+  if (llm && llm.kind !== "chatgpt-responses") {
+    const key = apiKey(llm);
+    if (!key && !llm.keyOptional) return { ok: false, message: `No ${env} saved.` };
+    const url = llm.kind === "anthropic" ? `${(process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/models` : `${(baseURL(llm) ?? "").replace(/\/$/, "")}/models`;
+    if (!/^https?:\/\//.test(url)) return { ok: false, message: `${llm.label} has no base URL set.` };
+    const headers: Record<string, string> = llm.kind === "anthropic" ? { "x-api-key": key ?? "", "anthropic-version": "2023-06-01" } : key ? { authorization: `Bearer ${key}` } : {};
+    try {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+      if (res.ok) return { ok: true, message: `${llm.label} accepted the key.` };
+      const body = await res.text().catch(() => "");
+      const why = /"message"\s*:\s*"([^"]{1,200})"/.exec(body)?.[1] ?? body.slice(0, 200);
+      return { ok: false, message: `${llm.label} refused the key (${res.status})${why ? `: ${why}` : "."}` };
+    } catch (e) {
+      return { ok: false, message: `Couldn't reach ${llm.label}: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+  const tts = TTS_FOR_KEY[env];
+  if (tts) {
+    if (!configuredCloudProviders().includes(tts)) return { ok: false, message: `${providerLabel(tts)} needs ${credentialFor(tts)}; something is still missing.` };
+    try {
+      await cloudVoicePreview(tts);
+      return { ok: true, message: `${providerLabel(tts)} spoke a test line with this key.` };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return { ok: Boolean(process.env[env]), message: process.env[env] ? "Saved. This one can't be tested from here." : `No ${env} saved.` };
 }
 
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
@@ -609,8 +671,14 @@ export function createApp(o: ServeOptions = {}): App {
       const env = String(b.env ?? "");
       const value = String(b.value ?? "");
       if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
-      saveCredential(root, env, value.trim());
+      saveCredential(root, env, cleanCredential(value));
       return json(200, { ok: true, set: Boolean(process.env[env]) });
+    }
+    if (url.pathname === "/api/credentials/test" && req.method === "POST") {
+      if (requireAuth && !user) return json(401, { error: "Sign in first." });
+      const env = String((await readJson(req)).env ?? "");
+      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
+      return json(200, await testCredential(env));
     }
     if (url.pathname === "/api/credentials" && req.method === "DELETE") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });

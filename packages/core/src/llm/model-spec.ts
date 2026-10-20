@@ -2,7 +2,7 @@ import { ClaudeBackend, DEFAULT_CLAUDE_OPTIONS } from "./claude.ts";
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
 import { OpenAICompatibleBackend } from "./openai-compatible.ts";
 import { ChatGPTResponsesBackend } from "./chatgpt-responses.ts";
-import { provider } from "./providers.ts";
+import { configuredProviders, provider } from "./providers.ts";
 
 /**
  * Model specs:
@@ -20,8 +20,20 @@ export interface ModelSelection {
 }
 
 export function defaultSelection(): ModelSelection {
-  const agent = process.env.LAB_AGENT_MODEL ?? DEFAULT_MODEL_SPEC;
+  const agent = process.env.LAB_AGENT_MODEL ?? keyedDefault();
   return { agent, stagehand: process.env.LAB_STAGEHAND_MODEL ?? agent };
+}
+
+/**
+ * Without LAB_AGENT_MODEL, use the providers someone actually holds a key for: a person who saved
+ * only an OpenRouter key in Settings got every live run refused for want of ANTHROPIC_API_KEY.
+ * Claude stays first when its key is there (and is the answer when no key is, so the error names
+ * it); the rest form a fallback chain on each provider's example model.
+ */
+function keyedDefault(): string {
+  const keyed = configuredProviders().filter((p) => !p.keyOptional && !p.exampleModel.includes("<"));
+  if (keyed.length === 0 || keyed.some((p) => p.id === "anthropic")) return DEFAULT_MODEL_SPEC;
+  return keyed.map((p) => `${p.id}:${p.exampleModel}`).join(",");
 }
 
 export function backendFor(spec: string): ModelBackend {

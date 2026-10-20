@@ -77,15 +77,15 @@ const CATALOG: Record<string, CloudVoice[]> = {
   ],
   awspolly: [
     { id: "Aditi", name: "Aditi", note: "Indian English/Hindi, female", lang: "en-IN" },
-    { id: "Amy", name: "Amy", note: "US English, female", lang: "en-US" },
-    { id: "Brian", name: "Brian", note: "US English, male", lang: "en-US" },
+    { id: "Amy", name: "Amy", note: "UK English, female", lang: "en-GB" },
+    { id: "Brian", name: "Brian", note: "UK English, male", lang: "en-GB" },
     { id: "Emma", name: "Emma", note: "UK English, female", lang: "en-GB" },
     { id: "Joanna", name: "Joanna", note: "US English, female, narration", lang: "en-US" },
     { id: "Kevin", name: "Kevin", note: "US English, male", lang: "en-US" },
     { id: "Salli", name: "Salli", note: "US English, female", lang: "en-US" },
-    { id: "Arthur", name: "Arthur", note: "US English, male", lang: "en-US" },
+    { id: "Arthur", name: "Arthur", note: "UK English, male", lang: "en-GB" },
     { id: "Kajal", name: "Kajal", note: "Indian English/Hindi, female", lang: "en-IN" },
-    { id: "Liam", name: "Liam", note: "Irish English, male", lang: "en-IE" },
+    { id: "Liam", name: "Liam", note: "Canadian French, male", lang: "fr-CA" },
     { id: "Zhiyu", name: "Zhiyu", note: "Mandarin, female", lang: "cmn-CN" },
   ],
 };
@@ -98,16 +98,16 @@ const CREDENTIAL: Record<string, string> = {
   elevenlabs: "ELEVENLABS_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GOOGLE_TTS_API_KEY",
-  azure: "AZURE_TTS_KEY",
-  awspolly: "AWS_ACCESS_KEY_ID",
+  azure: "AZURE_TTS_KEY and AZURE_TTS_REGION",
+  awspolly: "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY",
   sarvam: "SARVAM_API_KEY",
-  bhashini: "BHASHINI_API_KEY",
+  bhashini: "BHASHINI_API_KEY and BHASHINI_USER_ID",
   murf: "MURF_API_KEY",
-  reverie: "REVERIE_API_KEY",
+  reverie: "REVERIE_API_KEY and REVERIE_APP_ID",
   custom: "LAB_TTS_ENDPOINT",
 };
 
-/** The env var a provider is configured with, or "" when it needs none. */
+/** The env var(s) a provider is configured with, or "" when it needs none. */
 export function credentialFor(provider: string): string {
   return CREDENTIAL[normalizeProvider(provider)] ?? "";
 }

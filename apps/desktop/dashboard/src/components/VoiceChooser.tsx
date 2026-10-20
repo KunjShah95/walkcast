@@ -75,6 +75,8 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
       const check = await fetch(cloudVoicePreviewUrl(natural, ""));
       if (!check.ok) {
         const why = ((await check.json().catch(() => ({}))) as { error?: string }).error;
+        // Don't leave a key the provider refused behind: it would read as "key saved" from now on.
+        await fetch(`/api/credentials?env=${KEY_ENV[natural]}`, { method: "DELETE" }).catch(() => undefined);
         throw new Error(`${NATURAL_LABEL[natural]} didn't accept that key${why ? `: ${why}` : "."} Check the key, or pick another option.`);
       }
       onChoose(natural);

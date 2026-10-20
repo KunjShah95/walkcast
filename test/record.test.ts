@@ -181,7 +181,7 @@ test("a voice name and its credential travel with the provider", async () => {
   const { credentialFor, providerLabel, defaultVoiceFor } = await import("../packages/core/src/record/voices.ts");
   // Used in the refusal message when a chosen provider can't be reached: "no ELEVENLABS_API_KEY".
   assert.equal(credentialFor("elevenlabs"), "ELEVENLABS_API_KEY");
-  assert.equal(credentialFor("polly"), "AWS_ACCESS_KEY_ID");
+  assert.equal(credentialFor("polly"), "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
   assert.equal(providerLabel("openai"), "OpenAI");
   assert.equal(providerLabel("nonsense"), "nonsense");
   assert.equal(defaultVoiceFor("openai", {} as NodeJS.ProcessEnv), "alloy");
