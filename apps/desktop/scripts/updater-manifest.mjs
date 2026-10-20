@@ -56,7 +56,9 @@ if (process.argv[1] && basename(process.argv[1]) === "updater-manifest.mjs") {
     console.error("usage: updater-manifest.mjs <artifactsDir> <tag> [--repo owner/name]");
     process.exit(2);
   }
-  const manifest = buildManifest(dir, tag, repo, `Walkcast ${tag}. Full notes: https://github.com/${repo}/releases/tag/${tag}`);
+  const manifest = buildManifest(dir, tag, repo, `Walkcast ${tag}. Full notes: https://github.com/${repo}/releases/tag/${tag}
+
+If it doesn't install by itself when Walkcast starts (versions up to 0.4.1 give the download only 10 seconds), press Install here.`);
   writeFileSync(join(dir, "latest.json"), JSON.stringify(manifest, null, 2) + "\n");
   console.log(`latest.json: ${Object.keys(manifest.platforms).join(", ")} → ${manifest.version}`);
 }
