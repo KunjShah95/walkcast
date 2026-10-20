@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import type { TraceEvent } from "./capture/recorder.ts";
+import type { RecordingInsights } from "./record/insights.ts";
 import type { FixtureManifest } from "./lab/fixture.ts";
 import type { RunResult } from "./lab/runner.ts";
 import type { ExperimentSummary as ExperimentSummaryData } from "./lab/summary.ts";
@@ -119,6 +120,8 @@ export interface RecordingSummary {
   media: { video: string | null; mp4: string | null; webm?: string | null; audio: string | null; captions: string; voice: string; note: string };
   /** Why the walk ended, when a length cap was set. */
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
+  /** What the recorder found on the site: console errors, failed requests, page timings. */
+  insights?: RecordingInsights;
   /** What the person asked the narration to be, and what spoke instead. */
   narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
 }

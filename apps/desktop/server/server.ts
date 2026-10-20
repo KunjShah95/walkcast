@@ -26,6 +26,8 @@ import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
 import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from "../../../packages/core/src/webhooks.ts";
 import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
+import { analyzeRecording } from "../../../packages/core/src/record/insights.ts";
+import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
 import { checkForUpdate } from "../../../packages/core/src/ops/updates.ts";
@@ -905,6 +907,43 @@ try {
         await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
       }
       return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
+    }
+    // What the recorder found on the site while it walked it.
+    //
+    // A walkthrough made now carries its insights in its summary. One made before this existed
+    // still has its trace on disk, and the trace is where the truth is: the same analysis runs
+    // over it here, so an old walkthrough is not a blank page.
+    const insightsMatch = /^\/api\/recordings\/([\w.-]+)\/insights$/.exec(url.pathname);
+    if (insightsMatch && req.method === "GET") {
+      const id = insightsMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      const summary = (await listRecordings(user)).find((r) => r.id === id);
+      if (summary?.insights) return json(200, { insights: summary.insights });
+      if (media.kind !== "local") return json(501, { error: "This walkthrough's trace is not on this server, so it cannot be read here." });
+      const trace = join(root, "recordings", id, "trace.jsonl");
+      if (!existsSync(trace)) return json(404, { error: "This walkthrough has no trace to read." });
+      const facts = {
+        id,
+        url: summary?.url ?? "",
+        createdAt: summary?.createdAt,
+        durationMs: summary?.durationMs ?? 0,
+        pages: summary?.pages ?? [],
+        skipped: summary?.skipped ?? [],
+        stopped: summary?.stopped,
+      };
+      const events = readFileSync(trace, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          try {
+            return JSON.parse(line) as TraceEvent;
+          } catch {
+            return null; // a half-written line is not a reason to fail the whole read
+          }
+        })
+        .filter((e): e is TraceEvent => e !== null);
+      return json(200, { insights: analyzeRecording(facts, events) });
     }
     // Delete a recording: its files (local folder, or its objects in the bucket) and its index row.
     const deleteMatch = /^\/api\/recordings\/([\w.-]+)$/.exec(url.pathname);

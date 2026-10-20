@@ -1,4 +1,5 @@
 import type { LabIndex, RecordingSummary, RunDetail } from "./types.ts";
+import type { RecordingInsights } from "../../../../../packages/core/src/record/insights.ts";
 
 /** Data source: baked into an exported file, or fetched from `lab ui`. */
 interface Baked {
@@ -334,6 +335,25 @@ export async function deleteRecording(id: string): Promise<void> {
 /** URL for a recording's transcript export in the requested format. */
 export function transcriptUrl(id: string, format: "srt" | "vtt" | "json"): string {
   return `/api/recordings/${encodeURIComponent(id)}/transcript?format=${format}`;
+}
+
+/**
+ * What the recorder found on the site while it walked it.
+ *
+ * A walkthrough made now carries its insights in its summary; an older one is read from its
+ * trace by the server, which runs the same analysis. `null` means the walkthrough has no
+ * trace to read (a recording kept in object storage, or a snapshot with no server behind it).
+ */
+export async function loadInsights(id: string): Promise<RecordingInsights | null> {
+  if (isSnapshot) return null;
+  try {
+    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/insights`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { insights?: RecordingInsights };
+    return body.insights ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Generate captions from the recording's audio via STT. */

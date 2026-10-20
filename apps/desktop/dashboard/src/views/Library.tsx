@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
+import { Insights } from "../components/Insights.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
 import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, deleteRecording, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
@@ -152,6 +153,7 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
               }}
             />
             <Pages recording={current} />
+            <Insights recording={current} others={recordings} />
           </div>
         )}
       </div>

@@ -12,6 +12,7 @@ import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";
 import { attachEvidence } from "./failure.ts";
+import { analyzeRecording, type RecordingInsights } from "./insights.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -81,6 +82,8 @@ export interface RecordingResult {
   narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
   /** Why the walk ended, and how far it got. */
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
+  /** What the recorder found on the site while it walked it. */
+  insights?: RecordingInsights;
   /** Requests the SSRF guard refused. */
   blockedRequests?: string[];
 }
@@ -195,6 +198,11 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
 
     recorder.flush();
     const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
+    // What the recorder saw on the site, measured while it was there: the console errors, the
+    // requests that failed, how long each page took to load, the links each page offered and
+    // the controls it saw. The trace holds all of it; without this step the dashboard threw
+    // it away and a walkthrough could only be watched, never read.
+    const insights = analyzeRecording({ id, url: start.toString(), createdAt: new Date().toISOString(), durationMs: Date.now() - started, pages, skipped, stopped: { reason: stopReason, pages: pages.length, seconds: Math.round((Date.now() - started) / 1000), ...(maxSeconds ? { limitSeconds: maxSeconds } : {}) } }, recorder.events);
     options.onProgress?.("Adding narration and encoding the video");
     // The narration loop and the encode below are the longest stretch of a recording that has
     // nothing to report, so they forward their own beats to the worker's stall guard.
@@ -234,6 +242,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       captions,
       media,
       dir,
+      insights,
       ...(options.ttsProvider
         ? {
             narration: {
