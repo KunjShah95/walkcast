@@ -14,6 +14,7 @@ import { causes, symptoms } from "../../packages/core/src/lab/classifier.ts";
 import { runExperiment } from "../../packages/core/src/lab/experiment.ts";
 import { loadPlugins } from "../../packages/core/src/plugins.ts";
 import { loadFixture, replayFixture, writeFixture } from "../../packages/core/src/lab/fixture.ts";
+import { baselineFrom, gate, summariseGate, type GateBaseline } from "../../packages/core/src/lab/gate.ts";
 import { closeBrowser, runOnce } from "../../packages/core/src/lab/runner.ts";
 import { findChrome } from "../../packages/core/src/lab/chrome.ts";
 import { applyCredentialsFile, exportDashboard, serveDashboard } from "./server/server.ts";
@@ -52,6 +53,10 @@ Commands:
   compare <fixturesDir> --agents v0,v1,v2 [--trials k]
                                         pass^k table for every fixture × agent; exits 1 on any failure
                                         of the last agent listed
+  ci <fixturesDir> [--agents v0,v1] [--trials k] [--baseline-file f] [--update] [--json]
+                                        The regression gate: replay every fixture and fail when one that
+                                        used to pass stops passing. The baseline file remembers what each
+                                        fixture did last time (--update writes it).
   experiment [--task t] [--scenarios singles|pairs] [--baseline id] [--candidates a,b] [--seeds n]
       [--trials k] [--concurrency c] [--model-mode m] [--agent-model spec] [--stagehand-model spec] [--out dir] [--live]
                                         Full validation experiment (docs/ASSESSMENT.md §7). Writes
@@ -127,6 +132,9 @@ const { positionals, values } = parseArgs({
     "against": { type: "string" },
     // New failures go to runs/_fixtures; pass --fixtures fixtures to add one to the committed CI gate.
     fixtures: { type: "string", default: join("runs", "_fixtures") },
+    "baseline-file": { type: "string" },
+    update: { type: "boolean", default: false },
+    json: { type: "boolean", default: false },
     out: { type: "string" },
     live: { type: "boolean", default: false },
     screenshots: { type: "boolean", default: false },
@@ -433,6 +441,43 @@ async function main(): Promise<number> {
       }
       return gateFailed ? 1 : 0;
     }
+    case "ci": {
+      if (!target) throw new Error("ci needs a fixtures directory");
+      const dirs = readdirSync(target).map((d) => join(target, d)).filter((d) => existsSync(join(d, "manifest.json")));
+      if (dirs.length === 0) throw new Error(`No fixtures in ${target}.`);
+      const agents = values.agents!.split(",").map((a) => a.trim()).filter(Boolean);
+      const trials = Number(values.trials);
+      const baselinePath = values["baseline-file"] ?? join(target, "baseline.json");
+      const baseline = readBaseline(baselinePath);
+      const replays: Awaited<ReturnType<typeof replayFixture>>[] = [];
+      for (const dir of dirs) {
+        for (const agent of agents) {
+          replays.push(await replayFixture(loadFixture(dir), agent, trials, runsDir, replayOptions()));
+        }
+      }
+      const results = agents.map((agent) => gate(replays.filter((r) => r.agent === agent), baseline, agent, trials));
+      const failed = results.some((r) => r.failed);
+      const json = JSON.stringify({ failed, results }, null, 2);
+      if (values.out) {
+        // The file is the machine-readable answer. The log lines the run printed share the
+        // terminal with it, so they do not go into the file.
+        writeFileSync(values.out, `${json}\n`);
+        console.log(`gate result written: ${values.out}`);
+      } else if (values.json) {
+        console.log(json);
+      } else {
+        for (const result of results) {
+          console.log(`\n${result.agent} — ${result.rows.length} fixtures, ${result.trials} trials each`);
+          for (const line of summariseGate(result)) console.log(`  ${line}`);
+        }
+        console.log(failed ? "\nThe gate failed." : "\nThe gate passed.");
+      }
+      if (values.update) {
+        writeFileSync(baselinePath, `${JSON.stringify({ ...baseline, ...baselineFrom(replays) }, null, 2)}\n`);
+        console.log(`baseline written: ${baselinePath}`);
+      }
+      return failed ? 1 : 0;
+    }
     case "experiment": {
       const out = resolve(values.out ?? join("results", new Date().toISOString().replace(/[:.]/g, "-")));
       await runExperiment({
@@ -456,8 +501,23 @@ async function main(): Promise<number> {
   }
 }
 
-function modelMode(): GatewayMode | undefined {
-  const mode = values["model-mode"];
+/**
+ * The gate's memory of what each fixture did last time.
+ *
+ * A missing file is not an error: it is a gate with nothing to compare against, so every
+ * fixture is new and the first run is the one that writes the baseline.
+ */
+function readBaseline(path: string): GateBaseline {
+  if (!existsSync(path)) return {};
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as GateBaseline;
+  } catch {
+    console.error(`The baseline at ${path} could not be read; treating every fixture as new.`);
+    return {};
+  }
+}
+
+function modelMode(): GatewayMode | undefined {  const mode = values["model-mode"];
   if (mode === undefined) return undefined;
   if (mode !== "live" && mode !== "replay" && mode !== "scripted") throw new Error("--model-mode must be live, replay or scripted");
   return mode;

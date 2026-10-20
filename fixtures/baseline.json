@@ -1,0 +1,62 @@
+{
+  "gateway-timeout-s1-unsafe-retry@v0": {
+    "agent": "v0",
+    "verdict": "fail",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "gateway-timeout-s1-unsafe-retry@v1": {
+    "agent": "v1",
+    "verdict": "pass",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "session-expiry-s1-auth-lost@v0": {
+    "agent": "v0",
+    "verdict": "fail",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "session-expiry-s1-auth-lost@v1": {
+    "agent": "v1",
+    "verdict": "pass",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "silent-owner-drop-s1-app-dropped-field@v0": {
+    "agent": "v0",
+    "verdict": "fail",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "silent-owner-drop-s1-app-dropped-field@v1": {
+    "agent": "v1",
+    "verdict": "pass",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "stale-owners-s1-stale-observation@v0": {
+    "agent": "v0",
+    "verdict": "fail",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "stale-owners-s1-stale-observation@v1": {
+    "agent": "v1",
+    "verdict": "pass",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "ui-drift-s1-locator-not-found@v0": {
+    "agent": "v0",
+    "verdict": "fail",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  },
+  "ui-drift-s1-locator-not-found@v1": {
+    "agent": "v1",
+    "verdict": "pass",
+    "trials": 1,
+    "updatedAt": "2026-10-20T16:26:11.587Z"
+  }
+}

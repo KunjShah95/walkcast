@@ -1,0 +1,63 @@
+name: regression gate
+
+# The gate replays every fixture and fails when one that used to pass stops passing.
+# It is the promise of the lab, kept honestly: a failure is a failure, a known failure is
+# not a surprise, and the baseline file is what remembers the difference.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      LAB_LOG: "off"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The scripted agents need no browser and no model key. A stagehand agent (sh-p0, sh-p1)
+      # does: uncomment the next line when the gate runs one.
+      # - run: npx playwright install --with-deps chromium
+      - name: Replay every fixture
+        id: gate
+        continue-on-error: true
+        run: |
+          npm run lab -- ci fixtures --agents v1 --trials 3 --out gate.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Write the summary
+        if: always() && hashFiles('gate.json') != ''
+        run: node .github/scripts/gate-summary.mjs
+      - name: Comment on the pull request
+        if: always() && hashFiles('gate.json') != '' && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('gate-summary.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- walkcast-gate -->';
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const previous = comments.data.find((c) => c.body.includes(marker));
+            const text = `${marker}\n${body}`;
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body: text });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: text });
+            }
+      - name: The gate failed
+        if: steps.gate.outputs.exit_code != '0'
+        run: |
+          echo "A fixture that used to pass stopped passing. The summary above says which."
+          exit 1
