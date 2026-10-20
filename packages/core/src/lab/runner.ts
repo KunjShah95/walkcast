@@ -94,7 +94,7 @@ export async function closeBrowser(): Promise<void> {
 function chromePath(): string {
   const path = findChrome();
   if (!path) {
-    throw new Error("Stagehand agents need Google Chrome or Microsoft Edge installed, or LAB_CHROME_PATH set to a Chrome binary. See README.");
+    throw new Error("This AI agent needs Google Chrome or Microsoft Edge installed (or LAB_CHROME_PATH pointing at a Chrome binary). Install one and try again, or pick a scripted agent (v0, v1, v2).");
   }
   return path;
 }

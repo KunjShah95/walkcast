@@ -11,6 +11,8 @@ import { FFMPEG_TIMEOUT_MS } from "../record/media.ts";
 import { RecordError, recordSite } from "../record/site.ts";
 import { type FailureEvidence, type FailureReport, evidenceOf, explainFailure } from "../record/failure.ts";
 import { closeWarmBrowser } from "../record/browser.ts";
+import { loadFixture, replayFixture, writeFixture } from "../lab/fixture.ts";
+import { runExperiment } from "../lab/experiment.ts";
 import { runOnce } from "../lab/runner.ts";
 import { CREDENTIALS, startApp } from "../app/server.ts";
 import { SEED_LEADS } from "../lab/task.ts";
@@ -37,6 +39,8 @@ import { open } from "./secret-box.ts";
  */
 /** Flat ceiling for a lab run, which has no page dimension (and the pre-existing default cap). */
 const LAB_CEILING_MS = 6 * 60_000;
+/** An experiment started from the app runs every fault, then replays each failure per candidate. */
+const EXPERIMENT_CEILING_MS = 20 * 60_000;
 /** Fixed part of a record job's ceiling: launch, sign-in, narration, encode, upload. */
 const RECORD_BASE_MS = 5 * 60_000;
 /** Per-page allowance: ~3.6x the 12.45 s/page measured on a real 30-page site. */
@@ -59,9 +63,9 @@ export function pagesAsked(maxPages: unknown): number {
  * The wall-clock ceiling for one job. An explicit cap — the `deadlineMs` option or
  * `LAB_JOB_DEADLINE_MS` — wins outright, so a fleet can still impose its own hard limit.
  */
-export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null): number {
+export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null, op: unknown = null): number {
   if (explicit !== null) return explicit;
-  if (kind !== "record") return LAB_CEILING_MS;
+  if (kind !== "record") return op === "experiment" ? EXPERIMENT_CEILING_MS : LAB_CEILING_MS;
   const pageBased = RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
   // A requested recording length is itself a budget (the walk runs that long, then narration and
   // the libx264 encode run on top), so the job ceiling must not be shorter than it — otherwise a
@@ -252,7 +256,7 @@ export class Worker {
         abort.abort(new Error("lease unconfirmed: no heartbeat acknowledgement within the lease margin"));
       }
     }, 2000);
-    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds);
+    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds, job.input.op);
     const deadline = setTimeout(() => abort.abort(new Error(`took longer than ${Math.round(ceilingMs / 1000)} s`)), ceilingMs);
     // Stall guard: only a record job reports progress, so only a record job has a liveness signal to
     // measure. A lab run keeps its flat ceiling and gets no stall check, exactly as before.
@@ -275,7 +279,7 @@ export class Worker {
       await this.o.store.flush().catch((e) => log.warn("job.store_flush_failed", { job: job.id, error: String(e) }));
     };
     try {
-      const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await this.labRun(job);
+      const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await this.labRun(job, onProgress);
       await finish({ status: "succeeded", result });
       // An earlier attempt's evidence is moot once a retry made the recording.
       if (job.kind === "record") rmSync(failureDir(this.o.root, job.id), { recursive: true, force: true });
@@ -366,8 +370,19 @@ export class Worker {
     }
   }
 
-  private async labRun(job: Job): Promise<Record<string, unknown>> {
-    const input = job.input as { agent: string; fault: string; seed: number; task: string; modelMode?: "live" | "replay" | "scripted" };
+  private async labRun(job: Job, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
+    const input = job.input as {
+      op?: "run" | "replay" | "experiment";
+      agent: string;
+      fault: string;
+      seed: number;
+      task: string;
+      modelMode?: "live" | "replay" | "scripted";
+      fixture?: string;
+      trials?: number;
+      baseline?: string;
+      candidates?: string[];
+    };
     // Per-job credential scope: the owner's connected keys answer the model providers' lookups
     // for this run only, so a key never leaks into other code paths of this process.
     const credentials: Parameters<typeof withCredentials>[0] = {};
@@ -382,16 +397,54 @@ export class Worker {
       } catch { /* best effort */ }
     }
     return withCredentials(credentials, async () => {
+      // Replay a fixture k times with one agent: the pass^k check `lab replay` runs, from the app.
+      if (input.op === "replay" && input.fixture) {
+        const trials = input.trials ?? 3;
+        onProgress(`Replaying ${trials} time${trials === 1 ? "" : "s"}`);
+        const summary = await replayFixture(loadFixture(join(this.o.root, input.fixture)), input.agent, trials, join(this.o.root, "runs"), input.modelMode ? { modelMode: input.modelMode } : {});
+        const rel = (d: string) => `runs/${d.split(/[\\/]/).pop()}`;
+        return { replay: { ...summary, fixture: input.fixture, trials: summary.trials.map((t) => ({ ...t, runDir: rel(t.runDir) })) } };
+      }
+      // Baseline against candidates on every fault, as `lab experiment` does; the Experiments page
+      // reads it from results/.
+      if (input.op === "experiment") {
+        const id = `app-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+        onProgress("Running every fault with the baseline, then replaying each failure with the candidates");
+        await runExperiment({
+          seeds: input.seed,
+          trials: input.trials ?? 1,
+          concurrency: 1,
+          baseline: input.baseline ?? "v0",
+          candidates: input.candidates ?? ["v1", "v2"],
+          task: isTaskId(input.task) ? (input.task as TaskId) : "create-lead",
+          outDir: join(this.o.root, "results", id),
+        });
+        return { experiment: id };
+      }
+      const task = taskById(isTaskId(input.task) ? (input.task as TaskId) : "create-lead");
       const r = await runOnce({
         fault: normalizeScenario(input.fault),
         seed: input.seed,
         agent: input.agent,
-        task: taskById(isTaskId(input.task) ? (input.task as TaskId) : "create-lead"),
+        task,
         outDir: join(this.o.root, "runs"),
         screenshots: true,
         ...(input.modelMode ? { modelMode: input.modelMode } : {}),
       });
-      return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}` };
+      // A failure the agent caused becomes a regression fixture, as `lab run` does. Runs started
+      // from the app never saved one, so the Fixtures page stayed empty in the desktop app. A
+      // harness error is not agent behaviour; the same fault, seed and cause is already captured.
+      let fixture: string | undefined;
+      if (r.diagnosis.verdict === "fail" && !r.agentError) {
+        const fixturesDir = join(this.o.root, "runs", "_fixtures");
+        try {
+          mkdirSync(fixturesDir, { recursive: true });
+          fixture = `runs/_fixtures/${(await writeFixture(r, task, fixturesDir)).dir.split(/[\\/]/).pop()}`;
+        } catch (e) {
+          if (!/already exists/.test(String(e))) log.warn("fixture.save_failed", { job: job.id, error: String(e) });
+        }
+      }
+      return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}`, ...(fixture ? { fixture } : {}) };
     });
   }
 }

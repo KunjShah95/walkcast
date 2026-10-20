@@ -2,7 +2,8 @@ import { motion, useScroll, useSpring } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/FlightStrip.tsx";
-import { CopyButton, FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
+import { ReplayFixture } from "../components/ReplayFixture.tsx";
+import { FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { fileUrl, loadRun } from "../lib/api.ts";
 import { faultLabel, cn, ms, pathOf } from "../lib/format.ts";
 import type { ClaimEvent, ConsoleEvent, Finding, LabIndex, ModelCallEvent, NetworkEvent, RunDetail, StepEvent } from "../lib/types.ts";
@@ -12,7 +13,7 @@ type Node =
   | { kind: "model"; at: number; call: ModelCallEvent }
   | { kind: "claim"; at: number; claim: ClaimEvent };
 
-export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: (r: Route) => void }) {
+export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
@@ -30,6 +31,13 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
     };
   }, [dir]);
 
+  // A run that finished after the index was loaded (a replay, a Fault replay run): reload it once,
+  // so Older/Newer and the run's new fixture are right.
+  const known = index.runs.some((r) => r.dir === dir);
+  useEffect(() => {
+    if (!known) void refresh?.();
+  }, [dir, known]);
+
   const jump = (stepId: number) => {
     document.getElementById(`step-${stepId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     setFlash(stepId);
@@ -45,8 +53,9 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
   for (const f of findings) for (const s of f.evidenceSteps) evidence.set(s, [...(evidence.get(s) ?? []), f]);
   const fixture = index.fixtures.find((f) => f.manifest.original.runId === run.id);
   const position = index.runs.findIndex((r) => r.dir === dir);
-  const prev = index.runs[position + 1];
-  const next = index.runs[position - 1];
+  // Not in the index yet: no neighbours (runs[0] used to show up as "Older").
+  const prev = position < 0 ? undefined : index.runs[position + 1];
+  const next = position < 0 ? undefined : index.runs[position - 1];
 
   return (
     <div className="grid min-w-0 gap-5 [&>*]:min-w-0">
@@ -58,13 +67,17 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
           {(() => {
             const self = index.runs[position];
             const clean = index.runs.find((r) => r.agent === self?.agent && r.task === self?.task && r.fault === "none" && r.verdict === "pass" && r.dir !== dir);
-            return clean ? (
+            // Without a clean run of this agent (the app's runs all inject a fault), a run that
+            // passed the same fault is the next best baseline: another agent, or a replay of the fix.
+            const passed = self?.verdict === "fail" ? index.runs.find((r) => r.task === self.task && r.fault === self.fault && r.verdict === "pass" && r.dir !== dir) : undefined;
+            const base = clean ?? passed;
+            return base ? (
               <button
                 type="button"
-                onClick={() => go({ view: "compare", base: clean.dir, cand: dir })}
+                onClick={() => go({ view: "compare", base: base.dir, cand: dir })}
                 className="rounded-full bg-solid px-3.5 py-1.5 text-[12.5px] font-medium text-on-solid hover:brightness-95"
               >
-                Compare with a clean run
+                {clean ? "Compare with a clean run" : `Compare with ${base.agent}, which passed`}
               </button>
             ) : null;
           })()}
@@ -142,7 +155,7 @@ export function RunView({ dir, index, go }: { dir: string; index: LabIndex; go: 
           <PanelHeader eyebrow="Regression fixture" title={fixture.id} />
           <div className="grid gap-2 p-4">
             <p className="text-ink-2">Re-run this failure against another agent or model. With the same agent, recorded model calls are replayed at no cost.</p>
-            <CopyButton text={`npm run lab -- replay ${fixture.dir} --agent ${run.agent} --trials 3`} />
+            <ReplayFixture dir={fixture.dir} agent={run.agent} go={go} />
           </div>
         </Panel>
       )}

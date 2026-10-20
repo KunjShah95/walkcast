@@ -286,10 +286,10 @@ export function App() {
                 {index && route.view === "dashboard" && <Dashboard index={index} me={me} go={go} />}
                 {index && route.view === "runs" && <Runs index={index} go={go} />}
                 {index && route.view === "failures" && <Failures go={go} />}
-                {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
-                {index && route.view === "experiments" && <Experiments index={index} go={go} />}
-                {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
-                {index && route.view === "simulator" && <FaultReplay index={index} go={go} />}
+                {index && route.view === "fixtures" && <Fixtures index={index} go={go} refresh={refresh} />}
+                {index && route.view === "experiments" && <Experiments index={index} go={go} refresh={refresh} />}
+                {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} refresh={refresh} />}
+                {index && route.view === "simulator" && <FaultReplay index={index} go={go} refresh={refresh} />}
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
                 {/* Every view is gated on `index`, which is null whenever there is no session. Settings and

@@ -263,6 +263,16 @@ export const SCENARIOS: Scenario[] = [
   },
 ];
 
+/**
+ * The built-in scripted agent that plays this scenario's part when the model-driven one can't run:
+ * Stagehand needs Google Chrome or Edge installed, and the desktop app only ships its own Chromium.
+ * The naive v0 reproduces every "broken" outcome here and the fixed v1 every "handled" one, with
+ * the same fault and the same check against the app's records.
+ */
+export function scriptedStandIn(s: Scenario): "v0" | "v1" {
+  return s.verdict === "fail" ? "v0" : "v1";
+}
+
 export function scenarioById(id: string): Scenario | undefined {
   return SCENARIOS.find((s) => s.id === id);
 }

@@ -5,7 +5,7 @@ import { Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { FAULT_INFO } from "../lib/agents.ts";
 import { type Capabilities, SignInRequired, loadCapabilities, startRun } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
-import { SCENARIOS, type Scenario, type ScenarioStep } from "../lib/scenarios.ts";
+import { SCENARIOS, type Scenario, type ScenarioStep, scriptedStandIn } from "../lib/scenarios.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
 
 /**
@@ -15,7 +15,7 @@ import type { LabIndex, RunSummary } from "../lib/types.ts";
  * workspace that has never recorded anything. When the server can record, the same scenario can be
  * run live in a real browser and the real timeline opened.
  */
-export function FaultReplay({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
+export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
   const scenarioId = useScenarioFromHash();
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]!;
 
@@ -48,19 +48,24 @@ export function FaultReplay({ index, go }: { index: LabIndex; go: (r: Route) => 
   // One player for the whole page: the diagram and the transcript never disagree.
   const player = usePlayer(scenario.steps);
 
+  // No Chrome or Edge here, so the model-driven agent can't start: play the scenario with the
+  // scripted agent that reproduces it, instead of a button that always failed.
+  const standIn = caps.live && caps.stagehand === false && scenario.stagehand ? scriptedStandIn(scenario) : null;
+
   const runLive = async () => {
     setRunning(true);
     setError(null);
     setNeedsSignIn(false);
     try {
       const dir = await startRun({
-        agent: scenario.liveAgent,
+        agent: standIn ?? scenario.liveAgent,
         fault: scenario.faults.join("+"),
         seed: 1,
         task: scenario.liveTask,
-        ...(scenario.stagehand && !caps.providers?.length ? { modelMode: "scripted" } : {}),
+        ...(!standIn && scenario.stagehand && !caps.providers?.length ? { modelMode: "scripted" } : {}),
       });
       setLiveDir(dir);
+      void refresh?.();
     } catch (e) {
       setNeedsSignIn(e instanceof SignInRequired);
       setError((e as Error).message);
@@ -181,6 +186,13 @@ export function FaultReplay({ index, go }: { index: LabIndex; go: (r: Route) => 
                 <p>
                   This deployment records walkthroughs only. The scenario above is the complete story — the timeline, the check against the app's
                   records and the scorecard are all included.
+                </p>
+              )}
+              {standIn && (
+                <p className="text-ink-3">
+                  The AI agent in this scenario needs Google Chrome or Microsoft Edge, and neither is installed here, so this runs Walkcast's built-in{" "}
+                  {standIn === "v0" ? "naive" : "fixed"} agent ({standIn}) instead: same task, same fault, same check against the app's records. Install
+                  Chrome or Edge and reopen Walkcast to run the AI agent.
                 </p>
               )}
               <p className="text-[12.5px] text-ink-3">
@@ -611,7 +623,9 @@ function Narration({ steps, player }: { steps: ScenarioStep[]; player: Player })
 /** The recorded run for this scenario, when the workspace has one for it. */
 function useRecordedRun(scenario: Scenario, index: LabIndex): RunSummary | undefined {
   return useMemo(
-    () => index.runs.find((r) => r.task === scenario.liveTask && r.fault === scenario.faults.join("+") && r.agent === scenario.liveAgent),
+    () =>
+      index.runs.find((r) => r.task === scenario.liveTask && r.fault === scenario.faults.join("+") && r.agent === scenario.liveAgent) ??
+      index.runs.find((r) => r.task === scenario.liveTask && r.fault === scenario.faults.join("+") && r.agent === scriptedStandIn(scenario)),
     [scenario, index],
   );
 }

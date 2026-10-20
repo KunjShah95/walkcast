@@ -1,9 +1,10 @@
 import type { Route } from "../App.tsx";
-import { CopyButton, Empty, FindingChip, Panel } from "../components/ui.tsx";
+import { ReplayFixture } from "../components/ReplayFixture.tsx";
+import { Empty, FindingChip, Panel } from "../components/ui.tsx";
 import { faultLabel } from "../lib/format.ts";
 import type { LabIndex } from "../lib/types.ts";
 
-export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
+export function Fixtures({ index, go, refresh }: { index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
   const fixturesAll = index.fixtures ?? [];
   if (fixturesAll.length === 0) {
     return (
@@ -43,7 +44,7 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
       </div>
       {[...groups.entries()].map(([source, fixtures]) => (
         <section key={source} className="grid gap-3">
-          <h2 className="eyebrow">{source === "fixtures" ? "Committed suite (CI gate)" : source.replace("experiment:", "Experiment ")}</h2>
+          <h2 className="eyebrow">{source === "fixtures" ? "Committed suite (CI gate)" : source === "runs" ? "Saved from failed runs" : source.replace("experiment:", "Experiment ")}</h2>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 xl:grid-cols-3">
             {fixtures.map((f) => {
               const m = f.manifest;
@@ -84,7 +85,7 @@ export function Fixtures({ index, go }: { index: LabIndex; go: (r: Route) => voi
                     </dl>
                   </div>
                   <div className="mt-auto grid gap-2 border-t border-line p-3">
-                    <CopyButton text={`npm run lab -- replay ${f.dir} --agent ${m.original.agent.id} --trials 3`} />
+                    <ReplayFixture dir={f.dir} agent={m.original.agent.id} go={go} onDone={() => void refresh?.()} />
                     {run && (
                       <button type="button" onClick={() => go({ view: "run", dir: run.dir })} className="w-fit text-[12.5px] text-signal hover:underline">
                         Open the original recording

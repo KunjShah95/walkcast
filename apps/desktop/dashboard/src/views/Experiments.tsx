@@ -1,14 +1,17 @@
 import { formatInterval } from "../../../../../packages/core/src/lab/stats.ts";
 import type { Route } from "../App.tsx";
-import { Empty, Panel, PanelHeader } from "../components/ui.tsx";
+import { useState } from "react";
+import { Button, Empty, Panel, PanelHeader } from "../components/ui.tsx";
+import { SignInRequired, isSnapshot, startExperiment } from "../lib/api.ts";
 import { faultLabel, cn, label, ms } from "../lib/format.ts";
 import type { ExperimentSummary, LabIndex } from "../lib/types.ts";
 
 /** The summary as stored (and served): `falseSuccess` is absent in experiments run before it existed. */
 type Summary = ExperimentSummary["summary"];
 
-export function Experiments({ index, go }: { index: LabIndex; go: (r: Route) => void }) {
+export function Experiments({ index, go, refresh }: { index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
   const experimentsAll = index.experiments ?? [];
+  const runner = !isSnapshot && <RunExperiment onDone={() => void refresh?.()} />;
   if (experimentsAll.length === 0) {
     return (
       <Empty
@@ -16,13 +19,15 @@ export function Experiments({ index, go }: { index: LabIndex; go: (r: Route) => 
         tone="signal"
         icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6M10 3v6L4.6 18.4A1.7 1.7 0 0 0 6.1 21h11.8a1.7 1.7 0 0 0 1.5-2.6L14 9V3" /><path d="M7.2 15h9.6" /></svg>}
         action={
-          <button
-            type="button"
-            onClick={() => go({ view: "simulator" })}
-            className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
-          >
-            Compare agents on a real failure
-          </button>
+          runner || (
+            <button
+              type="button"
+              onClick={() => go({ view: "simulator" })}
+              className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
+            >
+              Compare agents on a real failure
+            </button>
+          )
         }
       >
         This page compares two or more agent versions against the same failures, repeatedly, so a difference in reliability is a measurement rather
@@ -32,9 +37,57 @@ export function Experiments({ index, go }: { index: LabIndex; go: (r: Route) => 
   }
   return (
     <div className="grid gap-8">
+      {runner && <Panel className="p-4">{runner}</Panel>}
       {experimentsAll.map((e) => (
         <Experiment key={e.id} id={e.id} s={e.summary} />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Start an experiment from the app: the naive v0 as baseline on every fault, each failure frozen
+ * as a fixture and replayed with v1 (the fix) and v2 (the fix minus read-back). Scripted agents
+ * only, so it costs nothing and needs no key; `lab experiment` covers the rest.
+ */
+function RunExperiment({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [trials, setTrials] = useState(1);
+  const run = async () => {
+    setBusy("Starting…");
+    setError(null);
+    try {
+      await startExperiment({ baseline: "v0", candidates: ["v1", "v2"], seeds: 1, trials }, (s) =>
+        setBusy(s.status === "queued" ? "Waiting for the worker…" : (s.progress ?? "Running…")),
+      );
+      onDone();
+    } catch (e) {
+      setError(e instanceof SignInRequired ? "Sign in again to run an experiment." : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="grid justify-items-center gap-2 text-center">
+      <div className="flex flex-wrap items-center justify-center gap-2 text-[12.5px]">
+        <span className="text-ink-2">v0 against v1 and v2 on every fault</span>
+        <label className="flex items-center gap-1.5 text-ink-3">
+          trials per replay
+          <select value={trials} onChange={(e) => setTrials(Number(e.target.value))} disabled={Boolean(busy)} className="h-8 rounded-lg border border-line bg-panel px-2 text-ink">
+            {[1, 2, 3].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button tone="primary" onClick={() => void run()} disabled={Boolean(busy)}>
+          {busy ? "Running the experiment…" : "Run an experiment"}
+        </Button>
+      </div>
+      {busy && <p className="text-[12px] text-ink-3">{busy} This takes a few minutes; you can leave this page.</p>}
+      {error && <p className="text-[12.5px] text-fail">{error}</p>}
     </div>
   );
 }

@@ -101,6 +101,8 @@ export interface Capabilities {
   running?: string | null;
   queue?: number | null;
   stagehand?: boolean;
+  /** Every runnable agent version; `kind` "scripted" needs no model key and no Chrome. */
+  agents?: { id: string; kind: string; description: string }[];
   providers?: string[];
   /** Speech-to-text providers with a key, for auto-captions. */
   sttProviders?: string[];
@@ -130,7 +132,7 @@ export interface JobStatus {
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   progress: string | null;
   error: string | null;
-  result: { dir?: string; id?: string } | null;
+  result: ({ dir?: string; id?: string } & Record<string, unknown>) | null;
   startedAt?: string | null;
   createdAt?: string;
   /** Present while queued: the job's place in line. */
@@ -143,6 +145,13 @@ export interface JobStatus {
  * The idempotency key makes a double-click or a retried POST start one job, not two.
  */
 async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<string> {
+  const result = await submitForResult(path, input, onProgress);
+  if (typeof result.dir !== "string") throw new Error("The job finished without a result.");
+  return result.dir;
+}
+
+/** submitAndWait, handing back the job's whole result rather than only its directory. */
+async function submitForResult(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
   const key = crypto.randomUUID();
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
   // A proxy's HTML error page is not JSON: fall back to the status rather than "Unexpected token <".
@@ -176,8 +185,34 @@ async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobS
     onProgress?.(job);
   }
   if (job.status === "cancelled") throw new JobCancelled("Cancelled.");
-  if (job.status !== "succeeded" || !job.result?.dir) throw new Error(job.error ?? `The job ${job.status}.`);
-  return job.result.dir;
+  if (job.status !== "succeeded" || !job.result) throw new Error(job.error ?? `The job ${job.status}.`);
+  return job.result;
+}
+
+/** One fixture replayed k times with one agent: the pass^k check. */
+export interface ReplayResult {
+  fixture: string;
+  agent: string;
+  passes: number;
+  /** pass^k: the agent met the fixture's expectation in every trial. */
+  passAll: boolean;
+  /** Trials that failed with every cause the original run was diagnosed with. */
+  reproduced: number;
+  environmentDrift: string[];
+  trials: { verdict: "pass" | "fail"; causes: string[]; durationMs: number; runDir: string }[];
+}
+
+/** Replay a fixture on the server's worker and resolve with the pass^k summary. */
+export async function startReplay(input: { fixture: string; agent: string; trials: number }, onProgress?: (s: JobStatus) => void): Promise<ReplayResult> {
+  const result = await submitForResult("/api/run", { op: "replay", ...input }, onProgress);
+  if (!result.replay) throw new Error("The replay finished without a result.");
+  return result.replay as ReplayResult;
+}
+
+/** Run a baseline against candidate agents on every fault; resolves with the experiment's id. */
+export async function startExperiment(input: { baseline: string; candidates: string[]; seeds: number; trials: number }, onProgress?: (s: JobStatus) => void): Promise<string> {
+  const result = await submitForResult("/api/run", { op: "experiment", ...input }, onProgress);
+  return String(result.experiment ?? "");
 }
 
 /** Starts a real run and resolves with its directory when it finishes. */

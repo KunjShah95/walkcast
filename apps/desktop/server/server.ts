@@ -897,7 +897,7 @@ try {
       if (notReady) return refuse(503, notReady);
       let input: Record<string, unknown>;
       try {
-        input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
+        input = kind === "run" ? validateRun(b, allowLiveRuns, root) : validateRecord(b, exposed);
       } catch (e) {
         // An unfinished form (no URL, box not ticked) is not a failed recording; a bad address is.
         if (e instanceof AuthError && e.status === 400) return /^(Confirm that you own|Paste the site's URL)/.test(e.message) ? json(400, { error: e.message }) : refuse(400, e.message);
@@ -1303,7 +1303,33 @@ async function withQueue(store: Store, job: Job) {
   }
 }
 
-function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean): Record<string, unknown> {
+function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = process.cwd()): Record<string, unknown> {
+  const op = b.op === undefined ? "run" : String(b.op);
+  if (!["run", "replay", "experiment"].includes(op)) throw new AuthError(400, `Unknown lab operation "${op}".`);
+  const known = (id: string) => allAgents().some((a) => a.id === id);
+  const trials = Math.max(1, Math.min(5, Math.trunc(Number(b.trials ?? (op === "replay" ? 3 : 1)) || 1)));
+  if (op === "replay") {
+    // A fixture the index listed: a relative path under fixtures/, runs/_fixtures/ or results/<exp>/fixtures/.
+    const fixture = String(b.fixture ?? "").replace(/\\/g, "/");
+    if (!/^(fixtures|runs\/_fixtures|results\/[\w.-]+\/fixtures)\/[\w.+-]+$/.test(fixture) || !existsSync(join(root, fixture, "manifest.json"))) {
+      throw new AuthError(400, "That fixture doesn't exist here.");
+    }
+    const agent = String(b.agent ?? "v1");
+    if (!known(agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
+    return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead" };
+  }
+  if (op === "experiment") {
+    // Scripted agents only: an experiment is dozens of runs, and from the app it must never spend
+    // model credits by accident.
+    const scripted = (id: string) => allAgents().some((a) => a.id === id && a.kind === "scripted");
+    const baseline = String(b.baseline ?? "v0");
+    const candidates = (Array.isArray(b.candidates) ? b.candidates : ["v1", "v2"]).map(String).filter((c) => c !== baseline).slice(0, 4);
+    for (const id of [baseline, ...candidates]) if (!scripted(id)) throw new AuthError(400, `Experiments from the app use the scripted agents only; "${id}" isn't one.`);
+    if (candidates.length === 0) throw new AuthError(400, "Pick at least one candidate agent to compare with the baseline.");
+    const seeds = Math.max(1, Math.min(3, Math.trunc(Number(b.seeds ?? 1)) || 1));
+    const task: TaskId = isTaskId(String(b.task ?? "")) ? (b.task as TaskId) : "create-lead";
+    return { op, baseline, candidates, trials: Math.min(trials, 3), seed: seeds, agent: baseline, fault: "none", task };
+  }
   const agent = String(b.agent ?? "v0");
   if (!allAgents().some((a) => a.id === agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
   const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
