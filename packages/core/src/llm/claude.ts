@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
+import { lookup } from "./credentials.ts";
 
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -23,14 +24,38 @@ export const DEFAULT_CLAUDE_OPTIONS: ClaudeBackendOptions = {
  */
 export class ClaudeBackend implements ModelBackend {
   readonly name: string;
-  private client = new Anthropic();
+  private client: Anthropic | undefined;
+  private clientKey = "";
 
   constructor(private readonly options: ClaudeBackendOptions = DEFAULT_CLAUDE_OPTIONS) {
     this.name = options.model;
   }
 
+  /**
+   * The Anthropic client, built for the key that is in scope right now.
+   *
+   * The SDK reads ANTHROPIC_API_KEY from the environment once, when it is constructed. A key
+   * saved in Settings after that, or a key connected to one person's account, was invisible to
+   * it: the app said the provider was configured and every request failed with "Could not
+   * resolve authentication method". Resolving the key here, per call, is what makes the key
+   * that was just saved the key that is used.
+   *
+   * The two Anthropic names are mutually exclusive on purpose: the SDK sends both headers when
+   * it has both, and a request with an x-api-key and an Authorization header is rejected.
+   */
+  private get anthropic(): Anthropic {
+    const apiKey = lookup("ANTHROPIC_API_KEY");
+    const authToken = apiKey ? undefined : lookup("ANTHROPIC_AUTH_TOKEN");
+    const signature = `${apiKey ?? ""}|${authToken ?? ""}`;
+    if (!this.client || this.clientKey !== signature) {
+      this.client = new Anthropic({ apiKey: apiKey ?? null, authToken: authToken ?? null });
+      this.clientKey = signature;
+    }
+    return this.client;
+  }
+
   async agent(request: AgentRequest): Promise<AgentResponse> {
-    const response = await this.client.beta.messages.create({
+    const response = await this.anthropic.beta.messages.create({
       model: this.options.model,
       max_tokens: 16000,
       betas: ["server-side-fallback-2026-07-01"],
@@ -52,7 +77,7 @@ export class ClaudeBackend implements ModelBackend {
     const format = params.responseFormat;
     const jsonSchema = format?.type === "json_schema" ? format : undefined;
     const tools = "tools" in params ? params.tools : undefined;
-    const response = await this.client.beta.messages.create({
+    const response = await this.anthropic.beta.messages.create({
       model: this.options.model,
       max_tokens: 16000,
       betas: ["server-side-fallback-2026-07-01"],

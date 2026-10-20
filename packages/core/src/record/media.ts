@@ -60,6 +60,10 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   // Keep the whole visit either way: a silent MP4 with the caption track still plays anywhere.
   const silent = async (note: string) => {
     writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
+    // A narrated MP4 already on disk is the better recording. A failure in one of the last
+    // steps must not replace a video that speaks with a silent one.
+    const existing = join(dir, "recording.mp4");
+    if (existsSync(existing) && statSync(existing).size > 0) return finish(note);
     try {
       Object.assign(result, await muxSilent(dir, video, onProgress));
     } catch { /* the WebM and captions are still there */ }
@@ -70,7 +74,7 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   try {
     return await narrate(dir, video, captions, result, engine, onProgress);
   } catch (e) {
-    return silent(`Narration failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}); the video has captions and a transcript.`);
+    return silent(`Narration failed (${failureReason(e)}); the video has captions and a transcript.`);
   } finally {
     for (const [i] of captions.entries()) {
       rmSync(join(dir, `.tts-${i}.wav`), { force: true });
@@ -136,9 +140,18 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
   ]);
   const webm = join(dir, "narrated.webm");
   onProgress?.("Packaging the WebM");
-  await run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
+  // The MP4 is the recording; the WebM is a second copy for browsers without H.264. A build of
+  // ffmpeg without the Opus encoder must not cost the person the recording they already have,
+  // so this step fails alone: the MP4 above stands.
+  let webmOk = false;
+  try {
+    await run(["-i", join(dir, video), "-i", audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "libopus", "-b:a", "64k", webm]);
+    webmOk = true;
+  } catch {
+    webmOk = false;
+  }
   return {
-    webm: existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null,
+    webm: webmOk && existsSync(webm) && statSync(webm).size > 0 ? "narrated.webm" : null,
     audio: "narration.wav",
     mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null,
   };
@@ -184,7 +197,7 @@ export async function renarrate(dir: string, captions: Caption[], voice: Voice, 
       } catch (e) {
         if (!local) throw e;
         const r = await narrate(dir, "video.webm", captions, fresh(), local);
-        r.note = `${r.note} The recording's own voice failed (${e instanceof Error ? e.message.split("\n")[0] : String(e)}), so the offline voice spoke.`;
+        r.note = `${r.note} The recording's own voice failed (${failureReason(e)}), so the offline voice spoke.`;
         return r;
       }
     }
@@ -263,12 +276,22 @@ let cacheDir: string | undefined;
 const spoken = new Map<string, number>();
 
 /**
- * How long the narration voice takes to say `text`, in ms. With flite available the line is
- * synthesized once (and cached) so the measurement is exact; otherwise it is estimated.
+ * How long the narration voice takes to say `text`, in ms.
+ *
+ * The recording holds each action on screen for as long as its line takes, so the answer has to
+ * come from the voice that will actually speak it. With flite available the line is synthesized
+ * once (and cached) so the measurement is exact; a cloud voice is measured by its own pace,
+ * because a line timed by the offline voice's speed arrives after the action it describes has
+ * already moved on.
  */
-export async function speechMs(text: string): Promise<number> {
-  const engine = localVoice(VOICE);
-  if (!engine) return text.split(/\s+/).filter(Boolean).length * 380 + 400;
+export async function speechMs(text: string, engine?: VoiceEngine | null): Promise<number> {
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (engine && engine.kind !== "local") {
+    const rate = engine.wordsPerSecond ?? 2.8;
+    return Math.round((words / rate) * 1000) + 250;
+  }
+  const local = engine ?? localVoice(VOICE);
+  if (!local) return words * 380 + 400;
   const cached = spoken.get(text);
   if (cached !== undefined) return cached;
   cacheDir ??= mkdtempSync(join(tmpdir(), "lab-tts-"));
@@ -276,7 +299,7 @@ export async function speechMs(text: string): Promise<number> {
   const txt = join(cacheDir, `${i}.txt`);
   const wav = join(cacheDir, `${i}.wav`);
   writeFileSync(txt, text.replace(/[{}]/g, ""));
-  await engine.speak(text.replace(/[{}]/g, ""), wav, cacheDir);
+  await local.speak(text.replace(/[{}]/g, ""), wav, cacheDir);
   const ms = Math.round(wavSeconds(wav) * 1000);
   rmSync(txt, { force: true });
   rmSync(wav, { force: true });
@@ -342,18 +365,51 @@ export function pickEngine(voice: Voice = VOICE): VoiceEngine | null {
   return robotVoiceAllowed() ? localVoice(voice) : null;
 }
 
-/** Duration of a PCM WAV from its header (avoids a probe per clip). */
-function wavSeconds(file: string): number {
-  const buf = readFileSync(file);
+/**
+ * Duration of a PCM WAV from its header (avoids a probe per clip).
+ *
+ * A clip that is not a WAV, or is a truncated one, has no duration to read: it returns 0 rather
+ * than throwing. Throwing here used to take the whole narration down with it — one provider
+ * answering in its own format, and the recording shipped with no voice at all.
+ */
+export function wavSeconds(file: string): number {
+  let buf: Buffer;
+  try {
+    buf = readFileSync(file);
+  } catch {
+    return 0;
+  }
+  if (buf.length < 44) return 0;
+  if (buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") return 0;
   const byteRate = buf.readUInt32LE(28);
+  if (!byteRate) return 0;
   let offset = 12;
   while (offset + 8 <= buf.length) {
     const id = buf.toString("ascii", offset, offset + 4);
     const size = buf.readUInt32LE(offset + 4);
     if (id === "data") return Math.min(size, buf.length - offset - 8) / byteRate;
-    offset += 8 + size;
+    offset += 8 + size + (size % 2);
   }
   return 0;
+}
+
+/**
+ * The useful part of a failure, for the note the recording carries.
+ *
+ * An ffmpeg failure arrives as "Command failed: <the whole command line>\n<what ffmpeg said>".
+ * The first line is the command nobody needs to read; the last line is the reason. Showing the
+ * first one hid every real cause behind a wall of flags.
+ */
+export function failureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const lines = message
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const last = lines.at(-1) ?? message;
+  // A message that is only the command line has nothing better to offer.
+  if (/^Command failed:/i.test(last)) return lines.at(-2) ?? last;
+  return last.slice(0, 300);
 }
 
 async function probeSeconds(file: string): Promise<number> {

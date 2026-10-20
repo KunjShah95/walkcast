@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -112,10 +112,11 @@ const LIMITS = {
  * returns 202 with a job id at once and the browser polls /api/jobs/:id, so nothing depends on a
  * request staying open for minutes behind a load balancer.
  */
-const CREDENTIAL_KEYS: { env: string; label: string }[] = [
+export const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "ANTHROPIC_API_KEY", label: "Anthropic API key" },
   { env: "OPENAI_API_KEY", label: "OpenAI API key" },
   { env: "OPENROUTER_API_KEY", label: "OpenRouter API key" },
+  { env: "AI_GATEWAY_API_KEY", label: "Vercel AI Gateway key" },
   { env: "GEMINI_API_KEY", label: "Google Gemini API key" },
   { env: "GOOGLE_API_KEY", label: "Google API key (alt)" },
   { env: "GROQ_API_KEY", label: "Groq API key" },
@@ -126,6 +127,7 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "TOGETHER_API_KEY", label: "Together AI API key" },
   { env: "FIREWORKS_API_KEY", label: "Fireworks API key" },
   { env: "CEREBRAS_API_KEY", label: "Cerebras API key" },
+  { env: "OLLAMA_API_KEY", label: "Ollama API key (local models)" },
   { env: "SARVAM_API_KEY", label: "Sarvam API key" },
   { env: "BHASHINI_API_KEY", label: "Bhashini API key" },
   { env: "BHASHINI_USER_ID", label: "Bhashini user id" },
@@ -133,10 +135,12 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key" },
   { env: "AZURE_TTS_KEY", label: "Azure TTS key" },
   { env: "AZURE_TTS_REGION", label: "Azure TTS region" },
-  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly)" },
-  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly)" },
+  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly and S3)" },
+  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly and S3)" },
   { env: "AWS_SESSION_TOKEN", label: "AWS session token (temporary keys only)" },
   { env: "AWS_REGION", label: "AWS region (Polly)" },
+  { env: "MEDIA_S3_BUCKET", label: "Media bucket (S3 storage)" },
+  { env: "MEDIA_S3_REGION", label: "Media region (S3 storage)" },
   { env: "MURF_API_KEY", label: "Murf API key" },
   { env: "REVERIE_API_KEY", label: "Reverie API key" },
   { env: "REVERIE_APP_ID", label: "Reverie app id" },
@@ -147,6 +151,50 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
   { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key" },
   { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL" },
 ];
+
+/**
+ * Names the same credential goes by.
+ *
+ * A provider reads one name; people paste the key under another. A key saved as
+ * GOOGLE_CLOUD_API_KEY worked while the Settings row for it said "not set", and the Google voice
+ * picker showed the provider as unconfigured while the recording spoke with it perfectly well.
+ * Saving a credential therefore writes every name in its group, and clearing it clears them all.
+ */
+export const CREDENTIAL_ALIASES: Record<string, string[]> = {
+  AI_GATEWAY_API_KEY: ["VERCEL_OIDC_TOKEN"],
+  HF_TOKEN: ["HUGGINGFACE_HUB_TOKEN"],
+  BHASHINI_API_KEY: ["ULCA_API_KEY"],
+  BHASHINI_USER_ID: ["ULCA_USER_ID"],
+  GOOGLE_TTS_API_KEY: ["GOOGLE_CLOUD_API_KEY"],
+  AZURE_TTS_KEY: ["AZURE_SPEECH_KEY"],
+  AZURE_TTS_REGION: ["AZURE_SPEECH_REGION"],
+  ANTHROPIC_API_KEY: ["ANTHROPIC_AUTH_TOKEN"],
+};
+
+/** Every name a credential is known by: its own, plus the aliases it answers to. */
+function credentialNames(env: string): string[] {
+  return [env, ...(CREDENTIAL_ALIASES[env] ?? [])];
+}
+
+/** Whether a credential is set, under any of the names it is known by. */
+export function credentialSet(env: string): boolean {
+  return credentialNames(env).some((name) => Boolean(process.env[name]));
+}
+
+/**
+ * The providers the person themselves connected, which live on their account rather than in the
+ * server's environment.
+ *
+ * The capabilities payload said "no providers" to someone who had signed in to OpenRouter, so
+ * the app quietly fell back to the scripted model and told them their key was missing. The key
+ * is theirs and it works; it just is not in this process's environment.
+ */
+function connectedProviders(user: { openrouterKey?: string; chatgpt?: { refreshToken?: string } } | null): string[] {
+  const out: string[] = [];
+  if (user?.openrouterKey) out.push("openrouter");
+  if (user?.chatgpt?.refreshToken) out.push("chatgpt");
+  return out;
+}
 
 /** Every narration provider the dashboard may select, local ones first. */
 const TTS_PROVIDERS = ["flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
@@ -165,13 +213,21 @@ function credentialsPath(root: string): string {
   return join(root, ".walkcast-credentials.json");
 }
 
-function applyCredentialsFile(root: string): void {
+/**
+ * Read the saved credentials into this process's environment.
+ *
+ * Exported because a worker that runs on its own (the web service with LAB_WORKER=off) never
+ * calls createApp, and so never saw the keys the person saved in Settings: the recording came
+ * out with no voice, and the run said the provider was unconfigured. The file is the one the
+ * Settings panel writes; the worker reads the same one.
+ */
+export function applyCredentialsFile(root: string): void {
   const p = credentialsPath(root);
   if (!existsSync(p)) return;
   try {
     const data = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
     for (const [k, v] of Object.entries(data)) {
-      if (typeof v === "string" && CREDENTIAL_KEYS.some((c) => c.env === k)) process.env[k] = v;
+      if (typeof v === "string" && CREDENTIAL_KEYS.some((c) => c.env === k)) setCredential(k, v);
     }
   } catch { /* ignore */ }
 }
@@ -188,13 +244,41 @@ export function cleanCredential(value: string): string {
   return v.replace(/^Bearer\s+/i, "").trim();
 }
 
+/**
+ * Put a credential into the environment under every name it is known by.
+ *
+ * The Anthropic pair is the awkward one: ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are two
+ * different ways to authenticate, and a request carrying both is rejected. So the two are
+ * mutually exclusive — setting one clears the other — while every other alias is the same key
+ * under a second name, and gets the same value.
+ */
+function setCredential(env: string, value: string): void {
+  const names = credentialNames(env);
+  process.env[env] = value;
+  for (const name of names.slice(1)) {
+    if (env === "ANTHROPIC_API_KEY" && name === "ANTHROPIC_AUTH_TOKEN") delete process.env[name];
+    else process.env[name] = value;
+  }
+}
+
+/** Remove a credential, under every name it is known by. */
+function clearCredential(env: string): void {
+  for (const name of credentialNames(env)) delete process.env[name];
+}
+
 function saveCredential(root: string, env: string, value: string): void {
   const p = credentialsPath(root);
   let data: Record<string, string> = {};
   if (existsSync(p)) try { data = JSON.parse(readFileSync(p, "utf8")) as Record<string, string>; } catch { data = {}; }
   if (value) data[env] = value; else delete data[env];
-  writeFileSync(p, JSON.stringify(data, null, 2));
-  if (value) process.env[env] = value; else delete process.env[env];
+  // The file holds the keys in plain text, so it is readable by its owner only.
+  writeFileSync(p, JSON.stringify(data, null, 2), { mode: 0o600 });
+  try {
+    chmodSync(p, 0o600);
+  } catch {
+    /* a filesystem without POSIX permissions (Windows) has nothing to tighten */
+  }
+  if (value) setCredential(env, value); else clearCredential(env);
   // Capabilities depend on which credentials are set; drop cached responses, and voice samples
   // spoken with the old key.
   capabilitiesCache.clear();
@@ -242,7 +326,7 @@ async function testCredential(env: string): Promise<{ ok: boolean; message: stri
       return { ok: false, message: e instanceof Error ? e.message : String(e) };
     }
   }
-  return { ok: Boolean(process.env[env]), message: process.env[env] ? "Saved. This one can't be tested from here." : `No ${env} saved.` };
+  return { ok: credentialSet(env), message: credentialSet(env) ? "Saved. This one can't be tested from here." : `No ${env} saved.` };
 }
 
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
@@ -641,7 +725,7 @@ export function createApp(o: ServeOptions = {}): App {
         authRequired: requireAuth,
         stagehand: findChrome() !== null,
         liveModels: allowLiveRuns,
-        providers: configuredProviders().map((p) => p.id),
+        providers: [...new Set([...configuredProviders().map((p) => p.id), ...connectedProviders(user)])],
         sttProviders: configuredSttProviders(),
         demoSite: demoSiteEnabled(exposed),
         agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description, exposure: agentExposure(a), dailyLimit: agentDailyLimit(a) })),
@@ -662,7 +746,7 @@ export function createApp(o: ServeOptions = {}): App {
     // ---------------------------------------------------------------- credentials
     if (url.pathname === "/api/credentials" && req.method === "GET") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: Boolean(process.env[k.env]) })) });
+      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, set: credentialSet(k.env) })) });
     }
     if (url.pathname === "/api/credentials" && req.method === "POST") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
@@ -672,7 +756,7 @@ export function createApp(o: ServeOptions = {}): App {
       const value = String(b.value ?? "");
       if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
       saveCredential(root, env, cleanCredential(value));
-      return json(200, { ok: true, set: Boolean(process.env[env]) });
+      return json(200, { ok: true, set: credentialSet(env) });
     }
     if (url.pathname === "/api/credentials/test" && req.method === "POST") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
@@ -1303,7 +1387,7 @@ async function withQueue(store: Store, job: Job) {
   }
 }
 
-function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = process.cwd()): Record<string, unknown> {
+export function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = process.cwd()): Record<string, unknown> {
   const op = b.op === undefined ? "run" : String(b.op);
   if (!["run", "replay", "experiment"].includes(op)) throw new AuthError(400, `Unknown lab operation "${op}".`);
   const known = (id: string) => allAgents().some((a) => a.id === id);
@@ -1316,7 +1400,14 @@ function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = 
     }
     const agent = String(b.agent ?? "v1");
     if (!known(agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
-    return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead" };
+    // How the agent's model answers: the recorded calls, the deterministic stand-in, or a live
+    // model. Without this the choice was made for the person — a browser agent whose fixture
+    // holds no recorded calls was pushed into a live run, which needs a key and costs money,
+    // and the replay could not be tried at all without one.
+    const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
+    if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
+    if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.");
+    return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead", ...(modelMode ? { modelMode } : {}) };
   }
   if (op === "experiment") {
     // Scripted agents only: an experiment is dozens of runs, and from the app it must never spend

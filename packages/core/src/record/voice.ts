@@ -10,7 +10,7 @@
 import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { signHeaders } from "../media/s3.ts";
 import { resolveLanguage, resolveVoice } from "./voices.ts";
@@ -19,6 +19,103 @@ const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
 const execFileAsync = promisify(execFile);
 async function run(args: string[], opts: { cwd?: string } = {}): Promise<void> {
   await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: 5 * 60_000, killSignal: "SIGKILL" });
+}
+
+/**
+ * Whether `file` starts with a RIFF/WAVE header.
+ *
+ * The name on disk is not a promise about the bytes inside it: a provider answers in its own
+ * format, and the extension says nothing. This is the only honest check.
+ */
+export function isRiffWav(file: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = openSync(file, "r");
+    const head = Buffer.alloc(12);
+    const read = readSync(fd, head, 0, 12, 0);
+    return read === 12 && head.toString("ascii", 0, 4) === "RIFF" && head.toString("ascii", 8, 12) === "WAVE";
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/**
+ * Wrap raw 16-bit little-endian mono PCM in a RIFF/WAVE header.
+ *
+ * Google Cloud TTS answers LINEAR16: bare samples with no header at all. Everything downstream
+ * (the duration read, the mix, the browser preview) expects a WAV, and ffmpeg cannot guess the
+ * format of a headerless file, so the header is written here rather than guessed at later.
+ */
+export function pcmToWav(pcm: Buffer, sampleRate = 22050, channels = 1, bitsPerSample = 16): Buffer {
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const head = Buffer.alloc(44);
+  head.write("RIFF", 0, "ascii");
+  head.writeUInt32LE(36 + pcm.length, 4);
+  head.write("WAVE", 8, "ascii");
+  head.write("fmt ", 12, "ascii");
+  head.writeUInt32LE(16, 16);
+  head.writeUInt16LE(1, 20);
+  head.writeUInt16LE(channels, 22);
+  head.writeUInt32LE(sampleRate, 24);
+  head.writeUInt32LE(byteRate, 28);
+  head.writeUInt16LE(blockAlign, 32);
+  head.writeUInt16LE(bitsPerSample, 34);
+  head.write("data", 36, "ascii");
+  head.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([head, pcm]);
+}
+
+/**
+ * Whether `file` holds text rather than audio.
+ *
+ * A provider that has gone wrong answers with an error page or a JSON body, and ffmpeg cannot
+ * read either. The raw-PCM reading below would happily take those bytes as samples, so a
+ * provider's failure would become a millisecond of noise and a recording that claims to have
+ * spoken. Text is the giveaway.
+ */
+function looksLikeText(file: string): boolean {
+  let head: Buffer;
+  try {
+    head = readFileSync(file).subarray(0, 512);
+  } catch {
+    return false;
+  }
+  if (!head.length) return false;
+  let printable = 0;
+  for (const byte of head) {
+    if (byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte < 127)) printable++;
+  }
+  return printable / head.length > 0.9;
+}
+
+/**
+ * Make `file` a 22050 Hz mono WAV, whatever the provider sent.
+ *
+ * This is the boundary where a provider's own format becomes the format the pipeline speaks.
+ * ElevenLabs and Polly answer MP3, Google answers headerless PCM, a custom endpoint answers
+ * whatever it likes, and an uploaded voice sample may be an MP3 named .wav. Left alone, a clip
+ * that isn't a WAV is either measured as zero-length (every caption collapses onto t=0) or
+ * rejected by the mix — and a rejected mix means the recording ships silent, which is exactly
+ * the "the cloud voice doesn't work with video recordings" report.
+ */
+async function ensureWav(file: string, cwd: string): Promise<void> {
+  if (!existsSync(file)) throw new Error("the voice provider returned no audio");
+  if (isRiffWav(file)) return;
+  const out = `${file}.wav`;
+  try {
+    await run(["-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+  } catch (e) {
+    // Headerless PCM: ffmpeg has nothing to detect the format from, so say what it is. Only
+    // when the bytes look like samples and not like an error page: reading a page of text as
+    // noise turns the provider's failure into a recording that claims to have spoken.
+    const size = statSync(file).size;
+    if (size % 2 !== 0 || size === 0 || looksLikeText(file)) throw e;
+    await run(["-f", "s16le", "-ar", "22050", "-ac", "1", "-i", file, "-ar", "22050", "-ac", "1", out], { cwd });
+  }
+  renameSync(out, file);
 }
 
 export interface VoiceEngine {
@@ -30,7 +127,16 @@ export interface VoiceEngine {
   speak(text: string, outFile: string, cwd: string): Promise<void>;
   /** Zero-network engines are always available; cloud ones need a key + network. */
   available(): boolean;
+  /**
+   * How fast this voice speaks, in words a second. The recording holds each action on screen for
+   * as long as its narration takes, so a cloud voice has to be paced by its own speed: paced by
+   * the offline voice's, the line it speaks arrives after the action it describes has moved on.
+   */
+  wordsPerSecond?: number;
 }
+
+/** The pace of a typical cloud narration voice, in words a second. */
+const DEFAULT_WORDS_PER_SECOND = 2.8;
 
 export type FliteVoice = "slt" | "awb" | "kal" | "rms";
 
@@ -39,6 +145,9 @@ export function fliteEngine(voice: FliteVoice): VoiceEngine {
     id: `flite:${voice}`,
     kind: "local",
     available: (): boolean => true,
+    // The offline voice is deliberately slow and flat: it is a fallback, not a voice anyone
+    // chooses for the pace of it.
+    wordsPerSecond: 2.2,
     async speak(text, outFile, cwd) {
       const txt = join(cwd, ".tts-tmp.txt");
       writeFileSync(txt, text.replace(/[{}]/g, ""));
@@ -48,6 +157,7 @@ export function fliteEngine(voice: FliteVoice): VoiceEngine {
       } finally {
         rmSync(txt, { force: true });
       }
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -62,7 +172,8 @@ export function sarvamEngine(cloudVoice?: string, cloudLanguage?: string): Voice
     id: `sarvam:${speaker}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    async speak(text, outFile) {
+    wordsPerSecond: 2.8,
+    async speak(text, outFile, cwd) {
       const res = await fetch("https://api.sarvam.ai/text-to-speech", {
         method: "POST",
         headers: { "Content-Type": "application/json", "api-subscription-key": key },
@@ -76,6 +187,7 @@ export function sarvamEngine(cloudVoice?: string, cloudLanguage?: string): Voice
       const buf = Buffer.from(encoded, "base64");
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, buf);
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -92,6 +204,7 @@ export function sapiEngine(voice: FliteVoice): VoiceEngine {
     id: `windows:${gender.toLowerCase()}`,
     kind: "local",
     available: sapiAvailable,
+    wordsPerSecond: 2.6,
     async speak(text, outFile, cwd) {
       const txt = join(cwd, ".tts-tmp.txt");
       writeFileSync(txt, text, "utf8");
@@ -106,6 +219,7 @@ export function sapiEngine(voice: FliteVoice): VoiceEngine {
         rmSync(txt, { force: true });
       }
       if (!existsSync(outFile)) throw new Error("Windows speech produced no audio");
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -146,7 +260,8 @@ export function bhashiniEngine(cloudVoice?: string, cloudLanguage?: string): Voi
     id: `bhashini:${serviceId.split("/").pop()}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && userId),
-    async speak(text, outFile) {
+    wordsPerSecond: 2.7,
+    async speak(text, outFile, cwd) {
       const res = await fetch("https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/compute", {
         method: "POST",
         headers: { "Content-Type": "application/json", "ulcaApiKey": key, "userID": userId },
@@ -159,6 +274,7 @@ export function bhashiniEngine(cloudVoice?: string, cloudLanguage?: string): Voi
       if (!encoded) throw new Error("bhashini returned no audio");
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(encoded, "base64"));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -200,7 +316,8 @@ export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
     },
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    async speak(text, outFile) {
+    wordsPerSecond: 2.9,
+    async speak(text, outFile, cwd) {
       let res = await say(text);
       // Free accounts may only use premade voices through the API; a library voice (one picked
       // in an older build, or set in ELEVENLABS_VOICE_ID) answers 402. Switch to a premade voice
@@ -222,6 +339,7 @@ export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
       await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
       const { rmSync } = await import("node:fs");
       rmSync(tmp, { force: true });
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -238,7 +356,8 @@ export function googleCloudTtsEngine(cloudVoice?: string, cloudLanguage?: string
     id: `google:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    async speak(text, outFile) {
+    wordsPerSecond: 3,
+    async speak(text, outFile, cwd) {
       const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(key)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -248,8 +367,13 @@ export function googleCloudTtsEngine(cloudVoice?: string, cloudLanguage?: string
       if (!res.ok) throw await ttsError("google", res);
       const json = (await res.json()) as { audioContent?: string };
       if (!json.audioContent) throw new Error("google TTS returned no audio");
+      // LINEAR16 is bare 16-bit PCM with no header: written straight to disk it is a file
+      // ffmpeg cannot read and the duration reader cannot measure, so the WAV header goes on
+      // here, once, rather than leaving both to guess later.
+      const pcm = Buffer.from(json.audioContent, "base64");
       const { writeFile } = await import("node:fs/promises");
-      await writeFile(outFile, Buffer.from(json.audioContent, "base64"));
+      await writeFile(outFile, pcmToWav(pcm, 22050));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -266,7 +390,8 @@ export function azureTtsEngine(cloudVoice?: string, cloudLanguage?: string): Voi
     id: `azure:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && region),
-    async speak(text, outFile) {
+    wordsPerSecond: 2.8,
+    async speak(text, outFile, cwd) {
       const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
       const ssml = "<speak version='1.0' xml:lang='" + language + "'><voice name='" + voice + "'>" + safe + "</voice></speak>";
       const res = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
@@ -278,6 +403,7 @@ export function azureTtsEngine(cloudVoice?: string, cloudLanguage?: string): Voi
       if (!res.ok) throw await ttsError("azure", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -304,7 +430,8 @@ export function awsPollyEngine(cloudVoice?: string, cloudLanguage?: string): Voi
     id: `awspolly:${voice}`,
     kind: "cloud",
     available: (): boolean => true,
-    async speak(text, outFile) {
+    wordsPerSecond: 2.9,
+    async speak(text, outFile, cwd) {
       const first = POLLY_STANDARD_ONLY.has(voice) ? "standard" : "neural";
       let res = await say(text, first);
       // A voice that exists on only one engine answers 400 on the other: try that one once.
@@ -320,6 +447,7 @@ export function awsPollyEngine(cloudVoice?: string, cloudLanguage?: string): Voi
       await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
       const { rmSync } = await import("node:fs");
       rmSync(tmp, { force: true });
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -347,7 +475,8 @@ export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
     id: `openai:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    async speak(text, outFile) {
+    wordsPerSecond: 3,
+    async speak(text, outFile, cwd) {
       const res = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
@@ -357,6 +486,7 @@ export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
       if (!res.ok) throw await ttsError("openai", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -370,7 +500,8 @@ export function murfEngine(cloudVoice?: string): VoiceEngine | null {
     id: `murf:${voice}`,
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    async speak(text, outFile) {
+    wordsPerSecond: 3,
+    async speak(text, outFile, cwd) {
       const res = await fetch("https://api.murf.ai/v1/speech/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", "api-key": key },
@@ -381,8 +512,12 @@ export function murfEngine(cloudVoice?: string): VoiceEngine | null {
       const json = (await res.json()) as { audioFile?: string };
       if (!json.audioFile) throw new Error("murf returned no audio");
       const audioRes = await fetch(json.audioFile);
+      // The download is a second request to Murf's CDN: a 403 or an expired link answers with an
+      // error page, and that page used to be written to the clip as if it were the audio.
+      if (!audioRes.ok) throw new Error(`murf TTS failed (${audioRes.status}): the audio file could not be downloaded.`);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await audioRes.arrayBuffer()));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -398,7 +533,8 @@ export function reverieEngine(cloudVoice?: string, cloudLanguage?: string): Voic
     id: `reverie:${speaker}`,
     kind: "cloud",
     available: (): boolean => Boolean(key && appId),
-    async speak(text, outFile) {
+    wordsPerSecond: 2.8,
+    async speak(text, outFile, cwd) {
       const res = await fetch("https://revapi.reverieinc.com/", {
         method: "POST",
         headers: { "Content-Type": "application/json", "REV-API-KEY": key, "REV-APP-ID": appId, "src_lang": language, "tgt_lang": language, "REV-APPNAME": "tts" },
@@ -408,6 +544,7 @@ export function reverieEngine(cloudVoice?: string, cloudLanguage?: string): Voic
       if (!res.ok) throw await ttsError("reverie", res);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -423,7 +560,8 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
     id: `custom:${voice ?? "default"}`,
     kind: "cloud",
     available: (): boolean => Boolean(endpoint),
-    async speak(text, outFile) {
+    wordsPerSecond: DEFAULT_WORDS_PER_SECOND,
+    async speak(text, outFile, cwd) {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(key ? { "Authorization": `Bearer ${key}` } : {}) },
@@ -436,15 +574,18 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
       if (ct.includes("application/json")) {
         const json = (await res.json()) as { audio?: string; audioContent?: string; url?: string };
         const encoded = json.audio || json.audioContent;
-        if (encoded) { await writeFile(outFile, Buffer.from(encoded, "base64")); return; }
+        if (encoded) { await writeFile(outFile, Buffer.from(encoded, "base64")); await ensureWav(outFile, cwd); return; }
         if (json.url) {
           const a = await fetch(json.url);
+          if (!a.ok) throw new Error(`custom TTS failed (${a.status}): the audio file could not be downloaded.`);
           await writeFile(outFile, Buffer.from(await a.arrayBuffer()));
+          await ensureWav(outFile, cwd);
           return;
         }
         throw new Error("custom TTS returned no audio");
       }
       await writeFile(outFile, Buffer.from(await res.arrayBuffer()));
+      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -460,9 +601,13 @@ function customVoiceEngine(): VoiceEngine | null {
     id: "custom-voice",
     kind: "custom-voice",
     available: () => true,
-    async speak(_text: string, outFile: string, _cwd: string) {
+    wordsPerSecond: DEFAULT_WORDS_PER_SECOND,
+    async speak(_text: string, outFile: string, cwd: string) {
       const { copyFileSync } = await import("node:fs");
       copyFileSync(sample, outFile);
+      // The sample is whatever the person uploaded — an MP3 named .wav, an OGG, an M4A. It has
+      // to become a WAV before the pipeline can measure it and mix it.
+      await ensureWav(outFile, cwd);
     },
   };
 }

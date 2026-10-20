@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -80,6 +80,18 @@ if (shared) {
 // The ffmpeg the installer ships (stage-sidecar.ts), set before the media modules read it.
 const bundledFfmpeg = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 if (existsSync(bundledFfmpeg)) process.env.LAB_FFMPEG ??= bundledFfmpeg;
+// The committed fixture suite ships with the app and is copied into the data directory on first
+// run. Without it a fresh install has no fixtures at all: the Fixtures page and the fault-replay
+// page are empty, and a regression guard nobody can try is no guard. The app's own fixtures
+// (saved from failed runs) are never overwritten.
+const shippedFixtures = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "fixtures");
+if (existsSync(shippedFixtures) && !existsSync(join(root, "fixtures"))) {
+  try {
+    cpSync(shippedFixtures, join(root, "fixtures"), { recursive: true });
+  } catch (e) {
+    console.error(`sidecar: could not copy the bundled fixtures (${e instanceof Error ? e.message : String(e)})`);
+  }
+}
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(root, "browsers");
 mkdirSync(process.env.PLAYWRIGHT_BROWSERS_PATH, { recursive: true });
 

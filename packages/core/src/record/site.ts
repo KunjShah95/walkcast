@@ -6,7 +6,7 @@ import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation } from "../capture/tools.ts";
 import { buildMedia, localVoice, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
-import { engineFor } from "./voice.ts";
+import { engineFor, type VoiceEngine } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser } from "./browser.ts";
 import { captionsFor, type Caption } from "./narration.ts";
@@ -118,6 +118,17 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   // Request bodies stay out of the trace: they belong to the recorded site, not to us.
   const recorder = new Recorder(dir, { screenshots: false, bodies: false });
   const pace = options.paceMs ?? 800;
+  // The voice is known before the walk starts, and the walk is paced by it: every action stays on
+  // screen for as long as that voice needs to say its line. Pacing by the offline voice's speed
+  // instead meant a cloud voice's narration arrived after the action it describes had moved on.
+  // A selected provider that can't be reached must not pass for one that spoke: ask for it, then
+  // keep whichever engine actually narrates, and say so in the recording itself. The dashboard
+  // asks each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on
+  // purpose) or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
+  const picked = options.ttsProvider;
+  const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
+  const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
+  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
   const started = Date.now();
   const pages: PageVisit[] = [];
   const skipped: { url: string; reason: string }[] = [];
@@ -151,7 +162,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       const page = await context.newPage();
       videoStart = recorder.now();
       recorder.attach(context, page);
-      const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }));
+      const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }), engine);
 
       // The budget covers the walk itself, starting the moment recording begins — browser launch and
       // sign-in still happen, but the cap is about the video the person watches, not our overhead.
@@ -185,14 +196,6 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     recorder.flush();
     const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
     options.onProgress?.("Adding narration and encoding the video");
-    // A selected provider that can't be reached must not pass for one that spoke: ask for it, then
-    // keep whichever engine actually narrates, and say so in the recording itself. The dashboard asks
-    // each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on purpose)
-    // or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
-    const picked = options.ttsProvider;
-    const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
-    const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
-    const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
     // The narration loop and the encode below are the longest stretch of a recording that has
     // nothing to report, so they forward their own beats to the worker's stall guard.
     let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
@@ -238,7 +241,9 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
               asked: providerLabel(options.ttsProvider),
               askedVoice: options.ttsVoice ?? defaultVoiceFor(options.ttsProvider),
               spoke: media.voice === "none" ? "none" : (spokeEngine?.id ?? "none"),
-              reachable: !chose || askedEngine !== null,
+              // The provider reached the person only if it is the engine that actually narrated:
+              // a provider that answered with an error page left the offline voice speaking.
+              reachable: !chose ? true : askedEngine ? spokeEngine?.id === askedEngine.id : false,
             },
           }
         : {}),
@@ -265,6 +270,8 @@ class NarratedTools extends BrowserTools {
     recorder: Recorder,
     baseUrl: string,
     private context: () => Parameters<typeof captionsFor>[1],
+    /** The voice that will speak this recording: it decides how long each action is held. */
+    private readonly voice: VoiceEngine | null,
   ) {
     super(page, recorder, baseUrl);
   }
@@ -285,7 +292,7 @@ class NarratedTools extends BrowserTools {
       .map((c) => c.text)
       .filter((t) => !t.startsWith("Recording finished"));
     let speech = 0;
-    for (const t of lines) speech += await speechMs(t);
+    for (const t of lines) speech += await speechMs(t, this.voice);
     const owed = speech - (this.recorder.now() - last.startedAt);
     if (owed > 0) await this.page.waitForTimeout(owed);
     return value;

@@ -21,7 +21,7 @@ const OUT = join(TAURI, "sidecar");
 const BIN = join(TAURI, "binaries");
 
 /** Sources the server reaches, kept at their repo paths. */
-const SOURCES = ["packages/core/src", "packages/brand/src", "apps/desktop/server", "apps/desktop/sidecar.ts", "supabase/migrations"];
+const SOURCES = ["packages/core/src", "packages/brand/src", "apps/desktop/server", "apps/desktop/sidecar.ts", "supabase/migrations", "fixtures"];
 const DASHBOARD = "apps/desktop/dashboard/dist/index.html";
 /** Packages read by path rather than imported (the self-hosted fonts), plus the TypeScript loader. */
 const ALWAYS = ["@fontsource-variable/schibsted-grotesk", "@fontsource-variable/jetbrains-mono", "tsx"];

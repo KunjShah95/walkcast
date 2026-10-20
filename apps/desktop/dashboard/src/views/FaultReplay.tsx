@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { type NodeStatus, type Packet, Pipeline } from "../components/Pipeline.tsx";
+import { ReplayFixture } from "../components/ReplayFixture.tsx";
 import { Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { FAULT_INFO } from "../lib/agents.ts";
 import { type Capabilities, SignInRequired, loadCapabilities, startRun } from "../lib/api.ts";
-import { cn, ms } from "../lib/format.ts";
+import { cn, faultLabel, ms } from "../lib/format.ts";
 import { SCENARIOS, type Scenario, type ScenarioStep, scriptedStandIn } from "../lib/scenarios.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
 
@@ -201,9 +202,44 @@ export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: R
               </p>
             </div>
           </Panel>
+
+          <FixtureReplays index={index} go={go} refresh={refresh} />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The real failures this machine has, replayable from right here.
+ *
+ * The scenario above is a diagram: it explains the failure without running anything. A fixture
+ * is the frozen failure itself — the app, the seed data, the timings — and replaying it runs the
+ * real agent against it in a real browser. A browser agent needs Chrome or Edge, but it does not
+ * need a model key when the fixture's recorded calls are replayed, so the page can try one
+ * without either. That combination was unreachable: the fixture lived on another page, and the
+ * model mode was chosen for the person.
+ */
+function FixtureReplays({ index, go, refresh }: { index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
+  const fixtures = index.fixtures ?? [];
+  if (fixtures.length === 0) return null;
+  return (
+    <Panel>
+      <PanelHeader eyebrow={`${fixtures.length} saved`} title="Replay a real failure" />
+      <div className="grid gap-4 px-4 py-3">
+        {fixtures.map((f) => (
+          <div key={f.dir} className="grid gap-1.5">
+            <div className="flex flex-wrap items-baseline gap-2 text-[12.5px]">
+              <span className="font-mono text-ink">{f.id}</span>
+              <span className="text-ink-3">
+                failed with {f.manifest.original.agent.id} · {faultLabel(f.manifest.environment.fault)}
+              </span>
+            </div>
+            <ReplayFixture dir={f.dir} agent={f.manifest.original.agent.id} go={go} onDone={() => void refresh?.()} />
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 

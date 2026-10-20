@@ -202,8 +202,14 @@ export interface ReplayResult {
   trials: { verdict: "pass" | "fail"; causes: string[]; durationMs: number; runDir: string }[];
 }
 
-/** Replay a fixture on the server's worker and resolve with the pass^k summary. */
-export async function startReplay(input: { fixture: string; agent: string; trials: number }, onProgress?: (s: JobStatus) => void): Promise<ReplayResult> {
+/**
+ * Replay a fixture on the server's worker and resolve with the pass^k summary.
+ *
+ * `modelMode` decides how the agent's model answers: the calls recorded with the fixture, the
+ * deterministic stand-in, or a live model. It is what lets a browser agent be replayed on a
+ * machine with no provider key.
+ */
+export async function startReplay(input: { fixture: string; agent: string; trials: number; modelMode?: string }, onProgress?: (s: JobStatus) => void): Promise<ReplayResult> {
   const result = await submitForResult("/api/run", { op: "replay", ...input }, onProgress);
   if (!result.replay) throw new Error("The replay finished without a result.");
   return result.replay as ReplayResult;

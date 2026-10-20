@@ -1,7 +1,6 @@
 // node frames.mjs video.html out.mp4|--stills t1,t2,... [fps] [from] [to]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 const [,, html, out, fpsArg='30', fromArg='0', toArg='88'] = process.argv;
 const b = await chromium.launch();
 const p = await b.newPage({ viewport:{width:1920,height:1080} });

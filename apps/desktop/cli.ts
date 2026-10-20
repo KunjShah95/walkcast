@@ -16,7 +16,7 @@ import { loadPlugins } from "../../packages/core/src/plugins.ts";
 import { loadFixture, replayFixture, writeFixture } from "../../packages/core/src/lab/fixture.ts";
 import { closeBrowser, runOnce } from "../../packages/core/src/lab/runner.ts";
 import { findChrome } from "../../packages/core/src/lab/chrome.ts";
-import { exportDashboard, serveDashboard } from "./server/server.ts";
+import { applyCredentialsFile, exportDashboard, serveDashboard } from "./server/server.ts";
 import { LabData } from "../../packages/core/src/data.ts";
 import { compareRuns, type DiffReport } from "../../packages/core/src/lab/diff.ts";
 import { spawnSync } from "node:child_process";
@@ -317,6 +317,10 @@ async function main(): Promise<number> {
     case "worker": {
       // A queue worker on its own (the web service then runs with LAB_WORKER=off).
       process.env.LAB_WARM_BROWSER = process.env.LAB_WARM_BROWSER || "1";
+      // The keys the person saved in Settings live in a file, not in this process's environment.
+      // A worker that never read it ran every recording with no voice, and every live model run
+      // with no provider, while the web service said the key was set.
+      applyCredentialsFile(process.cwd());
       const store = createStore(process.cwd());
       if (store.kind === "file") console.error("Note: with the local file store a separate worker can't share the web server's queue; set SUPABASE_DB_URL.");
       const worker = new Worker({ store, media: createMedia(process.cwd()), root: process.cwd() }).start();
