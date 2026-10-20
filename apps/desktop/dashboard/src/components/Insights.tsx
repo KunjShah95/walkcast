@@ -234,25 +234,51 @@ function Changes({ recording, others }: { recording: RecordingSummary; others: R
   return (
     <Panel>
       <PanelHeader
-        eyebrow="Compare with an earlier walkthrough of the same site"
+        eyebrow="Every walkthrough of this site, newest first"
         title="What changed"
-        aside={
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            aria-label="Compare with"
-            className="h-8 rounded-full border border-line bg-panel px-2.5 text-[12.5px] text-ink-2"
-          >
-            <option value="">Choose a walkthrough…</option>
-            {candidates.map((c) => (
-              <option key={c.id} value={c.id}>
-                {new Date(c.createdAt).toLocaleString()} — {c.pages.length} pages
-              </option>
-            ))}
-          </select>
-        }
+        aside={<span className="text-[12px] text-ink-3">Pick an earlier one to compare against</span>}
       />
       <div className="grid gap-3 px-4 py-3">
+        <ul className="grid gap-1.5">
+          {[recording, ...candidates].map((r) => {
+            const isCurrent = r.id === recording.id;
+            const health = r.insights;
+            return (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  disabled={isCurrent}
+                  onClick={() => setSelected(r.id)}
+                  aria-pressed={selected === r.id}
+                  className={cn(
+                    "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                    isCurrent ? "border-signal/50 bg-signal-soft" : selected === r.id ? "border-line-strong bg-panel-2" : "border-line hover:border-line-strong",
+                    isCurrent ? "cursor-default" : "",
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px]">
+                      {new Date(r.createdAt).toLocaleString()} {isCurrent && <span className="text-ink-3">· this one</span>}
+                    </span>
+                    <span className="block truncate font-mono text-[11.5px] text-ink-3">
+                      {r.pages.length} pages · {ms(r.durationMs)}
+                      {health && (
+                        <>
+                          {" · "}
+                          {health.totals.consoleErrors > 0 ? <span className="text-fail">{health.totals.consoleErrors} console errors</span> : <span>no console errors</span>}
+                          {health.totals.failedRequests > 0 && <span className="text-fail"> · {health.totals.failedRequests} failed requests</span>}
+                        </>
+                      )}
+                    </span>
+                  </span>
+                  {!isCurrent && (
+                    <span className="shrink-0 font-mono text-[11.5px] text-ink-3">{selected === r.id ? "comparing" : "compare"}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
         {loading && <p className="text-[13px] text-ink-3">Reading the earlier trace…</p>}
         {error && <p className="text-[13px] text-fail">{error}</p>}
         {diff && (
@@ -287,7 +313,11 @@ function Changes({ recording, others }: { recording: RecordingSummary; others: R
             </div>
           </>
         )}
-        {!selected && <p className="text-[13px] text-ink-3">Pick an earlier walkthrough of {hostOf(recording.url)} to see what the site looks like now against how it looked then.</p>}
+        {!selected && (
+          <p className="text-[13px] text-ink-3">
+            Pick an earlier walkthrough of {hostOf(recording.url)} to see what the site looks like now against how it looked then.
+          </p>
+        )}
       </div>
     </Panel>
   );

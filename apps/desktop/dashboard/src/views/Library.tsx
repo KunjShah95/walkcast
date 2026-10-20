@@ -101,6 +101,16 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
                 {!isSnapshot && caps?.live && (
                   <button
                     type="button"
+                    onClick={() => go({ view: "record", url: current.url })}
+                    title="Walk this site again and compare it with this walkthrough"
+                    className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
+                  >
+                    Walk it again
+                  </button>
+                )}
+                {!isSnapshot && caps?.live && (
+                  <button
+                    type="button"
                     onClick={() => setSharing((on) => !on)}
                     aria-expanded={sharing}
                     className={cn(
