@@ -15,6 +15,7 @@ import { runExperiment } from "../../packages/core/src/lab/experiment.ts";
 import { loadPlugins } from "../../packages/core/src/plugins.ts";
 import { loadFixture, replayFixture, writeFixture } from "../../packages/core/src/lab/fixture.ts";
 import { closeBrowser, runOnce } from "../../packages/core/src/lab/runner.ts";
+import { findChrome } from "../../packages/core/src/lab/chrome.ts";
 import { exportDashboard, serveDashboard } from "./server/server.ts";
 import { LabData } from "../../packages/core/src/data.ts";
 import { compareRuns, type DiffReport } from "../../packages/core/src/lab/diff.ts";
@@ -88,7 +89,7 @@ Providers: anthropic (claude), openai, vercel (AI Gateway), openrouter, gemini, 
 deepseek, huggingface (hf), xai (grok), together, fireworks, cerebras, ollama (local), custom
 (any OpenAI-compatible URL via LAB_CUSTOM_BASE_URL).
 
-Agents: v0/v1/v2 are scripted; sh-p0/sh-p1 are Claude + Stagehand v4 (need LAB_CHROME_PATH).
+Agents: v0/v1/v2 are scripted; sh-p0/sh-p1 are Claude + Stagehand v4 (need Chrome or Edge, or LAB_CHROME_PATH).
 Model modes (Stagehand agents): live (any configured provider; see "providers"), replay
 (recorded model calls, $0), scripted (deterministic stand-in for plumbing tests).
 `;
@@ -243,8 +244,8 @@ async function main(): Promise<number> {
       for (const key of apiKeys) {
         console.log(`    ${key.padEnd(22)} ${process.env[key]?.trim() ? "set" : "empty"}`);
       }
-      const chromePath = process.env.LAB_CHROME_PATH;
-      console.log(`  LAB_CHROME_PATH: ${chromePath ? (existsSync(chromePath) ? "ok (" + chromePath + ")" : "path set but missing: " + chromePath) : "unset (Stagehand uses playwright chromium)"}`);
+      const chromePath = findChrome();
+      console.log(`  Stagehand Chrome: ${chromePath ? "ok (" + chromePath + ")" : process.env.LAB_CHROME_PATH ? "LAB_CHROME_PATH set but missing: " + process.env.LAB_CHROME_PATH : "none found (install Chrome or Edge, or set LAB_CHROME_PATH)"}`);
       const playwrightCache = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "ms-playwright") : undefined;
       console.log(`  Playwright cache: ${playwrightCache && existsSync(playwrightCache) ? "present" : "missing — run npx playwright install chromium"}`);
       const ffmpegBin = process.env.LAB_FFMPEG || "ffmpeg";

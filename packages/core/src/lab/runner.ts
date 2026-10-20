@@ -17,6 +17,7 @@ import { ScriptedModel } from "../llm/scripted-model.ts";
 import { backendForSelection, defaultSelection, type ModelSelection } from "../llm/model-spec.ts";
 import { type Diagnosis, diagnose } from "./classifier.ts";
 import { createLeadTask, evaluateOracle, requestedValues, seedFor, type OracleResult, type Task } from "./task.ts";
+import { findChrome } from "./chrome.ts";
 import { writeRunReport } from "./report.ts";
 
 export interface RunOptions {
@@ -87,12 +88,13 @@ export async function closeBrowser(): Promise<void> {
 
 /**
  * Stagehand v4 loads its runtime as a Chrome extension over CDP (Extensions.loadUnpacked on a
- * port connection), which needs a recent Chrome. Point LAB_CHROME_PATH at Chrome for Testing.
+ * port connection), which needs a recent Chrome: LAB_CHROME_PATH, else an installed Chrome or Edge
+ * (both verified to run sh-p0 end to end).
  */
 function chromePath(): string {
-  const path = process.env.LAB_CHROME_PATH;
-  if (!path || !existsSync(path)) {
-    throw new Error("Stagehand agents need LAB_CHROME_PATH set to a recent Chrome (for Testing) binary. See README.");
+  const path = findChrome();
+  if (!path) {
+    throw new Error("Stagehand agents need Google Chrome or Microsoft Edge installed, or LAB_CHROME_PATH set to a Chrome binary. See README.");
   }
   return path;
 }
