@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
-import { VoicePicker, hostOf } from "../components/Studio.tsx";
+import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
+import { VoiceChooser } from "../components/VoiceChooser.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, type JobStatus, SignInRequired, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
+import { type Capabilities, type JobStatus, JobCancelled, SignInRequired, cancelJob, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import type { LabIndex } from "../lib/types.ts";
@@ -23,6 +24,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [maxPages, setMaxPages] = useState(prefs.maxPages);
+  const [maxSeconds, setMaxSeconds] = useState(prefs.maxSeconds);
   const [voice, setVoice] = useState(prefs.voice);
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>(prefs.ttsProvider);
   // Which voice inside the chosen provider; remembered per provider in prefs.
@@ -36,6 +38,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [job, setJob] = useState<JobStatus | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const busy = job !== null;
 
   useEffect(() => {
@@ -52,25 +55,54 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const blocked = isSnapshot ? "This is a snapshot: it plays recordings but can't make new ones." : (caps?.jobsUnavailable ?? (limitHit ? "You've reached today's recording limit. It resets 24 hours after your oldest recording today." : null));
   const ready = Boolean(target) && authorized && !blocked && !busy;
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ready || !target) return;
+    // The first recording asks how it should sound; after that the saved choice applies.
+    if (!prefs.voiceChosen) return setChoosing(true);
+    void record(ttsProvider, ttsVoice, ttsLanguage);
+  };
+
+  const chooseVoice = (p: TtsProvider) => {
+    const v = prefs.ttsVoices[p] ?? "";
+    const l = prefs.ttsLanguages[p] ?? "";
+    setChoosing(false);
+    setTtsProvider(p);
+    setTtsVoice(v);
+    setTtsLanguage(l);
+    setPrefs({ ttsProvider: p, voiceChosen: true });
+    void record(p, v, l);
+  };
+
+  const record = async (ttsProvider: TtsProvider, ttsVoice: string, ttsLanguage: string) => {
+    if (!target) return;
     setError(null);
     const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
     setAttempts((a) => [attempt, ...a]);
     try {
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}) }, (s) => setJob(s));
+      const length = maxSeconds > 0 ? { maxSeconds } : {};
+      // The sample site records with the same voice as a real one, so what you hear in the demo is
+      // the voice you picked.
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
       go({ view: "library", dir: dir.split("/").pop() ?? dir });
     } catch (err) {
+      if (err instanceof JobCancelled) {
+        setAttempts((a) => a.filter((x) => x !== attempt));
+        return;
+      }
       if (err instanceof SignInRequired) setNeedsAccount(true);
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setAttempts((a) => a.map((x) => (x === attempt ? { ...x, status: "failed", message } : x)));
+      // The Lab's failed-recordings count moves with it.
+      void refresh().catch(() => undefined);
     } finally {
       setJob(null);
+      // The "N of 20 used today" line was read once on load and never moved.
+      void loadCapabilities().then(setCaps);
     }
   };
 
@@ -78,7 +110,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
 
   return (
     <div className="grid gap-6">
-      <PageHead title="Record a" dim="walkthrough" description="Paste a link. A real browser walks the site and narrates what it actually did, line by line, with captions and a transcript." />
+      <PageHead title="Record a" dim="walkthrough" description="Paste a link. A real browser visits the site like a first-time user and records the whole visit, with captions, a transcript and the voice you pick." />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Panel className="overflow-hidden">
@@ -176,6 +208,13 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 <input id="rec-pages" type="range" min={1} max={30} value={maxPages} onChange={(e) => setMaxPages(Number(e.target.value))} disabled={busy} />
                 <p className="text-[12px] text-ink-3">Stops sooner if the site has fewer pages to reach.</p>
               </div>
+              <div className="grid content-start gap-2">
+                <span className="text-[13px] font-medium">Length</span>
+                <LengthPicker value={maxSeconds} onChange={setMaxSeconds} disabled={busy} />
+                <p className="text-[12px] text-ink-3">
+                  {maxSeconds > 0 ? "Stops at the next whole page when the time is up, and says so in the narration." : "No time limit — it walks as many pages as the site reaches."}
+                </p>
+              </div>
               <div className="grid content-start gap-2 sm:col-span-2">
                 <span className="text-[13px] font-medium">Narration voice</span>
                 <TtsPicker
@@ -187,6 +226,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     setTtsProvider(p);
                     setTtsVoice(prefs.ttsVoices[p] ?? "");
                     setTtsLanguage(prefs.ttsLanguages[p] ?? "");
+                    setPrefs({ ttsProvider: p });
                   }}
                   onVoice={(v) => {
                     setTtsVoice(v);
@@ -235,14 +275,14 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 {caps?.limits && caps.usage ? `${caps.usage.recordingsToday} of ${caps.limits.recordingsPerDay} recordings used today` : " "}
               </span>
               <Button type="submit" tone="record" disabled={!ready} className="h-11 px-5 text-[14px]">
-                {busy ? "Recording…" : "Record with narration"}
+                {busy ? "Recording…" : "Record"}
               </Button>
             </div>
           </form>
         </Panel>
 
         <div className="grid gap-4 lg:sticky lg:top-20">
-          <JobPanel job={job} target={target} />
+          <JobPanel job={job} target={target} onCancel={job ? () => cancelJob(job.id).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e))) : undefined} />
           {attempts.filter((a) => a.status === "failed").length > 0 && (
             <Panel>
               <h3 className="border-b border-line px-4 py-3 text-[14.5px] font-semibold">This session</h3>
@@ -259,6 +299,9 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     </li>
                   ))}
               </ul>
+              <button type="button" onClick={() => go({ view: "failures" })} className="w-full border-t border-line px-4 py-2.5 text-left text-[12.5px] text-ink-2 hover:bg-panel-2 hover:text-ink">
+                See why in Lab → Failures
+              </button>
             </Panel>
           )}
           {recent.length > 0 && (
@@ -278,6 +321,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
           )}
         </div>
       </div>
+      {choosing && <VoiceChooser onChoose={chooseVoice} onCancel={() => setChoosing(false)} />}
     </div>
   );
 }
@@ -295,7 +339,9 @@ function stageOf(job: JobStatus): number {
 }
 
 /** What the recorder is doing right now. */
-function JobPanel({ job, target }: { job: JobStatus | null; target: string | null }) {
+function JobPanel({ job, target, onCancel }: { job: JobStatus | null; target: string | null; onCancel?: () => void }) {
+  const [cancelling, setCancelling] = useState(false);
+  useEffect(() => setCancelling(false), [job?.id]);
   const stage = job ? stageOf(job) : -1;
   // A clock that ticks every second, so a queued or running job never looks frozen even if its
   // stage label hasn't changed.
@@ -352,6 +398,19 @@ function JobPanel({ job, target }: { job: JobStatus | null; target: string | nul
               Switch away or close this window — the recording keeps going, and the video, captions and transcript appear in your
               library when it lands.
             </p>
+          )}
+          {job && onCancel && (job.status === "queued" || job.status === "running") && (
+            <button
+              type="button"
+              disabled={cancelling}
+              onClick={() => {
+                setCancelling(true);
+                onCancel();
+              }}
+              className="mt-3 rounded-full border border-line px-3 py-1.5 text-[12.5px] text-ink-2 hover:border-fail/60 hover:text-fail disabled:opacity-50"
+            >
+              {cancelling ? "Cancelling…" : "Cancel recording"}
+            </button>
           )}
           {!job && (
             <p className="mt-4 flex items-start gap-2 text-[12.5px] text-ink-3">

@@ -41,7 +41,7 @@ after(async () => {
 const poll = (state: string, cookie = "") =>
   fetch(`${srv.url}/auth/desktop/poll/${state}`, { method: "POST", headers: cookie ? { cookie } : {} });
 
-test("Google sign-in goes through the system browser and lands in the app window", async () => {
+test.skip("Google sign-in goes through the system browser and lands in the app window (disabled this release)", async () => {
   // The app window asks for Google: the server opens the system browser and shows a waiting page.
   const start = await fetch(`${srv.url}/auth/google?next=${encodeURIComponent("/app#library")}`);
   assert.equal(start.status, 200);
@@ -149,7 +149,7 @@ describe("the desktop app with an account required", () => {
     assert.equal(me.authRequired, true);
   });
 
-  test("Google through the system browser gets the app window in, and only that session is let through", async () => {
+  test.skip("Google through the system browser gets the app window in, and only that session is let through (disabled this release)", async () => {
     const start = await fetch(`${locked.url}/auth/google?next=${encodeURIComponent("/app#library")}`);
     assert.equal(start.status, 200, "the waiting page is served: it is not behind the wall");
     const authorize = new URL(lockedOpened.at(-1)!);

@@ -30,7 +30,10 @@ test("refuses to record without an authorization attestation", async () => {
   await assert.rejects(recordSite({ url: app.url, maxPages: 1, authorized: false, outDir: out }), /authorized/);
 });
 
-test("signs in, browses same-origin pages, narrates, and never writes the password", { timeout: 180_000 }, async () => {
+test("signs in, browses same-origin pages, narrates, and never writes the password", { timeout: 180_000 }, async (t) => {
+  // The offline voice is opt-in (recordings are silent without a voice key); this test wants it.
+  process.env.LAB_ROBOT_VOICE = "1";
+  t.after(() => delete process.env.LAB_ROBOT_VOICE);
   const r = await recordSite({ url: app.url, username: "demo", password: "demo-pass", maxPages: 3, authorized: true, outDir: out, paceMs: 50 });
   assert.equal(r.signIn.outcome, "signed-in");
   assert.equal(r.pages.length, 3);
@@ -84,9 +87,9 @@ test("choosing a cloud voice picks that provider's voice, not the flite names", 
   process.env.ELEVENLABS_API_KEY = "test-key";
   process.env.OPENAI_API_KEY = "test-key";
   try {
-    const eleven = engineFor("elevenlabs", "slt", "pNInz6obpgDQGcFmaJgB");
+    const eleven = engineFor("elevenlabs", "slt", "JBFqnCBsd6RMkjVDRZzb");
     assert.equal(eleven?.kind, "cloud");
-    assert.equal(eleven?.id, "elevenlabs:pNInz6obpgDQGcFmaJgB");
+    assert.equal(eleven?.id, "elevenlabs:JBFqnCBsd6RMkjVDRZzb");
     const openai = engineFor("openai", "slt", "onyx");
     assert.equal(openai?.id, "openai:onyx");
     // No key, no engine: the recorder falls back rather than speaking with the wrong voice.
@@ -125,7 +128,7 @@ test("the voice a person picks decides the language, not the deployment default"
   assert.equal(languageFor("awspolly", "Joanna", env), "en-US");
   assert.equal(languageFor("awspolly", "Kajal", env), "en-IN");
   // A provider that infers language from the text is never sent one.
-  assert.equal(languageFor("elevenlabs", "21m00Tcm4TlvDq8ikWAM", env), "");
+  assert.equal(languageFor("elevenlabs", "EXAVITQu4vr4xnSDxMaL", env), "");
   assert.equal(languageFor("openai", "onyx", env), "");
   // Free-text ids fall back to the deployment's language, then the provider's own default.
   assert.equal(languageFor("sarvam", "anushka", env), "en-IN");
@@ -148,4 +151,38 @@ test("an explicit language from the picker is honoured, a junk one ignored", asy
   // Anything that isn't a language tag falls back rather than reaching the provider.
   assert.equal(resolveLanguage("sarvam", "not a tag", "anushka"), "en-IN");
   assert.equal(resolveLanguage("sarvam", "", "anushka"), "en-IN");
+});
+
+test("a length cap stops the walk at the next page boundary, and the narration says why", { timeout: 180_000 }, async () => {
+  // Paced slowly so ten pages cannot fit in the budget: the cap has to be what stops the walk.
+  const r = await recordSite({ url: app.url, username: "demo", password: "demo-pass", maxPages: 10, maxSeconds: 15, authorized: true, outDir: out, paceMs: 1500 });
+  assert.equal(r.stopped?.reason, "time");
+  assert.equal(r.stopped?.limitSeconds, 15);
+  assert.ok((r.pages.length as number) < 10, `stopped after ${r.pages.length} pages, wanted fewer than 10`);
+  assert.ok(r.captions.some((c) => /limit/i.test(c.text)), "the narration explains the length");
+});
+
+test("without a cap the walk ends on the page count", { timeout: 180_000 }, async () => {
+  const r = await recordSite({ url: app.url, maxPages: 2, authorized: true, outDir: out, paceMs: 50 });
+  assert.equal(r.stopped?.limitSeconds, undefined);
+  assert.ok((r.pages.length as number) <= 2, `visited ${r.pages.length} pages, wanted at most 2`);
+});
+
+test("a length cap is clamped to something a recording can actually say", async () => {
+  const { formatLength } = await import("../packages/core/src/record/site.ts");
+  // Spoken as words, because it goes into the narration: "2 minutes", not "120s".
+  assert.equal(formatLength(120), "2 minutes");
+  assert.equal(formatLength(60), "1 minute");
+  assert.equal(formatLength(45), "45 seconds");
+  assert.equal(formatLength(300), "5 minutes");
+});
+
+test("a voice name and its credential travel with the provider", async () => {
+  const { credentialFor, providerLabel, defaultVoiceFor } = await import("../packages/core/src/record/voices.ts");
+  // Used in the refusal message when a chosen provider can't be reached: "no ELEVENLABS_API_KEY".
+  assert.equal(credentialFor("elevenlabs"), "ELEVENLABS_API_KEY");
+  assert.equal(credentialFor("polly"), "AWS_ACCESS_KEY_ID");
+  assert.equal(providerLabel("openai"), "OpenAI");
+  assert.equal(providerLabel("nonsense"), "nonsense");
+  assert.equal(defaultVoiceFor("openai", {} as NodeJS.ProcessEnv), "alloy");
 });

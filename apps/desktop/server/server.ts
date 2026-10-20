@@ -7,12 +7,14 @@ import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from ".
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
 import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
 import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secret-box.ts";
-import { Worker } from "../../../packages/core/src/jobs/worker.ts";
+import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
+import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
+import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
 import { configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders } from "../../../packages/core/src/record/voice.ts";
+import { configuredCloudProviders, engineFor } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -143,10 +145,11 @@ const CREDENTIAL_KEYS: { env: string; label: string }[] = [
 ];
 
 /** Every narration provider the dashboard may select, local ones first. */
-const TTS_PROVIDERS = ["flite", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
+const TTS_PROVIDERS = ["flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
 
 const TTS_PROVIDER_LABEL: Record<string, string> = {
-  flite: "Built-in voice (local, offline)",
+  flite: "Basic offline voice (robotic, works offline)",
+  none: "No voice (captions only)",
   sarvam: "Sarvam (Indian)",
   bhashini: "Bhashini (Indian, govt)",
   custom: "Custom / Maya",
@@ -533,7 +536,25 @@ export function createApp(o: ServeOptions = {}): App {
     if (url.pathname === "/api/index") {
       const limit = clampInt(url.searchParams.get("limit"), 1, 2000, 500);
       const index = data.index(limit);
-      return json(200, { ...index, recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)) });
+      const scope = requireAuth ? (user?.id ?? "-") : null;
+      const failed = await Promise.all([store.failedJobs(scope, "record", 200), store.failedJobs(scope, "run", 200)]).then((l) => l.flat(), () => []);
+      return json(200, { ...index, recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)), failedRecordings: failed.filter((j) => canSee(j.owner)).length });
+    }
+    // Recordings that failed, for the Lab: the job's error and last stage, plus the report and
+    // evidence (screenshot, partial video, pages reached) the worker kept when it could.
+    if (url.pathname === "/api/failures" && req.method === "GET") {
+      const scope = requireAuth ? (user?.id ?? "-") : null;
+      const [jobs, runs] = await Promise.all([store.failedJobs(scope, "record", 200), store.failedJobs(scope, "run", 200)]);
+      return json(200, { failures: jobs.filter((j) => canSee(j.owner)).map((j) => failureFor(j)), runs: runs.filter((j) => canSee(j.owner)).map((j) => runFailureFor(j)) });
+    }
+    const failureFile = /^\/api\/failures\/([0-9a-f-]{36})\/(failure\.png|video\.webm)$/i.exec(url.pathname);
+    if (failureFile && (req.method === "GET" || req.method === "HEAD")) {
+      const [, id, file] = failureFile as unknown as [string, string, string];
+      const job = await store.job(id);
+      if (!job || job.kind !== "record" || !canSee(job.owner)) return json(404, { error: "not found" });
+      const abs = join(failureDir(root, id), file);
+      if (!existsSync(abs)) return json(404, { error: "not found" });
+      return streamFile(req, res, abs, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
     }
     // The recording browser's first-run download (desktop app); "unmanaged" everywhere else.
     if (url.pathname === "/api/browser" && (req.method === "GET" || req.method === "HEAD")) return json(200, browserSetup());
@@ -556,7 +577,7 @@ export function createApp(o: ServeOptions = {}): App {
         queue: await store.queueDepth().catch(() => null),
         user: publicUser(user),
         authRequired: requireAuth,
-        stagehand: Boolean(process.env.LAB_CHROME_PATH && existsSync(process.env.LAB_CHROME_PATH)),
+        stagehand: findChrome() !== null,
         liveModels: allowLiveRuns,
         providers: configuredProviders().map((p) => p.id),
         sttProviders: configuredSttProviders(),
@@ -710,7 +731,12 @@ export function createApp(o: ServeOptions = {}): App {
         const b = await readJson(req, 500_000);
         const captions = validateCaptions(b.captions);
         const voice = isVoice(b.voice) ? b.voice : "slt";
-        result = await renarrate(dir, captions, voice);
+        // Re-speak with the voice the recording was made in ("elevenlabs:<voice id>"), so fixing
+        // one line doesn't swap a natural voice for the offline one.
+        const spoke = typeof (summary as { narration?: { spoke?: unknown } }).narration?.spoke === "string" ? String((summary as { narration: { spoke: string } }).narration.spoke) : "";
+        const [spokeProvider = "", ...spokeVoice] = spoke.split(":");
+        const cloud = spokeProvider && isCloudProvider(spokeProvider) ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined) : null;
+        result = await renarrate(dir, captions, voice, cloud);
         summary.captions = captions;
       } else {
         const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");
@@ -727,6 +753,30 @@ try {
         await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
       }
       return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
+    }
+    // Delete a recording: its files (local folder, or its objects in the bucket) and its index row.
+    const deleteMatch = /^\/api\/recordings\/([\w.-]+)$/.exec(url.pathname);
+    if (deleteMatch && req.method === "DELETE") {
+      const id = deleteMatch[1]!;
+      if (id.startsWith(".")) return json(404, { error: "Recording not found." }); // never "..": this ends in a delete
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      // The files it published (worker.ts): the media names in its summary, plus recording.json.
+      const summary = (await listRecordings(user)).find((r) => r.id === id);
+      const m = (summary?.media ?? {}) as Partial<Record<"mp4" | "webm" | "video" | "audio" | "captions", string | null>>;
+      const files = [m.mp4, m.webm, m.video, m.audio, m.captions, "recording.json"].filter((f): f is string => Boolean(f));
+      try {
+        await media.remove(id, files);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        // Windows: the video is still open (playing in a tab). The index row stays, so nothing is half-deleted.
+        if (code === "EBUSY" || code === "EPERM") return json(409, { error: "The recording is in use and couldn't be deleted. Stop playing it and try again." });
+        return json(502, { error: `Couldn't delete the recording's files: ${e instanceof Error ? e.message : String(e)}` });
+      }
+      await store.deleteRecording(id);
+      capabilitiesCache.clear();
+      log.info("recording.deleted", { id, owner });
+      return json(200, { ok: true });
     }
     const sttMatch = /^\/api\/recordings\/([\w.-]+)\/captions\/stt$/.exec(url.pathname);
     if (sttMatch && req.method === "POST") {
@@ -762,20 +812,33 @@ try {
       }
     }
     if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
-      if (draining) return json(503, { error: "The server is restarting. Try again in a moment." });
-      if (o.jobsUnavailable) return json(503, { error: o.jobsUnavailable });
-      const notReady = browserNotReady();
-      if (notReady) return json(503, { error: notReady });
       const kind = url.pathname === "/api/run" ? "run" : "record";
       const b = await readJson(req);
-      const input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
-      // A cloud voice this process can't reach would silently narrate with the built-in voice, which
-      // reads as "I picked ElevenLabs and got SAPI". When we hold the worker we can say so up front,
+      // A recording turned away before it could start is still a failed recording to the person
+      // who asked: keep it, so the Lab lists it with the reason. Quotas and "already running" are
+      // not failures of the site and aren't kept.
+      const refuse = async (status: number, error: string): Promise<void> => {
+        if (kind === "record") await noteRefusal(owner, b.demo === true ? "" : String(b.url ?? ""), error, b.demo === true).catch((e) => log.warn("job.refusal_not_kept", { error: String(e) }));
+        return json(status, { error });
+      };
+      if (draining) return refuse(503, "The server is restarting. Try again in a moment.");
+      if (o.jobsUnavailable) return refuse(503, o.jobsUnavailable);
+      const notReady = browserNotReady();
+      if (notReady) return refuse(503, notReady);
+      let input: Record<string, unknown>;
+      try {
+        input = kind === "run" ? validateRun(b, allowLiveRuns) : validateRecord(b, exposed);
+      } catch (e) {
+        // An unfinished form (no URL, box not ticked) is not a failed recording; a bad address is.
+        if (e instanceof AuthError && e.status === 400) return /^(Confirm that you own|Paste the site's URL)/.test(e.message) ? json(400, { error: e.message }) : refuse(400, e.message);
+        throw e;
+      }
+      // A cloud voice this process can't reach would quietly ship with no voice, which reads as "I picked ElevenLabs and got something else". When we hold the worker we can say so up front,
       // instead of returning a video in the wrong voice minutes later.
       if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
         const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
         const env = credentialFor(input.ttsProvider);
-        throw new AuthError(400, `${id} is selected but this server has no ${env}, so the recording would be narrated by the built-in voice instead. Add the key in Settings, or pick the built-in voice.`);
+        return refuse(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the basic offline voice.`);
       }
       // A retried submit (double-click, network retry) gets the job it already created.
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;
@@ -785,6 +848,10 @@ try {
       }
       // Per-user limits, enforced atomically in the store so they hold across instances: the
       // daily quota and the active-job ceiling are single statements, not reads the caller races.
+      // Refuse "already running" before charging the daily quota: a click while a job runs used to
+      // spend one of the day's recordings on a request that was turned away. enqueueLimited below
+      // still enforces the ceiling atomically; this only keeps the common case from costing quota.
+      if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
       const perDay = kind === "record" ? LIMITS.recordingsPerDay : LIMITS.runsPerDay;
       if ((await store.hit(`quota:${kind}:${owner ?? "local"}`, 86_400_000)) > perDay) {
         throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
@@ -809,7 +876,22 @@ try {
       log.info("job.enqueued", { job: job.id, kind, owner });
       return json(202, { job: await withQueue(store, job) });
     }
-     const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
+    // Cancel a queued or running job (its owner only). The worker aborts at once when it is in this
+    // process, else at its next heartbeat; the partial recording is discarded.
+    const cancelMatch = /^\/api\/jobs\/([\w-]+)\/cancel$/.exec(url.pathname);
+    if (cancelMatch && req.method === "POST") {
+      const id = cancelMatch[1]!;
+      const job = await store.job(id);
+      if (!job || (requireAuth && job.owner !== owner)) return json(404, { error: "job not found" });
+      const cancelled = await store.cancel(id);
+      if (!cancelled) return json(409, { error: `The job already ${job.status}.`, job: await withQueue(store, job) });
+      worker?.cancel(id);
+      statusCache.delete(id);
+      capabilitiesCache.delete(user?.id ?? "__anon__");
+      log.info("job.cancelled", { job: id, owner });
+      return json(200, { job: await withQueue(store, cancelled) });
+    }
+    const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
     if (jobMatch) {
       const id = jobMatch[1]!;
       const ifNone = req.headers["if-none-match"];
@@ -829,6 +911,9 @@ try {
         statusCache.delete(id);
         return json(404, { error: "job not found" });
       }
+      // A finished job changes "recordings used today": drop this viewer's cached capabilities so
+      // the next read isn't up to 5 s stale.
+      if (job.status === "succeeded" || job.status === "failed") capabilitiesCache.delete(user?.id ?? "__anon__");
       const payload = { job: await withQueue(store, job) };
       const body = JSON.stringify(payload);
       const etag = `"${createHash("sha1").update(body).digest("hex").slice(0, 16)}"`;
@@ -1018,6 +1103,69 @@ try {
   }
 
   /** Postgres: the recordings table. Local files: recordings/*\/recording.json (CLI ones included). */
+  /** One failed recording job as the Lab shows it: the stored report when there is one. */
+  function failureFor(job: Job): FailureReport {
+    const path = join(failureDir(root, job.id), "failure.json");
+    if (existsSync(path)) {
+      try {
+        return JSON.parse(readFileSync(path, "utf8")) as FailureReport;
+      } catch {
+        /* torn write: fall back to the job row */
+      }
+    }
+    // No report: the worker died mid-job (app closed, crash) or this predates reports.
+    const error = job.error ?? "The recording failed without an error message.";
+    const input = job.input as { url?: string; demo?: boolean; refused?: boolean };
+    return {
+      ...(input.refused ? { refused: true } : {}),
+      jobId: job.id,
+      url: input.demo ? "Sample site" : String(input.url ?? ""),
+      owner: job.owner,
+      createdAt: job.createdAt,
+      failedAt: job.finishedAt ?? job.createdAt,
+      attempts: job.attempts,
+      error,
+      stage: job.progress,
+      ...explainFailure(error),
+      pages: [],
+      signIn: null,
+      skipped: [],
+      durationMs: job.startedAt && job.finishedAt ? Date.parse(job.finishedAt) - Date.parse(job.startedAt) : null,
+      files: { screenshot: null, video: null },
+    };
+  }
+
+  /**
+   * Keep a refused recording request as a failed job. The same refusal again within a couple of
+   * minutes (repeated clicks while the browser downloads) is one entry, not a pile of them.
+   */
+  async function noteRefusal(owner: string | null, url: string, error: string, demo = false): Promise<void> {
+    const recent = await store.failedJobs(owner, "record", 5);
+    const now = Date.now();
+    if (recent.some((j) => j.error === error && (j.input as { url?: unknown }).url === url && now - Date.parse(j.finishedAt ?? j.createdAt) < 2 * 60_000)) return;
+    // Only the address: never the password or anything else from the request.
+    await store.insertFailed({ kind: "record", owner, input: { url, refused: true, ...(demo ? { demo: true } : {}) } }, error);
+  }
+
+  /** A Lab agent run that never produced a result: its job row is all there is. */
+  function runFailureFor(job: Job): RunFailure {
+    const input = job.input as { agent?: string; fault?: string; task?: string; seed?: number; modelMode?: string };
+    const error = job.error ?? "The run failed without an error message.";
+    return {
+      jobId: job.id,
+      agent: String(input.agent ?? ""),
+      fault: String(input.fault ?? "none"),
+      task: String(input.task ?? "create-lead"),
+      seed: Number(input.seed ?? 0),
+      modelMode: input.modelMode ?? null,
+      createdAt: job.createdAt,
+      failedAt: job.finishedAt ?? job.createdAt,
+      attempts: job.attempts,
+      error,
+      ...explainFailure(error),
+    };
+  }
+
   async function listRecordings(user: User | null): Promise<RecordingSummary[]> {
     if (store.kind === "file") return data.recordings();
     const rows = await store.recordings(requireAuth ? (user?.id ?? "-") : null, 100);

@@ -6,6 +6,7 @@ interface Setup {
   state: "unmanaged" | "ready" | "installing" | "failed";
   item: string | null;
   percent: number | null;
+  doneMb?: number | null;
   totalMb: number | null;
   error: string | null;
 }
@@ -66,8 +67,11 @@ export function BrowserSetup() {
 
   const percent = setup.percent ?? 0;
   // The installer fetches a few files in turn; name the current one so the bar restarting makes sense.
-  const size = setup.totalMb ? `${setup.totalMb < 1 ? setup.totalMb.toFixed(1) : Math.round(setup.totalMb)} MB` : null;
-  const current = setup.item ? `${setup.item}${size ? ` · ${size}` : ""}` : "Starting the download";
+  const mb = (n: number) => (n < 1 ? n.toFixed(1) : String(Math.round(n)));
+  const size = setup.totalMb ? `${setup.doneMb != null ? `${mb(setup.doneMb)} of ` : ""}${mb(setup.totalMb)} MB` : null;
+  // Unpacking the archive takes a while after the last byte lands; say so rather than sit at 100%.
+  const unpacking = setup.totalMb != null && setup.doneMb != null && setup.doneMb >= setup.totalMb && setup.totalMb > 5;
+  const current = setup.item ? `${setup.item}${unpacking ? " · unpacking" : size ? ` · ${size}` : ""}` : "Starting the download";
 
   return (
     <div
@@ -79,7 +83,7 @@ export function BrowserSetup() {
         <>
           <p className="text-[13.5px] font-medium text-ink">Setting up the recording browser</p>
           <p className="mt-1 text-[12.5px] text-ink-2">
-            A one-time download of about 250 MB. You can look around meanwhile; recording starts working when it finishes.
+            A one-time download of about 100 MB. You can look around meanwhile; recording starts working when it finishes.
           </p>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-panel-3" aria-hidden>
             <div className="h-full rounded-full bg-signal transition-[width] duration-500" style={{ width: `${percent}%` }} />

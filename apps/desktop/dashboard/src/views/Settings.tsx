@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { VoicePicker } from "../components/Studio.tsx";
+import { LengthPicker, VoicePicker, lengthLabel } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
 import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
 import { Updates } from "../components/Updates.tsx";
@@ -74,7 +74,7 @@ export function Settings({ me }: { me: Me | null }) {
                 onLanguage={(l) => setPrefs({ ttsLanguages: { ...prefs.ttsLanguages, [prefs.ttsProvider]: l } })}
                 localVoicePicker={<VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />}
               />
-              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. The default is the built-in voice: Windows speech on Windows, flite elsewhere.</p>
+              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. Without one, use the basic offline voice (robotic) or no voice at all.</p>
             </div>
           </div>
           <label className="grid gap-1.5">
@@ -88,6 +88,11 @@ export function Settings({ me }: { me: Me | null }) {
               className="max-w-md"
             />
           </label>
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">Length · {lengthLabel(prefs.maxSeconds)}</span>
+            <LengthPicker value={prefs.maxSeconds} onChange={(maxSeconds) => setPrefs({ maxSeconds })} />
+            <p className="text-[12.5px] text-ink-3">How long a new walkthrough may run before it stops at the next whole page.</p>
+          </div>
           <label className="flex items-start gap-2 text-[13px] text-ink-2">
             <input type="checkbox" className="mt-0.5" checked={prefs.captions} onChange={(e) => setPrefs({ captions: e.target.checked })} />
             <span>Show captions on the video player by default.</span>

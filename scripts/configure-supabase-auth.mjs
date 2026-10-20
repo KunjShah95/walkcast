@@ -102,7 +102,10 @@ if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.SMTP_SENDER) {
     smtp_sender_name: env.SMTP_SENDER_NAME ?? "Walkcast",
   });
 } else if (!current.smtp_host) {
-  console.log("No custom SMTP configured: Supabase will only email your team members. Set SMTP_* to fix.");
+  // No custom SMTP: Supabase's built-in mailer only reaches your team. Auto-confirm so new
+  // accounts can sign in without a confirmation email nobody will receive.
+  Object.assign(patch, { mailer_autoconfirm: true });
+  console.log("No custom SMTP configured: enabling mailer_autoconfirm so sign-up needs no confirmation email.");
 }
 const res = await fetch(api, { method: "PATCH", headers, body: JSON.stringify(patch) });
 if (!res.ok) {

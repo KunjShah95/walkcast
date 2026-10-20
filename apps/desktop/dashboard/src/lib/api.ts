@@ -143,25 +143,37 @@ export interface JobStatus {
 async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<string> {
   const key = crypto.randomUUID();
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
-  const body = (await res.json()) as { job?: JobStatus; error?: string };
+  // A proxy's HTML error page is not JSON: fall back to the status rather than "Unexpected token <".
+  const body = (await res.json().catch(() => ({}))) as { job?: JobStatus; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.job) throw new Error(body.error ?? `Request failed (${res.status}).`);
   let job = body.job;
   onProgress?.(job);
   for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
     await new Promise((r) => setTimeout(r, delay));
-    const poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
+    // The job runs on the server whatever happens to this request: a dropped connection (the app
+    // server restarting, Wi-Fi blinking) is a reason to ask again, not to report the job failed.
+    let poll: Response;
+    try {
+      poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
+    } catch {
+      continue;
+    }
     if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
     // 404/410 are permanent, not transient: the job belongs to a different account (the server
     // hides it as 404) or the queue has forgotten it. Only the 5xx/network cases are worth
-    // retrying — treating 404 as transient spun the recorder forever with no error.
+    // retrying — treating 404 as transient spun the recorder forever with no error. Not a
+    // sign-in problem, so not SignInRequired (that opens the create-account prompt).
     if (poll.status === 404 || poll.status === 410) {
-      throw new SignInRequired("This job is no longer available. It belongs to a different account, or the server restarted.");
+      throw new Error("This job is no longer available. It belongs to a different account, or the server restarted.");
     }
     if (!poll.ok) continue; // transient (deploy, network); keep waiting
-    job = ((await poll.json()) as { job: JobStatus }).job;
+    const next = (await poll.json().catch(() => null)) as { job?: JobStatus } | null;
+    if (!next?.job) continue;
+    job = next.job;
     onProgress?.(job);
   }
+  if (job.status === "cancelled") throw new JobCancelled("Cancelled.");
   if (job.status !== "succeeded" || !job.result?.dir) throw new Error(job.error ?? `The job ${job.status}.`);
   return job.result.dir;
 }
@@ -182,13 +194,25 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
 }
 
 export class SignInRequired extends Error {}
+/** The person stopped the job themselves: not a failure to report. */
+export class JobCancelled extends Error {}
+
+/** Stop a queued or running job. */
+export async function cancelJob(id: string): Promise<void> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  // 409: it ended on its own first, which the poll loop picks up.
+  if (!res.ok && res.status !== 409) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Could not cancel (${res.status}).`);
+  }
+}
 
 export interface Me {
   user: { email: string; name?: string; google?: boolean; openrouter?: boolean; chatgpt?: boolean } | null;
@@ -254,6 +278,14 @@ export function renarrate(id: string, captions: { start: number; end: number; te
 /** Replace the narration with the user's own recording. */
 export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSummary> {
   return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
+}
+
+/** Delete a recording and its files. */
+export async function deleteRecording(id: string): Promise<void> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not delete the recording (${res.status}).`);
 }
 
 /** URL for a recording's transcript export in the requested format. */

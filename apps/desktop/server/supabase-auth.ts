@@ -243,8 +243,12 @@ export class SupabaseAuth extends Sessions {
       const session = await this.call<SupabaseSession>("POST", "/token?grant_type=pkce", { auth_code: code, code_verifier: flow.verifier }).catch((e: unknown) => {
         throw e instanceof SupabaseError && e.status < 500 ? new AuthError(400, "This sign-in link has expired or was already used. Please try again.") : e;
       });
-      flow.user = await this.adopt(session);
-      return { user: flow.user, next: flow.next };
+      const user = await this.adopt(session);
+      flow.user = user;
+      // No polling claims this one, so retire it now: a second exchange (replay, or the browser
+      // tab arriving later) must not mint a second session.
+      this.desktopFlows.delete(state);
+      return { user, next: flow.next };
     } catch (e) {
       flow.error = e instanceof AuthError ? e.message : "Sign-in failed. Please try again.";
       this.desktopFlows.delete(state);

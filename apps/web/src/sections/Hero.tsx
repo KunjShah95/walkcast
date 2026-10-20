@@ -2,7 +2,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AudioLines, Captions, FileText, Film, Globe, Link, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BrandMark, DownloadButton, Tile, WindowBar } from "../ui.tsx";
-import { WINDOWS_MSI_URL } from "../site.ts";
 
 interface Cue {
   start: number;
@@ -56,12 +55,12 @@ export function Nav() {
           walkcast
         </a>
         <nav className="nav-links" aria-label="Main">
+          <a href="/#what">How it works</a>
           <a href="/#features">Features</a>
-          <a href="/#login">Logins</a>
           <a href="/#uses">Use cases</a>
           <a href="/#pricing">Pricing</a>
-          <a href="/#download">Download</a>
           <a href="/#faq">FAQ</a>
+          <a href="/#agents">Walkcast Lab</a>
         </nav>
         <AnimatePresence mode="popLayout" initial={false}>
           {past ? (
@@ -84,18 +83,12 @@ const STRIP = [
   [Film, "WebM"],
   [Captions, "WebVTT captions"],
   [FileText, "Transcript"],
-  [AudioLines, "WAV narration"],
+  [AudioLines, "Optional voice-over"],
   [Globe, "Page list"],
 ] as const;
 
-/** A citation chip: points a claim at the line of the real recording that proves it. */
-function Ex({ n, at, seek }: { n: number; at: number; seek: (i: number) => void }) {
-  return (
-    <button type="button" className="ex" onClick={() => seek(at)} aria-label={`Play exhibit ${n} in the recording`}>
-      EX {String(n).padStart(2, "0")}
-    </button>
-  );
-}
+/** What people make with it: says who it's for in the first screen, without a paragraph. */
+const FOR = ["Product demos", "Onboarding videos", "Help-article clips", "Client handovers"];
 
 export function Hero() {
   const still = useReducedMotion();
@@ -109,16 +102,6 @@ export function Hero() {
     const el = list.current?.children[active] as HTMLElement | undefined;
     if (el && list.current) list.current.scrollTo({ top: el.offsetTop - 8, behavior: "smooth" });
   }, [active]);
-
-  /** Seek the demo to a narration line and play it: what the EX citations in the lede do. */
-  const seek = (i: number) => {
-    const v = video.current;
-    const c = cues[i];
-    if (!v) return;
-    document.getElementById("demo")?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
-    if (c) v.currentTime = c.start + 0.01;
-    v.play().catch(() => {});
-  };
 
   const line = (i: number) => ({
     initial: still ? false : { opacity: 0, y: 28, filter: "blur(10px)" },
@@ -134,21 +117,29 @@ export function Hero() {
             Paste a <Tile icon={Link} tone="ink" tilt={-6} /> link.
           </motion.span>
           <motion.span className="line" {...line(1)}>
-            Get it <Tile icon={Play} tone="rec" tilt={5} fill /> narrated.
+            Get a <Tile icon={Play} tone="rec" tilt={5} fill /> <mark className="hl">video tour</mark> of your site.
           </motion.span>
           <motion.span className="line dim" {...line(2)}>
-            No mic. No <span className="strike">editor</span>.
+            No camera. No editing.
           </motion.span>
         </h1>
         <motion.p className="lede" {...line(3)}>
-          A real browser signs in <Ex n={1} at={0} seek={seek} />, walks your pages <Ex n={5} at={4} seek={seek} /> and hands back an MP4 with a spoken
-          voice-over, captions and a transcript <Ex n={13} at={12} seek={seek} />. Every claim here cites the recording below.
+          Walkcast is a free desktop app. A real browser opens your site, signs in, clicks through your pages and records
+          the whole visit. You get an MP4 with captions, a transcript and an optional voice-over, ready to share.
         </motion.p>
-        <motion.div className="actions" {...line(4)}>
+        <motion.ul className="for-chips" aria-label="What people make with it" {...line(4)}>
+          {FOR.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </motion.ul>
+        <motion.div className="actions" {...line(5)}>
           <DownloadButton big />
+          <a className="pill ghost big" href="#demo">
+            Watch a real recording
+          </a>
         </motion.div>
-        <motion.p className="fineprint" {...line(5)}>
-          Free and open source. Windows 10 or 11, 64-bit. Also as an <a href={WINDOWS_MSI_URL}>.msi installer</a>.
+        <motion.p className="fineprint" {...line(6)}>
+          Free and open source. Windows, macOS (Apple Silicon) and Linux. <a href="/#download">All downloads</a>.
         </motion.p>
 
         <motion.div
@@ -158,7 +149,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 1.1, ease: [0.2, 0.7, 0.2, 1], delay: 0.55 }}
         >
-          <span className="exhibit-tab mono">Exhibit A · real output, unedited</span>
+          <span className="exhibit-tab mono">A real recording, unedited · press play</span>
           <div className="app">
             <WindowBar title={<span className="mono">agentic-crm-henna.vercel.app</span>}>
               <span className="live">REC</span>
@@ -179,9 +170,9 @@ export function Hero() {
                   <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="Narration" default />
                 </video>
               </figure>
-              <aside className="side" aria-label="Narration transcript">
+              <aside className="side" aria-label="Visit log">
                 <div className="side-head">
-                  <span className="side-title"><BrandMark size={16} /> Narration</span>
+                  <span className="side-title"><BrandMark size={16} /> Visit log</span>
                   <span className="mono">click to seek</span>
                 </div>
                 <ol className="cues" ref={list}>

@@ -23,7 +23,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ISSUES_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { AppleIcon, BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
 import { FAQ, HOWTO } from "../content.ts";
 
@@ -111,7 +111,7 @@ export function Bento() {
     <section className="sec" id="studio">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow n={4}>The app</Eyebrow>
+          <Eyebrow n={5}>The app</Eyebrow>
           <h2>
             Everything a <Tile icon={Clapperboard} tone="ink" tilt={-6} /> walkthrough needs.
             <br />
@@ -121,7 +121,7 @@ export function Bento() {
         <div className="bento">
           <Card className="b-pages">
             <h3>Walks the whole site in one go.</h3>
-            <p>Follows links on the same site, page by page, and narrates each one.</p>
+            <p>Visits your site the way a first-time user would, page by page, and records all of it.</p>
             <div className="path-chips">
               {["/", "/product", "/pricing", "/contact", "/login", "/signup", "/dashboard", "/leads"].map((p, i) => (
                 <motion.span
@@ -159,13 +159,13 @@ export function Bento() {
               ))}
             </div>
             <h3>files per run</h3>
-            <p>MP4, WebM, captions, transcript and the narration audio.</p>
+            <p>MP4, WebM, captions, a transcript and the page list.</p>
           </Card>
           <Card className="b-dark" delay={0.15}>
             <span className="rec-tag">REC</span>
             <div className="huge">HD</div>
-            <h3>Record and narrate</h3>
-            <p>H.264 video, AAC voice, captions on.</p>
+            <h3>The whole visit</h3>
+            <p>H.264 video with captions on, ready to share.</p>
           </Card>
           <Card className="b-setup">
             <h3>Works with your setup.</h3>
@@ -174,7 +174,7 @@ export function Bento() {
               {[
                 [<WindowsIcon key="w" />, "Windows 10 / 11", true],
                 [<AppWindow key="c" size={15} />, "Chromium", true],
-                [<AudioLines key="f" size={15} />, "ffmpeg voice", true],
+                [<Film key="f" size={15} />, "ffmpeg encoder", true],
                 [<GithubIcon key="g" />, "Open source", true],
                 [<Lock key="l" size={15} />, "Optional account", false],
               ].map(([icon, label, on]) => (
@@ -189,8 +189,8 @@ export function Bento() {
           <Card className="b-voice" delay={0.05}>
             <span className="soft-ic"><AudioLines size={18} /></span>
             <Wave />
-            <h3>A clear voice</h3>
-            <p>Four built-in voices. No microphone, no retakes.</p>
+            <h3>A voice, if you want one</h3>
+            <p>Pick it before your first recording: your own ElevenLabs or OpenAI key, a basic offline voice, or captions only.</p>
           </Card>
           <Card className="b-safe" delay={0.1}>
             <span className="soft-ic"><ShieldCheck size={18} /></span>
@@ -248,7 +248,7 @@ const USES: { title: string; text: string; art: ReactNode }[] = [
   },
   {
     title: "Product demos",
-    text: "A narrated tour for sales calls, from one link.",
+    text: "A full product tour for sales calls, from one link.",
     art: (
       <>
         <div className="bw" />
@@ -455,7 +455,7 @@ const INSTALLERS = [
     name: "Windows installer",
     file: `walkcast_${VERSION}_x64-setup.exe`,
     href: WINDOWS_EXE_URL,
-    size: "about 35 MB",
+    size: "about 56 MB",
     badge: "Recommended",
     text: "A guided setup that installs for your user account. No admin rights needed.",
     dark: true,
@@ -464,7 +464,7 @@ const INSTALLERS = [
     name: "Windows MSI package",
     file: `walkcast_${VERSION}_x64_en-US.msi`,
     href: WINDOWS_MSI_URL,
-    size: "about 58 MB",
+    size: "about 87 MB",
     badge: "For IT",
     text: "Installs for every user on the PC. Use it for managed rollouts like Intune or Group Policy.",
     dark: false,
@@ -473,7 +473,7 @@ const INSTALLERS = [
     name: "macOS disk image",
     file: `walkcast_${VERSION}_aarch64.dmg`,
     href: MACOS_DMG_URL,
-    size: "about 40 MB",
+    size: "about 78 MB",
     badge: "Apple Silicon",
     text: "Drag Walkcast into Applications. Runs on macOS 12 or later, Apple Silicon.",
     dark: false,
@@ -482,7 +482,7 @@ const INSTALLERS = [
     name: "Linux AppImage",
     file: `walkcast_${VERSION}_amd64.AppImage`,
     href: LINUX_APPIMAGE_URL,
-    size: "about 45 MB",
+    size: "about 161 MB",
     badge: "Any distro",
     text: "Make it executable and run it. No install step; works on most x86_64 Linux distributions.",
     dark: false,
@@ -491,36 +491,30 @@ const INSTALLERS = [
 
 const STEPS = HOWTO;
 
-/** Packaged installers ship for Windows, macOS and Linux. */
-function useNotWindows() {
-  const [other, setOther] = useState<string | null>(null);
-  useEffect(() => {
-    const ua = navigator.userAgent;
-    if (/Windows/i.test(ua)) return;
-    if (/Android|iPhone|iPad/i.test(ua)) setOther("a phone");
-    else if (/Mac/i.test(ua)) setOther("macOS");
-    else if (/Linux/i.test(ua)) setOther("Linux");
-  }, []);
-  return other;
+/** Installers ship for Windows, macOS and Linux; only a phone can't run Walkcast. */
+function useOnPhone() {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => setPhone(/Android|iPhone|iPad/i.test(navigator.userAgent)), []);
+  return phone;
 }
 
 export function DownloadSection() {
-  const other = useNotWindows();
+  const phone = useOnPhone();
   return (
     <section className="sec" id="download">
       <div className="wrap">
         <Reveal className="sec-head center">
-          <Eyebrow n={5}>Download</Eyebrow>
+          <Eyebrow n={7}>Download</Eyebrow>
           <h2>
             Get Walkcast for <Tile icon={AppWindow} tone="blue" tilt={-6} /> Windows, macOS, or Linux.
             <br />
             <span className="dim">Free, <Tile icon={Gift} tone="green" tilt={5} /> one click.</span>
           </h2>
           <p className="lede">Version {VERSION}. Windows 10/11 (x64), macOS 12+ (Apple Silicon), and most x86_64 Linux distributions.</p>
-          {other && (
+          {phone && (
             <p className="dl-other">
-              You seem to be on {other}. Pick the matching installer above, or{" "}
-              <a href={`${REPO_URL}#quick-start`}>run Walkcast from source</a>.
+              Walkcast is a desktop app: it runs a real browser on your computer. Open this page on a Windows PC, a Mac or a Linux
+              machine to install it.
             </p>
           )}
         </Reveal>
@@ -539,7 +533,7 @@ export function DownloadSection() {
               </div>
               <motion.a className={`pill big wide ${d.dark ? "" : "solid"}`} href={d.href} whileTap={{ scale: 0.97 }}>
                 <Download size={18} strokeWidth={2.2} />
-                Download {d.file.endsWith(".exe") ? ".exe" : ".msi"}
+                Download .{d.file.split(".").pop()}
               </motion.a>
             </Reveal>
           ))}
@@ -557,7 +551,7 @@ export function DownloadSection() {
           <span className="mono">Windows 10 / 11 · x64 · v{VERSION}</span>
           <span className="dl-links">
             <a href={RELEASES_URL}>All releases and notes</a>
-            <a href={`${REPO_URL}#quick-start`}>macOS and Linux: run from source</a>
+            <a href={`${REPO_URL}#quick-start`}>Build from source</a>
           </span>
         </Reveal>
       </div>
@@ -571,7 +565,7 @@ const HUB = [
   { label: "walkthrough.mp4", meta: "1:11 · H.264", icon: Film, color: "#c0321c", side: "l", y: 0.28 },
   { label: "captions.vtt", meta: "13 lines", icon: Captions, color: "#9c5700", side: "l", y: 0.72 },
   { label: "transcript.txt", meta: "6 pages", icon: FileText, color: "#2d4f73", side: "r", y: 0.28 },
-  { label: "narration.wav", meta: "voice · slt", icon: AudioLines, color: "#2c6a3d", side: "r", y: 0.72 },
+  { label: "narration.wav", meta: "optional voice", icon: AudioLines, color: "#2c6a3d", side: "r", y: 0.72 },
 ] as const;
 
 export function Closing() {
@@ -602,7 +596,7 @@ export function Closing() {
           <h2>
             Your site has <Tile icon={AppWindow} tone="ink" tilt={-6} /> pages.
             <br />
-            <span className="dim">Now it has a <Tile icon={AudioLines} tone="rec" tilt={5} /> voice.</span>
+            <span className="dim">Now it has a <Tile icon={Play} tone="rec" tilt={5} fill /> video tour.</span>
           </h2>
           <div ref={ref} className="hub" style={{ height: H }}>
             <svg width={w} height={H} aria-hidden="true">
@@ -640,7 +634,7 @@ export function Closing() {
             })}
           </div>
           <DownloadButton big />
-          <p className="fineprint">Free. Windows 10 or 11, 64-bit. Version {VERSION}.</p>
+          <p className="fineprint">Free. Windows, macOS (Apple Silicon) and Linux. Version {VERSION}.</p>
         </Reveal>
       </div>
     </section>
@@ -656,16 +650,21 @@ export function Footer() {
         <div className="foot">
           <div>
             <a className="brand" href="/#top"><BrandMark />walkcast</a>
-            <p>Narrated video walkthroughs of any website, made on your Windows PC.</p>
+            <p>
+              A free desktop app that opens your website in a real browser, signs in, walks your pages and records
+              the whole visit as a video.
+            </p>
             <DownloadButton />
             <span className="ver mono"><a href={RELEASES_URL}>v{VERSION}</a> · Windows 10/11 · x64</span>
           </div>
           <div>
             <h4>Product</h4>
             <ul>
+              <li><a href="/#what">How it works</a></li>
               <li><a href="/#features">Features</a></li>
               <li><a href="/#login">Logins</a></li>
               <li><a href="/#studio">The app</a></li>
+              <li><a href="/#agents">Walkcast Lab</a></li>
               <li><a href="/#uses">Use cases</a></li>
               <li><a href="/#pricing">Pricing</a></li>
               <li><a href="/#faq">FAQ</a></li>
@@ -696,7 +695,7 @@ export function Footer() {
             <h4>Project</h4>
             <ul>
               <li><a href={REPO_URL}>Source on GitHub</a></li>
-              <li><a href={`${REPO_URL}#walkcast-lab`}>Walkcast Lab</a></li>
+              <li><a href={LAB_URL}>Walkcast Lab</a></li>
               <li><a href={ISSUES_URL}>Issues</a></li>
               <li><a href={LICENSE_URL}>MIT License</a></li>
             </ul>

@@ -1,8 +1,8 @@
 import { Check, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { AUTHOR, FAQ, HOWTO, MORE_FAQ, ROUTES, UPDATED } from "../content.ts";
-import { RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { DownloadButton, WindowsIcon } from "../ui.tsx";
+import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { AppleIcon, DownloadButton, LinuxIcon, WindowsIcon } from "../ui.tsx";
 
 /**
  * The documents beside the landing page. Each answers one question completely, in plain HTML
@@ -28,7 +28,7 @@ function Doc({ path, eyebrow, children }: { path: string; eyebrow: string; child
         <aside className="doc-cta">
           <div>
             <b>Make your first walkthrough</b>
-            <p>Free for Windows 10 and 11. Version {VERSION}.</p>
+            <p>Free for Windows, Mac and Linux. Version {VERSION}.</p>
           </div>
           <DownloadButton />
         </aside>
@@ -226,28 +226,49 @@ export function DownloadPage() {
   return (
     <Doc path="/download" eyebrow="Download">
       <h1>
-        Download Walkcast for Windows. <span className="dim">Free, version {VERSION}.</span>
+        Download Walkcast. <span className="dim">Free, version {VERSION}.</span>
       </h1>
       <div className="dl-row">
         <a className="dl-tile" href={WINDOWS_EXE_URL}>
           <WindowsIcon width={22} height={22} />
           <span>
             <b>Windows installer (.exe)</b>
-            <small>Recommended · installs for your account, no admin rights · about 61 MB</small>
+            <small>Recommended · installs for your account, no admin rights · about 56 MB</small>
           </span>
         </a>
         <a className="dl-tile" href={WINDOWS_MSI_URL}>
           <WindowsIcon width={22} height={22} />
           <span>
             <b>Windows package (.msi)</b>
-            <small>For IT: installs for every user · about 95 MB</small>
+            <small>For IT: installs for every user · about 87 MB</small>
+          </span>
+        </a>
+        <a className="dl-tile" href={MACOS_DMG_URL}>
+          <AppleIcon width={22} height={22} />
+          <span>
+            <b>macOS disk image (.dmg)</b>
+            <small>Apple Silicon, macOS 12 or later · about 78 MB</small>
+          </span>
+        </a>
+        <a className="dl-tile" href={LINUX_APPIMAGE_URL}>
+          <LinuxIcon width={22} height={22} />
+          <span>
+            <b>Linux AppImage</b>
+            <small>Most x86_64 distributions, no install step · about 161 MB</small>
+          </span>
+        </a>
+        <a className="dl-tile" href={LINUX_DEB_URL}>
+          <LinuxIcon width={22} height={22} />
+          <span>
+            <b>Linux package (.deb)</b>
+            <small>Debian, Ubuntu and derivatives · about 97 MB</small>
           </span>
         </a>
       </div>
 
       <h2>Requirements</h2>
       <ul>
-        <li>Windows 10 or 11, 64-bit.</li>
+        <li>Windows 10 or 11 (64-bit), macOS 12+ on Apple Silicon, or a 64-bit Linux distribution.</li>
         <li>About 600 MB of disk: the app, plus the recording browser (Chromium) it downloads once on first launch.</li>
         <li>An internet connection to reach the sites you record. Everything else runs locally; ffmpeg and the voices are included.</li>
       </ul>
@@ -264,7 +285,10 @@ export function DownloadPage() {
 
       <h2>macOS and Linux</h2>
       <p>
-        There is no packaged build yet. Run it from source with Node.js 22, Rust and ffmpeg: see the <a href={`${REPO_URL}#quick-start`}>README</a>.
+        The Mac build is not notarized yet, so macOS blocks the first launch. Right-click Walkcast in Applications and choose <strong>Open</strong>; on
+        macOS 15 or later, open it once, then go to System Settings → Privacy &amp; Security and choose <strong>Open Anyway</strong>. On Linux, make the
+        AppImage executable (<code>chmod +x</code>) and run it, or install the .deb. You can also run Walkcast from source with Node.js 22, Rust and
+        ffmpeg: see the <a href={`${REPO_URL}#quick-start`}>README</a>.
       </p>
     </Doc>
   );

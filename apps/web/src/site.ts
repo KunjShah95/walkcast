@@ -14,3 +14,5 @@ export const LINUX_APPIMAGE_URL = `${RELEASES_URL}/latest/download/walkcast_${VE
 export const LINUX_DEB_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_amd64.deb`;
 export const ISSUES_URL = `${REPO_URL}/issues`;
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+/** The Walkcast Lab chapter of the README: browser-agent regression testing. */
+export const LAB_URL = `${REPO_URL}#walkcast-lab`;

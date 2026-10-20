@@ -1,6 +1,6 @@
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, rmSync } from "node:fs";
 import { extname, join } from "node:path";
-import { presignGet, putObject, type S3Config } from "./s3.ts";
+import { deleteObject, presignGet, putObject, type S3Config } from "./s3.ts";
 
 /**
  * Where recording media lives. Local disk (recordings/<id>/) by default; S3-compatible object
@@ -20,6 +20,13 @@ export interface MediaStore {
   publish(id: string, localDir: string, files: string[]): Promise<void>;
   /** A local file to stream, or a URL to redirect to; null when it doesn't exist. */
   locate(id: string, file: string): Promise<{ path: string } | { redirect: string } | null>;
+  /** Remove a recording's files (`files`: the names it published; local storage removes the folder). */
+  remove(id: string, files: string[]): Promise<void>;
+}
+
+/** Recording ids and file names are single path segments; anything else is refused. */
+function safeSegment(s: string): boolean {
+  return /^[\w.-]+$/.test(s) && !s.includes("..") && s !== ".";
 }
 
 const MEDIA_TYPES: Record<string, string> = {
@@ -34,6 +41,11 @@ export class LocalMedia implements MediaStore {
   readonly kind = "local" as const;
   constructor(readonly dir: string) {}
   async publish(): Promise<void> {}
+  async remove(id: string): Promise<void> {
+    if (!safeSegment(id)) throw new Error("Bad recording id.");
+    // Retries cover Windows briefly holding a file a player just closed.
+    rmSync(join(this.dir, id), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  }
   async locate(id: string, file: string) {
     if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file) || id === "." || id === ".." || file === "." || file === ".." || id.includes("..") || file.includes("..")) return null;
     const path = join(this.dir, id, file);
@@ -93,6 +105,12 @@ export class S3Media implements MediaStore {
     if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(file) || id === "." || id === ".." || file === "." || file === ".." || id.includes("..") || file.includes("..")) return null;
     // Short-lived: long enough to watch a recording, short enough that a leaked link expires.
     return { redirect: presignGet(await this.config(), this.key(id, file), 15 * 60) };
+  }
+
+  async remove(id: string, files: string[]): Promise<void> {
+    if (!safeSegment(id)) throw new Error("Bad recording id.");
+    const cfg = await this.config();
+    for (const file of new Set(files.filter(safeSegment))) await deleteObject(cfg, this.key(id, file));
   }
 
   private key(id: string, file: string): string {

@@ -17,6 +17,7 @@ import { RunView } from "./views/RunView.tsx";
 import { Runs } from "./views/Runs.tsx";
 import { Compare } from "./views/Compare.tsx";
 import { FaultReplay } from "./views/FaultReplay.tsx";
+import { Failures } from "./views/Failures.tsx";
 import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
@@ -31,6 +32,7 @@ export type Route =
   | { view: "settings" }
   | { view: "schedules" }
   | { view: "runs" }
+  | { view: "failures" }
   | { view: "fixtures" }
   | { view: "experiments" }
   | { view: "run"; dir: string }
@@ -50,7 +52,7 @@ function parse(hash: string): Route {
   // `#simulator?scenario=…` picks a scenario; the query is read by the view itself.
   const bare = h.split("?")[0] ?? h;
   if (h === "mobile") return { view: "mobile" };
-  if (bare === "runs" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
+  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
     return { view: bare } as Route;
   return { view: "dashboard" };
 }
@@ -77,6 +79,7 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
     name: "Lab",
     items: [
       { view: "runs", label: "Runs", count: (i) => i.runs.length },
+      { view: "failures", label: "Failures", count: (i) => i.failedRecordings ?? 0 },
       { view: "fixtures", label: "Fixtures", count: (i) => i.fixtures.length },
       { view: "experiments", label: "Experiments", count: (i) => i.experiments.length },
       { view: "simulator", label: "Fault replay" },
@@ -91,6 +94,7 @@ const TITLES: Record<Route["view"], string> = {
   settings: "Settings",
   schedules: "Schedules",
   runs: "Runs",
+  failures: "Failures",
   run: "Run",
   compare: "Compare",
   simulator: "Fault replay",
@@ -281,6 +285,7 @@ export function App() {
                 {!index && !error && <Loading />}
                 {index && route.view === "dashboard" && <Dashboard index={index} me={me} go={go} />}
                 {index && route.view === "runs" && <Runs index={index} go={go} />}
+                {index && route.view === "failures" && <Failures go={go} />}
                 {index && route.view === "fixtures" && <Fixtures index={index} go={go} />}
                 {index && route.view === "experiments" && <Experiments index={index} go={go} />}
                 {index && route.view === "run" && <RunView dir={route.dir} index={index} go={go} />}
@@ -468,12 +473,10 @@ function authNext(): string {
 /** The mark: a play button with a record light. */
 function Mark() {
   return (
-    <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden>
-      <rect width="64" height="64" rx="16" fill="var(--signal-strong)" />
-      <path d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" opacity=".5" />
-      <path d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff" />
-      <circle cx="48" cy="16" r="7.4" fill="#fff" />
-      <circle cx="48" cy="16" r="5" fill="var(--rec)" />
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
+      <rect x="0.5" y="0.5" width="25" height="25" rx="7.5" fill="var(--signal-strong)" />
+      <path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff" />
+      <circle cx="20.4" cy="5.6" r="2.6" fill="var(--rec)" stroke="var(--panel)" strokeWidth="1.2" />
     </svg>
   );
 }

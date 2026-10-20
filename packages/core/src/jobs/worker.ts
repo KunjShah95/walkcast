@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { unregisterSecret } from "../capture/secrets.ts";
+import { scrub, scrubText, unregisterSecret } from "../capture/secrets.ts";
 import { type TaskId, isTaskId, normalizeScenario } from "../app/faults.ts";
 import { log } from "../ops/log.ts";
 import type { MediaStore } from "../media/store.ts";
 import type { Voice } from "../record/media.ts";
 import { FFMPEG_TIMEOUT_MS } from "../record/media.ts";
 import { RecordError, recordSite } from "../record/site.ts";
+import { type FailureEvidence, type FailureReport, evidenceOf, explainFailure } from "../record/failure.ts";
 import { closeWarmBrowser } from "../record/browser.ts";
 import { runOnce } from "../lab/runner.ts";
 import { CREDENTIALS, startApp } from "../app/server.ts";
@@ -58,10 +59,16 @@ export function pagesAsked(maxPages: unknown): number {
  * The wall-clock ceiling for one job. An explicit cap — the `deadlineMs` option or
  * `LAB_JOB_DEADLINE_MS` — wins outright, so a fleet can still impose its own hard limit.
  */
-export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null): number {
+export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null): number {
   if (explicit !== null) return explicit;
   if (kind !== "record") return LAB_CEILING_MS;
-  return RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
+  const pageBased = RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
+  // A requested recording length is itself a budget (the walk runs that long, then narration and
+  // the libx264 encode run on top), so the job ceiling must not be shorter than it — otherwise a
+  // long recording gets killed mid-walk even though the user asked for it.
+  const ms = Number(maxSeconds);
+  const lengthBased = Number.isFinite(ms) && ms > 0 ? ms * 1000 + RECORD_BASE_MS : 0;
+  return Math.max(pageBased, lengthBased);
 }
 
 export interface WorkerOptions {
@@ -127,6 +134,10 @@ export class Worker {
   }
 
   start(): this {
+    if (!this.loop) {
+      if (this.o.media.kind === "local") sweepPartialRecordings(join(this.o.root, "recordings"));
+      sweepOldFailures(join(this.o.root, "failures"));
+    }
     this.loop ??= this.run();
     return this;
   }
@@ -134,6 +145,11 @@ export class Worker {
   /** Look for work now instead of at the next poll (after an enqueue in the same process). */
   poke(): void {
     this.wake?.();
+  }
+
+  /** Abort the job now if this worker runs it (cancel); otherwise its next heartbeat will. */
+  cancel(jobId: string): void {
+    if (this.current?.job.id === jobId) this.current.abort.abort(new Error(CANCELLED));
   }
 
   get busy(): boolean {
@@ -205,8 +221,10 @@ export class Worker {
     // Every progress signal doubles as proof of life for the stall guard below: that guard measures
     // silence between signals, never total elapsed time, so a slow recording is not a stuck one.
     let lastProgressAt = Date.now();
+    let stage: string | null = null;
     const onProgress = (p: string) => {
       lastProgressAt = Date.now();
+      stage = p;
       progress.push(p);
     };
     // Ownership is only real while a heartbeat confirms it. `confirmed` is the last time the
@@ -234,7 +252,7 @@ export class Worker {
         abort.abort(new Error("lease unconfirmed: no heartbeat acknowledgement within the lease margin"));
       }
     }, 2000);
-    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs);
+    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds);
     const deadline = setTimeout(() => abort.abort(new Error(`took longer than ${Math.round(ceilingMs / 1000)} s`)), ceilingMs);
     // Stall guard: only a record job reports progress, so only a record job has a liveness signal to
     // measure. A lab run keeps its flat ceiling and gets no stall check, exactly as before.
@@ -248,20 +266,46 @@ export class Worker {
     // Flush before finalizing in both directions: on failure the last label is what tells the
     // user (and the log) where the job died.
     const finish = async (outcome: Parameters<Store["finish"]>[2]) => {
-      await progress.flush();
+      // Flushing progress is best-effort: a failed flush must not prevent the terminal transition
+      // (the job would otherwise stay "running" until its lease lapses and get re-run).
+      try { await progress.flush(); } catch (e) { log.warn("job.progress_flush_failed", { job: job.id, error: String(e) }); }
       await this.o.store.finish(job.id, this.id, outcome);
+      // Persist terminal state immediately on the FileStore (PgStore commits synchronously), so a
+      // crash right after completion cannot lose the result in the debounced-write window.
+      await this.o.store.flush().catch((e) => log.warn("job.store_flush_failed", { job: job.id, error: String(e) }));
     };
     try {
       const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await this.labRun(job);
       await finish({ status: "succeeded", result });
+      // An earlier attempt's evidence is moot once a retry made the recording.
+      if (job.kind === "record") rmSync(failureDir(this.o.root, job.id), { recursive: true, force: true });
       log.info("job.succeeded", { job: job.id, kind: job.kind, ms: Date.now() - started });
     } catch (e) {
       const message = e instanceof Error ? e.message.split("\n")[0]! : String(e);
       if (this.stopping && abort.signal.aborted) return; // handed back by stop()
-      // Bad input won't get better on retry; crashes and timeouts get one more try.
-      const retry = !(e instanceof RecordError) && !abort.signal.aborted;
-      const err = abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message;
+      // Cancelled by its owner, or taken over after a lost lease: the store already has the
+      // outcome (or someone else is working on it), so there is nothing to record here.
+      const why = abort.signal.aborted ? String(abort.signal.reason?.message ?? "") : "";
+      if (why === CANCELLED || why === "lease lost") {
+        rmSync(failureDir(this.o.root, job.id), { recursive: true, force: true });
+        log.info("job.abandoned", { job: job.id, kind: job.kind, reason: why });
+        return;
+      }
+      // Bad input won't get better on retry, nor will an address that doesn't resolve or a bad
+      // certificate; crashes and timeouts get one more try.
+      const permanent = job.kind === "record" && ["address", "not-allowed", "certificate"].includes(explainFailure(message).category);
+      const retry = !(e instanceof RecordError) && !abort.signal.aborted && !permanent;
+      // Errors can quote a URL or form value; the site's credentials must not land in the job row.
+      const err = scrubText(abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message);
       await finish({ status: "failed", error: err, retry }).catch(() => undefined);
+      // The last attempt leaves a report the Lab lists: why, where, and what was on screen.
+      if (job.kind === "record" && (!retry || job.attempts >= job.maxAttempts)) {
+        try {
+          writeFailureReport(this.o.root, job, err, stage, evidenceOf(e), Date.now() - started);
+        } catch (we) {
+          log.warn("job.failure_report_failed", { job: job.id, error: String(we) });
+        }
+      }
       log.warn("job.failed", { job: job.id, kind: job.kind, ms: Date.now() - started, error: message, retry });
     } finally {
       clearInterval(beat);
@@ -307,6 +351,15 @@ export class Worker {
       delete summary.dir;
       await this.o.store.saveRecording({ id: r.id, owner: job.owner, url: r.url, createdAt: r.createdAt, summary });
       return { id: r.id, dir: `recordings/${r.id}` };
+    } catch (e) {
+      // Keep the evidence (screenshot, partial video) beside the report, and drop the half-made
+      // recording folder, which otherwise sat in recordings/ forever without a recording.json.
+      const ev = evidenceOf(e);
+      if (ev?.dir) {
+        stashEvidence(this.o.root, job.id, ev);
+        rmSync(ev.dir, { recursive: true, force: true });
+      }
+      throw e;
     } finally {
       if (this.o.media.kind !== "local" && existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
       await sample?.close().catch(() => undefined);
@@ -341,4 +394,95 @@ export class Worker {
       return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}` };
     });
   }
+}
+
+const CANCELLED = "cancelled by its owner";
+
+/** Where a failed recording job's report and evidence live: <root>/failures/<job id>/. */
+export function failureDir(root: string, jobId: string): string {
+  return join(root, "failures", jobId);
+}
+
+function stashEvidence(root: string, jobId: string, ev: FailureEvidence): void {
+  const dest = failureDir(root, jobId);
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  for (const name of [ev.screenshot, ev.video]) {
+    if (name && ev.dir && existsSync(join(ev.dir, name))) copyFileSync(join(ev.dir, name), join(dest, name));
+  }
+}
+
+function writeFailureReport(root: string, job: Job, error: string, stage: string | null, ev: FailureEvidence | null, durationMs: number): void {
+  const dest = failureDir(root, job.id);
+  mkdirSync(dest, { recursive: true });
+  const has = (name: string | null) => (name && existsSync(join(dest, name)) ? name : null);
+  const input = job.input as { url?: string; demo?: boolean };
+  const report: FailureReport = {
+    jobId: job.id,
+    url: input.demo ? "Sample site" : String(input.url ?? ""),
+    owner: job.owner,
+    createdAt: job.createdAt,
+    failedAt: new Date().toISOString(),
+    attempts: job.attempts,
+    error,
+    stage,
+    ...explainFailure(error),
+    pages: ev?.pages ?? [],
+    signIn: ev?.signIn ?? null,
+    skipped: ev?.skipped ?? [],
+    durationMs: ev?.durationMs ?? durationMs,
+    files: { screenshot: has(ev?.screenshot ?? null), video: has(ev?.video ?? null) },
+  };
+  writeFileSync(join(dest, "failure.json"), JSON.stringify(scrub(report), null, 2));
+}
+
+/** A folder this old with no recording.json is a recording that died before reports existed. */
+const PARTIAL_MAX_AGE_MS = 24 * 60 * 60_000;
+
+/**
+ * Failed recordings used to leave their working folder (a partial video, often tens of MB) in
+ * recordings/ for good: the Library skips it, nothing else removes it. Clear the old ones; a
+ * recording in progress is minutes old, never a day.
+ */
+export function sweepPartialRecordings(dir: string, now = Date.now()): number {
+  let removed = 0;
+  try {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      try {
+        const st = statSync(path);
+        if (!st.isDirectory() || existsSync(join(path, "recording.json")) || now - st.mtimeMs < PARTIAL_MAX_AGE_MS) continue;
+        rmSync(path, { recursive: true, force: true });
+        removed++;
+      } catch {
+        /* in use or vanished: leave it for next time */
+      }
+    }
+  } catch {
+    return 0; // no recordings folder yet
+  }
+  if (removed) log.info("recordings.partial_swept", { removed });
+  return removed;
+}
+
+/** Failure reports go when their job does: the store ages finished jobs off after 30 days. */
+const FAILURE_MAX_AGE_MS = 30 * 24 * 60 * 60_000;
+
+export function sweepOldFailures(dir: string, now = Date.now()): number {
+  let removed = 0;
+  try {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      try {
+        if (now - statSync(path).mtimeMs < FAILURE_MAX_AGE_MS) continue;
+        rmSync(path, { recursive: true, force: true });
+        removed++;
+      } catch {
+        /* vanished */
+      }
+    }
+  } catch {
+    return 0;
+  }
+  return removed;
 }

@@ -30,6 +30,13 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const root = process.cwd();
 
+// One stray rejected promise (a webhook retry, a Playwright event after a page closed) would end
+// this process under Node's default, taking a running recording and the whole window with it.
+// For one person's desktop app, log it and keep serving; the job itself has its own guards.
+process.on("unhandledRejection", (reason) => {
+  console.error(JSON.stringify({ t: new Date().toISOString(), level: "error", event: "process.unhandled_rejection", error: reason instanceof Error ? (reason.stack ?? reason.message) : String(reason) }));
+});
+
 // The app's public Supabase settings, shipped next to the sources. The environment wins.
 try {
   const file = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "desktop.env");

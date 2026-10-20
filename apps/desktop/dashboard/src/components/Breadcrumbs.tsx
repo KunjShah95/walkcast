@@ -22,6 +22,8 @@ function crumbsFor(route: Route): Crumb[] {
       return [LAB, { label: "Fault replay", current: true }];
     case "runs":
       return [LAB, { label: "Runs", current: true }];
+    case "failures":
+      return [LAB, { label: "Failures", current: true }];
     case "fixtures":
       return [LAB, { label: "Fixtures", current: true }];
     case "experiments":

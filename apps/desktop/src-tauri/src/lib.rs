@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,13 +12,35 @@ use tauri::{
 };
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// The app server the window talks to. In a release build it is the bundled Node running
 /// `sidecar.ts` on a free loopback port; `tauri dev` uses the server `npm run ui` already started.
 struct Sidecar(Mutex<Option<CommandChild>>);
 
+/// A release downloaded in the background at launch, waiting for the person to restart into it.
+#[derive(Default)]
+struct PendingUpdate(Mutex<Option<(Update, Vec<u8>)>>);
+
 const DEV_URL: &str = "http://127.0.0.1:4320/app";
+
+/// Set when the app itself stops the sidecar (quit, installing an update), so its exit is expected
+/// rather than a crash to recover from.
+static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Crash restarts this session; past the cap the window says what happened instead.
+static RESTARTS: AtomicUsize = AtomicUsize::new(0);
+/// Set once the window shows the app (not the splash): from then on a sidecar exit is a crash to
+/// recover from; before it, the startup wait reports the failure on the splash.
+static SHOWN: AtomicBool = AtomicBool::new(false);
+const MAX_RESTARTS: usize = 3;
+
+/// Stop the sidecar on purpose.
+fn stop_sidecar(app: &AppHandle) {
+  QUITTING.store(true, Ordering::SeqCst);
+  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
+    let _ = child.kill();
+  }
+}
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sign-in redirects come back to http://127.0.0.1:<port>/auth/..., and Supabase only redirects to
@@ -124,20 +146,66 @@ fn start_sidecar(app: &AppHandle, exited: Arc<AtomicBool>) -> Result<u16, Box<dy
     .spawn()?;
   app.state::<Sidecar>().0.lock().unwrap().replace(child);
 
+  let app = app.clone();
   tauri::async_runtime::spawn(async move {
     while let Some(event) = events.recv().await {
       match event {
         CommandEvent::Stdout(line) => log::info!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
         CommandEvent::Stderr(line) => log::warn!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
         CommandEvent::Terminated(status) => {
-          log::error!("sidecar exited: {:?}", status.code);
           exited.store(true, Ordering::SeqCst);
+          if QUITTING.load(Ordering::SeqCst) {
+            log::info!("sidecar stopped: {:?}", status.code);
+          } else {
+            log::error!("sidecar exited: {:?}", status.code);
+            restart_after_crash(&app);
+          }
         }
         _ => {}
       }
     }
   });
   Ok(port)
+}
+
+/// The app server died on its own after the window was showing it: start a new one and point the
+/// window at it, rather than leaving a dashboard whose every request fails. A crash during startup
+/// is left to the startup wait, which reports it on the splash.
+fn restart_after_crash(app: &AppHandle) {
+  if !SHOWN.load(Ordering::SeqCst) {
+    return;
+  }
+  let Some(window) = app.get_webview_window("main") else { return };
+  if RESTARTS.fetch_add(1, Ordering::SeqCst) >= MAX_RESTARTS {
+    let logs = app.path().app_log_dir().map(|p| p.display().to_string()).unwrap_or_default();
+    let text = serde_json::to_string(&format!("Walkcast's server keeps stopping. Restart the app; the log is in {logs}")).unwrap_or_default();
+    let _ = window.eval(&format!("document.body.innerHTML = '<p style=\"font:15px system-ui;padding:32px\"></p>'; document.querySelector('p').textContent = {text};"));
+    return;
+  }
+  let app = app.clone();
+  std::thread::spawn(move || {
+    let exited = Arc::new(AtomicBool::new(false));
+    let port = match start_sidecar(&app, exited.clone()) {
+      Ok(port) => port,
+      Err(e) => {
+        log::error!("could not restart the app server: {e}");
+        return;
+      }
+    };
+    *app.state::<Port>().0.lock().unwrap() = port;
+    let started = Instant::now();
+    while started.elapsed() < STARTUP_TIMEOUT && !exited.load(Ordering::SeqCst) {
+      if healthy(port) {
+        log::info!("app server restarted on port {port}");
+        if let Ok(url) = Url::parse(&format!("http://127.0.0.1:{port}/app")) {
+          let _ = window.navigate(url);
+        }
+        return;
+      }
+      std::thread::sleep(Duration::from_millis(200));
+    }
+    log::error!("the restarted app server did not come up");
+  });
 }
 
 /// What the dashboard's Updates section shows. `available` is false when this is the newest
@@ -179,6 +247,11 @@ async fn check_update(app: AppHandle) -> UpdateStatus {
 /// it and restart. The sidecar is stopped first so the installer can replace its files.
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
+  // Already downloaded at launch: install it rather than fetching the same bytes again.
+  let pending = app.state::<PendingUpdate>().0.lock().unwrap().take();
+  if let Some((update, bytes)) = pending {
+    install_or_recover(&app, &update, bytes)?;
+  }
   let update = app
     .updater()
     .map_err(|e| e.to_string())?
@@ -187,17 +260,66 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "Walkcast is already up to date.".to_string())?;
   log::info!("downloading update {}", update.version);
-  let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
-  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
-    let _ = child.kill();
+  let window = app.get_webview_window("main");
+  let label = format!("Downloading Walkcast {}", update.version);
+  let mut update = update;
+  let bytes = download(&mut update, |progress| {
+    if let Some(window) = &window {
+      let text = serde_json::to_string(&format!("{label}… {progress}")).unwrap_or_default();
+      let _ = window.eval(&format!("(() => {{ const t = document.querySelector('#walkcast-update span'); if (t) t.textContent = {text}; }})();"));
+    }
+  })
+  .await
+  .map_err(|e| e.to_string())?;
+  install_or_recover(&app, &update, bytes)
+}
+
+/// Stop the server (the installer replaces its files), install and restart. If the install fails,
+/// bring the server back so the open window keeps working, and hand back why.
+fn install_or_recover(app: &AppHandle, update: &Update, bytes: Vec<u8>) -> Result<(), String> {
+  stop_sidecar(app);
+  if let Err(e) = update.install(bytes) {
+    log::error!("update install failed: {e}");
+    // Let the stopped server's exit event arrive while QUITTING still marks it expected, or it
+    // would read as a crash and start a second server alongside this one.
+    std::thread::sleep(Duration::from_millis(1500));
+    QUITTING.store(false, Ordering::SeqCst);
+    restart_after_crash(app);
+    return Err(e.to_string());
   }
-  update.install(bytes).map_err(|e| e.to_string())?;
   log::info!("update {} installed; restarting", update.version);
   app.restart();
 }
 
 /// How long a launch waits for the update feed before opening the app anyway.
 const LAUNCH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the splash waits for a release to download before opening the app and finishing the
+/// download in the background.
+const LAUNCH_DOWNLOAD_WAIT: Duration = Duration::from_secs(20);
+/// The whole installer download. An `Update` inherits the check's timeout, and reqwest applies it
+/// to the entire body: at 10 s, anything slower than ~30 Mbit/s failed every launch and the app
+/// opened on the old version again after the wait.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
+/// Download a release, telling `report` how far along it is ("42% of 35 MB") as the percent moves.
+async fn download(update: &mut Update, mut report: impl FnMut(String)) -> tauri_plugin_updater::Result<Vec<u8>> {
+  update.timeout = Some(DOWNLOAD_TIMEOUT);
+  let (mut done, mut shown) = (0u64, None);
+  update
+    .download(
+      |chunk, total| {
+        done += chunk as u64;
+        let Some(total) = total.filter(|t| *t > 0) else { return };
+        let percent = (done * 100 / total).min(100);
+        if shown != Some(percent) {
+          shown = Some(percent);
+          report(format!("{percent}% of {} MB", (total + 524_288) / 1_048_576));
+        }
+      },
+      || {},
+    )
+    .await
+}
 /// How often a running app looks for a new release.
 const RECHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 
@@ -233,40 +355,63 @@ async fn update_at_launch(app: &AppHandle, window: &WebviewWindow) -> bool {
     }
   };
   log::info!("updating to {} at launch", update.version);
-  set_splash(window, &format!("Updating Walkcast to {}…", update.version));
-  let bytes = match update.download(|_, _| {}, || {}).await {
-    Ok(bytes) => bytes,
-    Err(e) => {
-      log::warn!("update download failed: {e}");
-      return false;
-    }
-  };
-  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
-    let _ = child.kill();
+  let version = update.version.clone();
+  let label = format!("Updating Walkcast to {version}…");
+  set_splash(window, &label);
+  // Download in the background and give it a short while. On a slow line the app opens instead of
+  // holding the splash for minutes; the download carries on and offers a restart when it lands.
+  let waiting = Arc::new(AtomicBool::new(true));
+  let (tx, rx) = std::sync::mpsc::channel::<bool>();
+  {
+    let (app, window, waiting, version) = (app.clone(), window.clone(), waiting.clone(), version.clone());
+    tauri::async_runtime::spawn(async move {
+      let mut update = update;
+      match download(&mut update, |progress| {
+        if waiting.load(Ordering::SeqCst) {
+          set_splash(&window, &format!("{label} {progress}"));
+        }
+      })
+      .await
+      {
+        Ok(bytes) => {
+          app.state::<PendingUpdate>().0.lock().unwrap().replace((update, bytes));
+          let _ = tx.send(true);
+          if !waiting.load(Ordering::SeqCst) {
+            log::info!("update {version} downloaded in the background; offering a restart");
+            show_update_banner(&window, &version);
+          }
+        }
+        Err(e) => {
+          log::warn!("update download failed: {e}");
+          let _ = tx.send(false);
+        }
+      }
+    });
   }
+  let finished = rx.recv_timeout(LAUNCH_DOWNLOAD_WAIT);
+  waiting.store(false, Ordering::SeqCst);
+  if matches!(finished, Ok(false)) {
+    return false;
+  }
+  // Landed in time (or in the instant after the wait ended): install now.
+  let Some((update, bytes)) = app.state::<PendingUpdate>().0.lock().unwrap().take() else {
+    log::info!("update {version} still downloading; opening the app meanwhile");
+    return false;
+  };
+  stop_sidecar(app);
   if let Err(e) = update.install(bytes) {
     log::error!("update install failed: {e}");
+    QUITTING.store(false, Ordering::SeqCst);
     return false;
   }
   app.restart();
 }
 
-/// While the app runs: look for a release every few hours and, when one appears, show a banner in
-/// the dashboard with a one-click restart. If it's ignored, the next launch installs it anyway.
-fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
-  if auto_update_disabled() {
-    return;
-  }
-  std::thread::spawn(move || loop {
-    std::thread::sleep(RECHECK_EVERY);
-    let found = tauri::async_runtime::block_on(async {
-      app.updater().ok()?.check().await.ok().flatten().map(|u| u.version)
-    });
-    if let Some(version) = found {
-      log::info!("update {version} is available; offering a restart");
-      let label = serde_json::to_string(&format!("Walkcast {version} is ready.")).unwrap_or_default();
-      let _ = window.eval(&format!(
-        r#"(() => {{
+/// The dashboard's corner banner offering a restart into `version`. One at a time; dismissable.
+fn show_update_banner(window: &WebviewWindow, version: &str) {
+  let label = serde_json::to_string(&format!("Walkcast {version} is ready.")).unwrap_or_default();
+  let _ = window.eval(&format!(
+    r#"(() => {{
   if (document.getElementById("walkcast-update")) return;
   const bar = document.createElement("div");
   bar.id = "walkcast-update";
@@ -287,7 +432,23 @@ fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
   bar.append(text, go, close);
   document.body.append(bar);
 }})();"#
-      ));
+  ));
+}
+
+/// While the app runs: look for a release every few hours and, when one appears, show a banner in
+/// the dashboard with a one-click restart. If it's ignored, the next launch installs it anyway.
+fn watch_for_updates(app: AppHandle, window: WebviewWindow) {
+  if auto_update_disabled() {
+    return;
+  }
+  std::thread::spawn(move || loop {
+    std::thread::sleep(RECHECK_EVERY);
+    let found = tauri::async_runtime::block_on(async {
+      app.updater().ok()?.check().await.ok().flatten().map(|u| u.version)
+    });
+    if let Some(version) = found {
+      log::info!("update {version} is available; offering a restart");
+      show_update_banner(&window, &version);
     }
   });
 }
@@ -364,15 +525,14 @@ fn set_tray_tooltip(app: &AppHandle, text: &str) {
 
 /// Keep the tray icon honest about what the sidecar is doing: the window can be closed for the
 /// length of a recording, and this is the only sign of it that anything is still happening.
-fn watch_recording(app: &AppHandle, started: Arc<AtomicBool>) {
+fn watch_recording(app: &AppHandle) {
   let app = app.clone();
   std::thread::spawn(move || {
     let mut busy = false;
-    while started.load(Ordering::SeqCst) {
+    // Reads the port each beat, so it follows a restarted server. (It used to loop while the
+    // server's "exited" flag was true, i.e. never, and the tray never said it was recording.)
+    while !QUITTING.load(Ordering::SeqCst) {
       std::thread::sleep(Duration::from_secs(4));
-      if !started.load(Ordering::SeqCst) {
-        return;
-      }
       let port = app.state::<Port>().0.lock().unwrap().to_owned();
       let now = recording(port);
       if now != busy {
@@ -405,6 +565,7 @@ pub fn run() {
     .plugin(tauri_plugin_process::init())
     .invoke_handler(tauri::generate_handler![check_update, install_update])
     .manage(Sidecar(Mutex::new(None)))
+    .manage(PendingUpdate::default())
     .manage(Port(Mutex::new(0)))
     .setup(|app| {
       let handle = app.handle().clone();
@@ -442,17 +603,21 @@ pub fn run() {
       *handle.state::<Port>().0.lock().unwrap() = port;
       // Wait off the main thread so the event loop keeps running.
       std::thread::spawn(move || {
+        // Install a pending release first, while the server boots rather than after it; on success
+        // the app restarts and never gets past here.
+        if !tauri::async_runtime::block_on(update_at_launch(&handle, &window)) {
+          set_splash(&window, "Starting…");
+        }
         let started = Instant::now();
         while started.elapsed() < STARTUP_TIMEOUT && !exited.load(Ordering::SeqCst) {
           if healthy(port) {
-            // Install a pending release first; on success the app restarts and never gets here.
-            tauri::async_runtime::block_on(update_at_launch(&handle, &window));
             let url = Url::parse(&format!("http://127.0.0.1:{port}/app")).expect("a valid local URL");
             if let Err(e) = window.navigate(url) {
               log::error!("could not open the app: {e}");
             }
+            SHOWN.store(true, Ordering::SeqCst);
             watch_for_updates(handle.clone(), window.clone());
-            watch_recording(&handle, exited.clone());
+            watch_recording(&handle);
             return;
           }
           std::thread::sleep(Duration::from_millis(200));
@@ -468,9 +633,7 @@ pub fn run() {
     .expect("error while building tauri application")
     .run(|app, event| {
       if let RunEvent::Exit = event {
-        if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
-          let _ = child.kill();
-        }
+        stop_sidecar(app);
       }
     });
 }

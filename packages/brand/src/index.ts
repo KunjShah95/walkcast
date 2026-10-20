@@ -30,7 +30,7 @@ export const FONTS = `
 */
 
 export const CSS = `${FONTS}
-:root{--paper:#ffffff;--panel:#ffffff;--panel-2:#f5f4f1;--panel-3:#eae8e3;--ink:#1b1a17;--ink-2:#4c4841;--muted:#6b665d;--dim:#8a847a;--line:#e7e3db;--line-strong:#cfc9bd;--signal:#9c5700;--signal-strong:#874b00;--signal-soft:#f4e7d2;--on-signal:#ffffff;--exhibit:#f1dfbd;--exhibit-ink:#5c3400;--exhibit-soft:#f8efdf;--rec:#c0321c;--fail:#b2261c;--pass:#2c6a3d;--solid:#1b1a17;--on-solid:#ffffff;
+:root{--paper:#ffffff;--panel:#ffffff;--panel-2:#f5f4f1;--panel-3:#eae8e3;--ink:#1b1a17;--ink-2:#4c4841;--muted:#6b665d;--dim:#8a847a;--line:#e7e3db;--line-strong:#cfc9bd;--signal:#1d5e58;--signal-strong:#164a45;--signal-soft:#dcebe7;--on-signal:#ffffff;--exhibit:#f6d776;--exhibit-ink:#4f3b00;--exhibit-soft:#fbf0cc;--rec:#c0321c;--fail:#b2261c;--pass:#2c6a3d;--solid:#1b1a17;--on-solid:#ffffff;
 --r:14px;--r-lg:22px;--r-sm:8px;--pill:999px;--ease:cubic-bezier(.22,1,.36,1);--sans:"Schibsted Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:84px}
 ::selection{background:var(--exhibit);color:var(--exhibit-ink)}
@@ -58,7 +58,7 @@ h3{font-size:18px;line-height:1.3;letter-spacing:-.012em}
 .tile{display:inline-grid;place-items:center;width:.86em;height:.86em;margin:0 .06em;border-radius:.24em;vertical-align:-.1em;transform:rotate(-5deg);color:#fff;background:var(--solid)}
 .tile.tilt{transform:rotate(6deg)}
 .tile svg{width:.52em;height:.52em}
-.t-ink{background:#1b1a17;color:#fff}.t-signal{background:#9c5700;color:#fff}.t-rec{background:#c0321c;color:#fff}.t-pass{background:#2c6a3d;color:#fff}.t-exhibit{background:#f1dfbd;color:#5c3400}
+.t-ink{background:#1b1a17;color:#fff}.t-signal{background:#1d5e58;color:#fff}.t-rec{background:#c0321c;color:#fff}.t-pass{background:#2c6a3d;color:#fff}.t-exhibit{background:#f6d776;color:#4f3b00}
 .lede{font-size:clamp(17px,1.55vw,20px);line-height:1.55;color:var(--muted);max-width:50ch;margin:24px auto 0;text-wrap:pretty}
 .center{text-align:center}
 .center .lede{margin-left:auto;margin-right:auto;max-width:66ch}
@@ -346,7 +346,7 @@ ol.howto strong{color:var(--ink);font-weight:600}
 @media (max-width:760px){.nav-main{display:none}.hide-sm{display:none}}
 @media (max-width:620px){.compare thead{display:none}.compare tr{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;padding:18px;border-top:1px solid var(--line)}.compare tbody tr:first-child{border-top:0}.compare tbody th,.compare td{padding:0;border:0;width:auto}.compare tbody th{grid-column:1/-1;padding-bottom:4px}.compare td::before{content:attr(data-label);display:block;margin-bottom:4px;font-size:12.5px;font-weight:600;color:var(--muted)}.compare td:nth-child(2)::before{color:var(--signal)}.urlform{flex-direction:column;align-items:stretch;border-radius:22px;padding:8px}.urlform>.ic{display:none}.urlform input{padding:12px 12px}.urlform .pill{width:100%}.specs,.guide-list,.feats{grid-template-columns:1fr!important}.win-bar .win-title{display:none}.faq details p{padding:0 20px 20px}.faq summary{gap:12px;padding:16px}.auth-story,.auth-card{padding:26px 22px}.belt{gap:10px 22px}.belt li{font-size:14px}}`;
 
-export const MARK = `<svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#874b00"/><path d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5"/><path d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/><circle cx="48" cy="16" r="7.4" fill="#fff"/><circle cx="48" cy="16" r="5" fill="#c0321c"/></svg>`;
+export const MARK = `<svg width="28" height="28" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="7.5" fill="#1d5e58"/><path d="M5.6 20.4c2.4-.6 4.6-2.6 6.1-5.6" fill="none" stroke="#f6d776" stroke-width="1.9" stroke-linecap="round" stroke-dasharray=".1 3"/><path d="M11.6 6.4 20 10.1l-3.8 1.4-1.4 3.8z" fill="#fbf8f3" stroke="#fbf8f3" stroke-width=".8" stroke-linejoin="round"/><circle cx="20" cy="19.6" r="2.5" fill="#c0321c" stroke="#fbf8f3" stroke-width="1.2"/></svg>`;
 
 /** Drawn icons: one 24px grid, one stroke. */
 export const ICONS: Record<string, string> = {
@@ -382,7 +382,7 @@ export function icon(name: string, size = 20): string {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
 }
 
-export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#874b00"/><path d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5"/><path d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/><circle cx="48" cy="16" r="7.4" fill="#fff"/><circle cx="48" cy="16" r="5" fill="#c0321c"/></svg>`;
+export const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26"><rect x=".5" y=".5" width="25" height="25" rx="7" fill="#1d5e58"/><path d="M5.6 20.4c2.4-.6 4.6-2.6 6.1-5.6" fill="none" stroke="#f6d776" stroke-width="1.9" stroke-linecap="round" stroke-dasharray=".1 3"/><path d="M11.6 6.4 20 10.1l-3.8 1.4-1.4 3.8z" fill="#fbf8f3" stroke="#fbf8f3" stroke-width=".8" stroke-linejoin="round"/><circle cx="20" cy="19.6" r="2.5" fill="#c0321c" stroke="#fbf8f3" stroke-width="1.2"/></svg>`;
 
 /** The two self-hosted fonts, served at /assets/fonts/<file>. */
 const FONT_FILES: Record<string, string> = {

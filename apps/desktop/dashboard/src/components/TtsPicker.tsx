@@ -5,7 +5,7 @@ import type { TtsProvider } from "../lib/prefs.ts";
 import { PlayMark } from "./ui.tsx";
 
 /** Providers that speak from the machine itself, so the flite picker is the right control for them. */
-const LOCAL = new Set(["flite", "custom-voice"]);
+const LOCAL = new Set(["flite", "none", "custom-voice"]);
 
 export interface TtsPickerProps {
   provider: TtsProvider;
@@ -47,7 +47,14 @@ export function TtsPicker({ provider, voice, language, onProvider, onVoice, onLa
     return (
       <div className={cn("grid gap-2", className)}>
         <ProviderSelect providers={providers} value={provider} onChange={onProvider} disabled={disabled} className={selectClassName} />
-        {localVoicePicker}
+        {provider === "none" ? (
+          <p className="text-[12px] text-ink-3">Recordings get captions and a transcript, no voice.</p>
+        ) : (
+          <>
+            {localVoicePicker}
+            {provider === "flite" && <p className="text-[12px] text-ink-3">Sounds robotic. For a natural voice, pick ElevenLabs or OpenAI and add its key in Settings.</p>}
+          </>
+        )}
       </div>
     );
   }
@@ -86,8 +93,12 @@ function VoiceControl({ info, voice, language, onVoice, onLanguage, disabled }: 
   // The voice's own language wins; the typed one only fills in where the id doesn't carry one.
   const spoken = listed?.lang ?? (info.needsLanguage ? language || info.defaultLanguage : info.defaultLanguage);
   const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   useEffect(() => () => audio.current?.pause(), []);
+  // A voice that can't speak here would be discovered mid-recording, minutes in. The sample is
+  // the check: ask for it and say what came back.
+  useEffect(() => setFailed(null), [chosen, language, info.id]);
 
   const preview = () => {
     audio.current?.pause();
@@ -95,9 +106,15 @@ function VoiceControl({ info, voice, language, onVoice, onLanguage, disabled }: 
     const a = new Audio(cloudVoicePreviewUrl(info.id, chosen, info.needsLanguage ? language || undefined : undefined));
     audio.current = a;
     a.onended = () => setPlaying(false);
-    a.onerror = () => setPlaying(false);
+    a.onerror = () => {
+      setFailed("This voice could not be sampled. The provider rejected it — check its API key in Settings.");
+      setPlaying(false);
+    };
     setPlaying(true);
-    void a.play().catch(() => setPlaying(false));
+    void a.play().catch(() => {
+      setFailed("The sample could not be played. Check its API key in Settings.");
+      setPlaying(false);
+    });
   };
 
   return (
@@ -162,7 +179,8 @@ function VoiceControl({ info, voice, language, onVoice, onLanguage, disabled }: 
       ) : (
         <p className="text-[12px] text-ink-3">This provider's voices aren't a public list, so its voice id goes here.</p>
       )}
-      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording falls back to the built-in voice.</p>}
+      {!info.configured && <p className="text-[12px] text-warn">No API key for {info.label} on this server — add it in Settings, or the recording falls back to the basic offline voice.</p>}
+      {failed && <p className="text-[12px] text-fail">{failed}</p>}
     </div>
   );
 }

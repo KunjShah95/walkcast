@@ -153,6 +153,8 @@ export interface Store {
   // job queue
   /** Returns the existing job when (owner, idempotencyKey) was already submitted. */
   enqueue(job: NewJob): Promise<Job>;
+  /** Record a request that was refused before it could be queued, as an already-failed job. */
+  insertFailed(job: Pick<NewJob, "kind" | "owner" | "input">, error: string): Promise<Job>;
   /**
    * Enqueue while enforcing a per-owner active-job limit in one atomic step: the limit check and
    * the insert are a single statement, so two instances can never both pass a read-then-write
@@ -185,9 +187,16 @@ export interface Store {
   finish(jobId: string, workerId: string, outcome: { status: "succeeded"; result: Record<string, unknown> } | { status: "failed"; error: string; retry: boolean }): Promise<void>;
   /** Hand a job back to the queue (graceful shutdown) without counting an attempt. */
   release(jobId: string, workerId: string): Promise<void>;
+  /**
+   * Stop a queued or running job on its owner's request. A running job's worker loses ownership
+   * (its next heartbeat fails) and aborts. Null when the job had already ended.
+   */
+  cancel(jobId: string): Promise<Job | null>;
   job(id: string): Promise<Job | null>;
   /** The job an owner already submitted with this idempotency key, if any. */
   jobByKey(owner: string | null, idempotencyKey: string): Promise<Job | null>;
+  /** Jobs of one kind that ended failed, newest first; `owner` null means everyone's. */
+  failedJobs(owner: string | null, kind: JobKind, limit: number): Promise<Job[]>;
   /** Jobs that are queued or running for an owner (for per-user concurrency limits). */
   activeJobs(owner: string | null): Promise<number>;
   queueDepth(): Promise<number>;
@@ -207,6 +216,7 @@ export interface Store {
   saveRecording(row: RecordingRow): Promise<void>;
   recordings(owner: string | null, limit: number): Promise<RecordingRow[]>;
   recording(id: string): Promise<RecordingRow | null>;
+  deleteRecording(id: string): Promise<void>;
 
   // schedules
   schedules(owner: string | null): Promise<Schedule[]>;
@@ -240,6 +250,8 @@ export interface Store {
 
   /** Cheap round trip for readiness checks. */
   ping(): Promise<void>;
+  /** Flush any pending debounced writes. PgStore is synchronous, so this is a no-op there. */
+  flush(): Promise<void>;
   close(): Promise<void>;
 }
 

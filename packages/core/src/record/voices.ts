@@ -23,15 +23,19 @@ export interface CloudVoice {
 }
 
 const CATALOG: Record<string, CloudVoice[]> = {
+  // ElevenLabs' premade voices: the only ones a free account may use through the API (library
+  // voices answer 402 "paid_plan_required" there). Checked against /v2/voices, October 2026.
   elevenlabs: [
-    { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", note: "US English, female, warm narration" },
-    { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", note: "US English, male, documentary" },
-    { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", note: "US English, female, soft" },
-    { id: "ErXwobaYiN019PkySvjV", name: "Antoni", note: "US English, male, conversational" },
-    { id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli", note: "US English, female, young" },
-    { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", note: "US English, male, deep" },
-    { id: "VR6AewLTigWG4xSOukaG", name: "Arnold", note: "US English, male, narration" },
-    { id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam", note: "US English, male, raspy" },
+    { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", note: "US English, female, confident narration" },
+    { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", note: "British English, male, warm storyteller" },
+    { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", note: "British English, female, clear educator" },
+    { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", note: "British English, male, steady broadcaster" },
+    { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", note: "US English, female, professional" },
+    { id: "cjVigY5qzO86Huf0OWal", name: "Eric", note: "US English, male, smooth" },
+    { id: "SAz9YHcvj6GT2YYXdXww", name: "River", note: "US English, neutral, relaxed" },
+    { id: "nPczCjzI2devNBz1zQrb", name: "Brian", note: "US English, male, deep" },
+    { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", note: "US English, female, bright" },
+    { id: "bIHbv24MWmeRgasZH58o", name: "Will", note: "US English, male, relaxed" },
   ],
   openai: [
     { id: "alloy", name: "Alloy", note: "Neutral, balanced" },
@@ -89,6 +93,46 @@ const CATALOG: Record<string, CloudVoice[]> = {
 /** `polly` is the alias AWS Polly is also selected by. */
 const ALIASES: Record<string, string> = { polly: "awspolly", maya: "custom" };
 
+/** The credential each cloud provider needs, so "you picked one we can't reach" can say which. */
+const CREDENTIAL: Record<string, string> = {
+  elevenlabs: "ELEVENLABS_API_KEY",
+  openai: "OPENAI_API_KEY",
+  google: "GOOGLE_TTS_API_KEY",
+  azure: "AZURE_TTS_KEY",
+  awspolly: "AWS_ACCESS_KEY_ID",
+  sarvam: "SARVAM_API_KEY",
+  bhashini: "BHASHINI_API_KEY",
+  murf: "MURF_API_KEY",
+  reverie: "REVERIE_API_KEY",
+  custom: "LAB_TTS_ENDPOINT",
+};
+
+/** The env var a provider is configured with, or "" when it needs none. */
+export function credentialFor(provider: string): string {
+  return CREDENTIAL[normalizeProvider(provider)] ?? "";
+}
+
+/** How each provider is named in the dashboard, the errors and the narration notes. */
+const LABEL: Record<string, string> = {
+  flite: "Basic offline voice",
+  none: "No voice",
+  elevenlabs: "ElevenLabs",
+  openai: "OpenAI",
+  google: "Google Cloud",
+  azure: "Azure",
+  awspolly: "AWS Polly",
+  sarvam: "Sarvam",
+  bhashini: "Bhashini",
+  murf: "Murf",
+  reverie: "Reverie",
+  custom: "Custom TTS",
+  "custom-voice": "Custom voice",
+};
+
+export function providerLabel(provider: string): string {
+  return LABEL[provider.trim().toLowerCase()] ?? provider;
+}
+
 export function normalizeProvider(provider: string): string {
   const p = provider.trim().toLowerCase();
   return ALIASES[p] ?? p;
@@ -105,7 +149,7 @@ export function hasVoiceList(provider: string): boolean {
 
 /** Local (offline) providers speak from ffmpeg's flite names or an uploaded sample, not a list. */
 export function isCloudProvider(provider: string): boolean {
-  return !["", "flite", "local", "custom-voice", "custom_voice"].includes(provider.trim().toLowerCase());
+  return !["", "flite", "none", "local", "custom-voice", "custom_voice"].includes(provider.trim().toLowerCase());
 }
 
 /**
