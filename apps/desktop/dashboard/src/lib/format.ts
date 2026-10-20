@@ -18,6 +18,13 @@ export function formatElapsed(sec: number): string {
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
+/** Tokens, written the way people read them: 36.6k, 1.2M. */
+export function shortTokens(value: number): string {
+  if (value < 1000) return String(Math.round(value));
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
+  return `${(value / 1_000_000).toFixed(1)}M`;
+}
+
 export function ago(epochMs: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - epochMs) / 1000));
   if (s < 60) return `${s}s ago`;

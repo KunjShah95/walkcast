@@ -36,6 +36,11 @@ export interface RunSummary {
   steps: number;
   modelCalls: number;
   modelMode: string | null;
+  /** Tokens the run spent, as the gateway counted them. */
+  inputTokens: number;
+  outputTokens: number;
+  /** The model the run asked for, e.g. "openrouter:anthropic/claude-sonnet-5". */
+  modelSpec: string | null;
   createdAt: number;
   screenshots: number;
 }
@@ -306,6 +311,9 @@ export class LabData {
       steps: r.steps,
       modelCalls: r.modelCalls ?? 0,
       modelMode: r.model?.mode ?? null,
+      inputTokens: r.model?.inputTokens ?? r.cost?.inputTokens ?? 0,
+      outputTokens: r.model?.outputTokens ?? r.cost?.outputTokens ?? 0,
+      modelSpec: r.model?.selection?.agent ?? null,
       createdAt: mtimeMs,
       screenshots: files.filter((f) => f.endsWith(".jpg")).length,
     };

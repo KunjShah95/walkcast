@@ -5,7 +5,8 @@ import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/F
 import { ReplayFixture } from "../components/ReplayFixture.tsx";
 import { FindingChip, Panel, PanelHeader, Verdict } from "../components/ui.tsx";
 import { fileUrl, loadRun } from "../lib/api.ts";
-import { faultLabel, cn, label, ms, pathOf } from "../lib/format.ts";
+import { faultLabel, cn, label, ms, pathOf, shortTokens } from "../lib/format.ts";
+import { estimateCost, usd } from "../../../../../packages/core/src/llm/pricing.ts";
 import type { ClaimEvent, ConsoleEvent, Finding, LabIndex, ModelCallEvent, NetworkEvent, RunDetail, StepEvent } from "../lib/types.ts";
 
 type Node =
@@ -54,6 +55,9 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
   for (const f of findings) for (const s of f.evidenceSteps) evidence.set(s, [...(evidence.get(s) ?? []), f]);
   const fixture = index.fixtures.find((f) => f.manifest.original.runId === run.id);
   const position = index.runs.findIndex((r) => r.dir === dir);
+  // What the run cost, as far as it can honestly be said: the tokens are counted, the money
+  // is an estimate from a list that says it is one.
+  const cost = estimateCost(run.modelSpec, run.inputTokens, run.outputTokens);
   // Not in the index yet: no neighbours (runs[0] used to show up as "Older").
   const prev = position < 0 ? undefined : index.runs[position + 1];
   const next = position < 0 ? undefined : index.runs[position - 1];
@@ -108,6 +112,12 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
             <Meta k="steps" v={run.steps} />
             {result.model && <Meta k="model" v={`${result.model.mode} · ${result.model.calls} calls`} />}
             {result.model?.selection && <Meta k="via" v={result.model.selection.agent} />}
+            {(run.inputTokens > 0 || run.outputTokens > 0) && (
+              <Meta
+                k="tokens"
+                v={`${shortTokens(run.inputTokens)} in · ${shortTokens(run.outputTokens)} out${cost !== null ? ` · ≈ ${usd(cost)}` : ""}`}
+              />
+            )}
             <Meta k="browser" v={result.browserVersion ?? "–"} />
           </dl>
         </div>

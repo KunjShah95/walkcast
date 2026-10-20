@@ -7,7 +7,8 @@ import { Cite, Empty, ExhibitTag, FindingChip, Panel, PanelHeader, Stamp, Verdic
 import { type Capabilities, type Me, fileUrl, isSnapshot, loadCapabilities, loadRun } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 import { TASKS } from "../lib/agents.ts";
-import { FAULT_LABEL, ago, cn, faultLabel, label, ms } from "../lib/format.ts";
+import { FAULT_LABEL, ago, cn, faultLabel, label, ms, shortTokens } from "../lib/format.ts";
+import { estimateCost, usd } from "../../../../../packages/core/src/llm/pricing.ts";
 import type { LabIndex, RunDetail, RunSummary, StepEvent } from "../lib/types.ts";
 
 /**
@@ -133,6 +134,11 @@ function Facts({ index, caps }: { index: LabIndex; caps: Capabilities | null }) 
     [String(falseSuccess), "claimed success anyway"],
   ];
   if (caps?.limits && caps.usage) items.push([`${caps.usage.recordingsToday}/${caps.limits.recordingsPerDay}`, "recordings today"]);
+  // What the agent runs have cost. Tokens are the fact; the money is an estimate from a list
+  // that says what it is, so nobody is told a price as if it were a bill.
+  const spent = runs.reduce((n, r) => n + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0);
+  const money = runs.reduce((n, r) => n + (estimateCost(r.modelSpec, r.inputTokens ?? 0, r.outputTokens ?? 0) ?? 0), 0);
+  if (spent > 0) items.push([`${shortTokens(spent)} tokens`, money > 0 ? `≈ ${usd(money)} spent` : "spent"]);
   return (
     <dl className="flex flex-wrap gap-x-6 gap-y-1">
       {items.map(([v, k]) => (
