@@ -977,7 +977,7 @@ try {
         sharePage({
           title: hostOf(summary.url),
           host: summary.url,
-          recorded: summary.createdAt,
+          recorded: readableWhen(summary.createdAt),
           pages: summary.pages.length,
           durationMs: summary.durationMs,
           sources,
@@ -1698,6 +1698,13 @@ async function readJson(req: IncomingMessage, limit = 100_000): Promise<Record<s
   } catch {
     throw new AuthError(400, "Request body must be a JSON object.");
   }
+}
+
+/** A moment in words: "20 Oct 2026, 10:00". A raw timestamp tells a reader nothing. */
+function readableWhen(iso: string): string {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return iso;
+  return `${when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}, ${when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function clampInt(raw: string | number | null | undefined, min: number, max: number, fallback: number): number {

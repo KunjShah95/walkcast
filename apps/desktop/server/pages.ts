@@ -111,6 +111,11 @@ export function notFoundPage(): string {
   return shell({ title: `Page not found · ${NAME}`, body });
 }
 
+/** "the shop" reads as a sentence, not as a fragment of the narration. */
+function sentenceCase(text: string): string {
+  return text ? text[0]!.toUpperCase() + text.slice(1) : text;
+}
+
 /**
  * A shared walkthrough, for someone who was sent the link.
  *
@@ -153,7 +158,7 @@ export function sharePage(o: {
   <div class="share-grid">
     <section>
       <h2>Chapters</h2>
-      ${o.chapters.length ? `<ol class="share-list">${o.chapters.map((c) => `<li><button type="button" data-start="${c.start}"><span class="mono">${clock(c.start)}</span> ${esc(c.title)}</button></li>`).join("")}</ol>` : `<p class="dim">No chapters.</p>`}
+      ${o.chapters.length ? `<ol class="share-list">${o.chapters.map((c) => `<li><button type="button" data-start="${c.start}"><span class="mono">${clock(c.start)}</span> ${esc(sentenceCase(c.title))}</button></li>`).join("")}</ol>` : `<p class="dim">No chapters.</p>`}
     </section>
     <section>
       <h2>Transcript</h2>
@@ -167,6 +172,7 @@ export function sharePage(o: {
 </script>`;
   const css = `
 .share-head{padding:clamp(40px,7vw,84px) 0 8px;text-align:center}
+.share-head .dh{color:var(--signal);font-weight:700;font-size:clamp(13px,1.4vw,15px);letter-spacing:.14em;text-transform:uppercase;margin:0}
 .share-head h1{font-size:clamp(28px,4.4vw,46px);letter-spacing:-.03em;margin:10px 0 0}
 .share-head .lede{margin-inline:auto}
 .share .frame{margin-top:clamp(20px,3vw,34px)}
