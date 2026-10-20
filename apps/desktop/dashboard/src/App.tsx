@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
+import { CommandBar } from "./components/CommandBar.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
@@ -273,6 +274,7 @@ export function App() {
                   {isSnapshot ? "snapshot" : "live"} · {ago(Date.parse(index.generatedAt))}
                 </span>
               )}
+              <CommandBar index={index} go={go} />
             </div>
           </header>
 
