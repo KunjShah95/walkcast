@@ -102,6 +102,8 @@ export interface Capabilities {
   queue?: number | null;
   stagehand?: boolean;
   providers?: string[];
+  /** Speech-to-text providers with a key, for auto-captions. */
+  sttProviders?: string[];
   liveModels?: boolean;
   limits?: { activeJobsPerUser: number; recordingsPerDay: number; runsPerDay: number };
   usage?: { recordingsToday: number };

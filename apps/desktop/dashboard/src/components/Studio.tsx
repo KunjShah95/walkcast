@@ -90,6 +90,9 @@ export function Studio({
   // Bust the browser cache after a re-render (same file names, new content).
   const [version, setVersion] = useState(0);
   const [sttBusy, setSttBusy] = useState(false);
+  const [sttError, setSttError] = useState<string | null>(null);
+  // Known only on a live server; elsewhere let the server answer.
+  const sttMissing = caps?.live && caps.sttProviders?.length === 0;
 
   useEffect(() => {
     const track = video.current?.textTracks[0];
@@ -217,14 +220,17 @@ export function Studio({
             </button>
             <button
               type="button"
-              disabled={sttBusy}
+              disabled={sttBusy || sttMissing}
+              title={sttMissing ? "Add a speech-to-text key (OpenAI, Groq, ElevenLabs or Sarvam) in Settings" : "Transcribe the audio into new captions"}
               onClick={async () => {
                 setSttBusy(true);
+                setSttError(null);
                 try {
                   const next = await sttCaptions(r.id);
                   onChange?.(next);
                 } catch (e) {
-                  window.alert(e instanceof Error ? e.message : String(e));
+                  // Shown on the page: the desktop webview doesn't reliably show alert().
+                  setSttError(e instanceof Error ? e.message : String(e));
                 } finally {
                   setSttBusy(false);
                 }
@@ -250,6 +256,7 @@ export function Studio({
               })}
           </span>
         </div>
+        {sttError && <p className="border-t border-line px-4 py-2.5 text-[12.5px] text-fail">{sttError}</p>}
       </Panel>
 
       <Panel className="flex min-h-0 min-w-0 flex-col overflow-hidden">

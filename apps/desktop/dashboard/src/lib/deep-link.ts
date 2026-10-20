@@ -61,8 +61,11 @@ export async function watchDeepLinks(): Promise<() => void> {
 
   let unlisten: (() => void) | undefined;
   try {
-    unlisten = await listen("tauri://deep-link", (event) => {
-      if (typeof event.payload === "string") void complete(event.payload);
+    // The plugin's own event, carrying a list of URLs. (This listened for "tauri://deep-link",
+    // which nothing emits, so a sign-in returning to a running app was never completed.)
+    unlisten = await listen("deep-link://new-url", (event) => {
+      const urls = Array.isArray(event.payload) ? event.payload : [event.payload];
+      for (const url of urls) if (typeof url === "string") void complete(url);
     });
   } catch {
     return () => {};
@@ -70,7 +73,8 @@ export async function watchDeepLinks(): Promise<() => void> {
 
   // Cold start: the OS launched us with the URL, so no event will fire for it.
   try {
-    const current = await api.invoke?.<string[]>("plugin:deep_link|get_current");
+    // The plugin is registered as "deep-link"; "deep_link" named no command and always failed.
+    const current = await api.invoke?.<string[] | null>("plugin:deep-link|get_current");
     for (const url of current ?? []) void complete(url);
   } catch {
     /* command unavailable in this build */

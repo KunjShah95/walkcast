@@ -10,7 +10,7 @@
 import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { signHeaders } from "../media/s3.ts";
 import { resolveLanguage, resolveVoice } from "./voices.ts";
@@ -42,7 +42,12 @@ export function fliteEngine(voice: FliteVoice): VoiceEngine {
     async speak(text, outFile, cwd) {
       const txt = join(cwd, ".tts-tmp.txt");
       writeFileSync(txt, text.replace(/[{}]/g, ""));
-      await run(["-f", "lavfi", "-i", `flite=textfile=.tts-tmp.txt:voice=${voice}`, "-ar", "22050", "-ac", "1", outFile], { cwd });
+      // The line's text is scratch: it used to stay behind in every recording's folder.
+      try {
+        await run(["-f", "lavfi", "-i", `flite=textfile=.tts-tmp.txt:voice=${voice}`, "-ar", "22050", "-ac", "1", outFile], { cwd });
+      } finally {
+        rmSync(txt, { force: true });
+      }
     },
   };
 }
@@ -91,11 +96,15 @@ export function sapiEngine(voice: FliteVoice): VoiceEngine {
       const txt = join(cwd, ".tts-tmp.txt");
       writeFileSync(txt, text, "utf8");
       // Paths and text reach PowerShell through the environment, so nothing needs quoting.
-      await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SAPI_SCRIPT], {
-        env: { ...process.env, WALKCAST_TTS_IN: txt, WALKCAST_TTS_OUT: outFile, WALKCAST_TTS_GENDER: gender },
-        timeout: 60_000,
-        windowsHide: true,
-      });
+      try {
+        await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SAPI_SCRIPT], {
+          env: { ...process.env, WALKCAST_TTS_IN: txt, WALKCAST_TTS_OUT: outFile, WALKCAST_TTS_GENDER: gender },
+          timeout: 60_000,
+          windowsHide: true,
+        });
+      } finally {
+        rmSync(txt, { force: true });
+      }
       if (!existsSync(outFile)) throw new Error("Windows speech produced no audio");
     },
   };

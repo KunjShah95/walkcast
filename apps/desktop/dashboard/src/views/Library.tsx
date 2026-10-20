@@ -14,6 +14,8 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   const [overrides, setOverrides] = useState<Record<string, RecordingSummary>>({});
   const [transcriptFmt, setTranscriptFmt] = useState<"srt" | "vtt" | "json">("srt");
   const [deleting, setDeleting] = useState(false);
+  // The recording whose Delete is waiting for a second click.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
@@ -92,28 +94,50 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
                 >
                   Transcript
                 </a>
-                {!isSnapshot && caps?.live && (
+                {!isSnapshot && caps?.live && confirmDelete !== current.id && (
                   <button
                     type="button"
-                    disabled={deleting}
-                    onClick={async () => {
-                      if (!window.confirm(`Delete the walkthrough of ${hostOf(current.url)}? Its video, audio and captions are removed for good.`)) return;
-                      setDeleting(true);
-                      setDeleteError(null);
-                      try {
-                        await deleteRecording(current.id);
-                        await refresh();
-                        go({ view: "library" });
-                      } catch (e) {
-                        setDeleteError(e instanceof Error ? e.message : String(e));
-                      } finally {
-                        setDeleting(false);
-                      }
-                    }}
-                    className="inline-flex h-8 items-center rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-fail/60 hover:text-fail disabled:opacity-50"
+                    onClick={() => setConfirmDelete(current.id)}
+                    className="inline-flex h-8 items-center rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-fail/60 hover:text-fail"
                   >
-                    {deleting ? "Deleting…" : "Delete"}
+                    Delete
                   </button>
+                )}
+                {/* Asked on the page, not with window.confirm(): the desktop app's webview doesn't
+                    reliably show native dialogs, so Delete could silently never run. */}
+                {!isSnapshot && caps?.live && confirmDelete === current.id && (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-2">
+                    Delete its video, audio and captions for good?
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={() => setConfirmDelete(null)}
+                      className="inline-flex h-8 items-center rounded-full border border-line px-2.5 hover:text-ink disabled:opacity-50"
+                    >
+                      Keep
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={async () => {
+                        setDeleting(true);
+                        setDeleteError(null);
+                        try {
+                          await deleteRecording(current.id);
+                          await refresh();
+                          go({ view: "library" });
+                        } catch (e) {
+                          setDeleteError(e instanceof Error ? e.message : String(e));
+                        } finally {
+                          setDeleting(false);
+                          setConfirmDelete(null);
+                        }
+                      }}
+                      className="inline-flex h-8 items-center rounded-full border border-fail/60 px-2.5 text-fail hover:bg-fail-soft disabled:opacity-50"
+                    >
+                      {deleting ? "Deleting…" : "Delete"}
+                    </button>
+                  </span>
                 )}
               </div>
             </div>

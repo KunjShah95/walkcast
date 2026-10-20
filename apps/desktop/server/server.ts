@@ -863,6 +863,8 @@ try {
         if (existsSync(join(dir, "video.webm"))) audioFile = "video.webm";
         else return json(400, { error: "No audio available for this recording." });
       }
+      // No speech-to-text key is the person's to fix in Settings, not a server failure.
+      if (configuredSttProviders().length === 0) return json(400, { error: "Auto-captions need a speech-to-text key. Add an OpenAI, Groq, ElevenLabs or Sarvam key in Settings." });
       try {
         const captions = await generateCaptionsFromAudio(join(dir, audioFile), language, typeof (b as any)?.provider === "string" ? (b as any).provider : null);
         summary.captions = captions;
