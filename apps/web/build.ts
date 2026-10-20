@@ -2,7 +2,28 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "vite";
-import { AUTHOR, DEFINITION, DEMO, DESCRIPTION, FAQ, HOWTO, MORE_FAQ, NAME, ROUTES, SITE_ORIGIN, TAGLINE, UPDATED, type Route } from "./src/content.ts";
+import {
+  ANSWER_PAGES,
+  AUTHOR,
+  COMPARE_FAQ,
+  COMPARES,
+  DEFINITION,
+  DEMO,
+  DESCRIPTION,
+  FAQ,
+  GUIDE_STEPS,
+  GUIDES,
+  HOWTO,
+  LAB_FAQ,
+  MORE_FAQ,
+  NAME,
+  PRICING_FAQ,
+  ROUTES,
+  SITE_ORIGIN,
+  TAGLINE,
+  UPDATED,
+  type Route,
+} from "./src/content.ts";
 import { INDEXNOW_KEY } from "./src/seo.ts";
 import { ISSUES_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "./src/site.ts";
 
@@ -95,9 +116,47 @@ const howTo = {
   step: HOWTO.map(([name, text], i) => ({ "@type": "HowToStep", position: i + 1, name, text, url: `${url("/guides/narrated-website-walkthrough")}#step-${i + 1}` })),
 };
 
+/** A HowTo built from the shared step list, so the page and the schema cannot disagree. */
+const howToFor = (path: string, name: string, minutes: number) => {
+  const steps = GUIDE_STEPS[path] ?? [];
+  return {
+    "@type": "HowTo",
+    "@id": `${url(path)}#howto`,
+    name,
+    totalTime: `PT${minutes}M`,
+    tool: [{ "@type": "HowToTool", name: NAME }],
+    supply: [{ "@type": "HowToSupply", name: "A website you own or may test" }],
+    step: steps.map((s, i) => ({
+      "@type": "HowToStep",
+      position: i + 1,
+      name: s.title,
+      text: s.text,
+      url: `${url(path)}#step-${i + 1}`,
+    })),
+  };
+};
+
+/** The competitor in a comparison page, described as an entity so engines can relate the two. */
+const competitor = (path: string) => {
+  const c = COMPARES.find((x) => x.path === path);
+  if (!c) return null;
+  return {
+    "@type": "SoftwareApplication",
+    "@id": `${c.themUrl}#app`,
+    name: c.them,
+    url: c.themUrl,
+    applicationCategory: "MultimediaApplication",
+    description: c.price,
+  };
+};
+
 function graphFor(route: Route) {
-  const page = {
-    "@type": route.path.startsWith("/guides") ? "Article" : route.path === "/faq" ? "FAQPage" : "WebPage",
+  const kind = route.kind ?? "webpage";
+  const isGuide = kind === "guide";
+  const isCompare = kind === "compare";
+  const pageType = kind === "index" ? "CollectionPage" : isGuide || isCompare ? "Article" : kind === "faq" ? "FAQPage" : "WebPage";
+  const page: Record<string, unknown> = {
+    "@type": pageType,
     "@id": `${url(route.path)}#page`,
     url: url(route.path),
     name: route.title,
@@ -108,26 +167,58 @@ function graphFor(route: Route) {
     dateModified: UPDATED,
     author: { "@id": `${SITE}/#author` },
     publisher: { "@id": `${SITE}/#org` },
-    ...(route.path.startsWith("/guides") ? { headline: route.label, image: `${SITE}/assets/og.png`, datePublished: UPDATED } : {}),
-    ...(route.path === "/faq"
-      ? { mainEntity: [...FAQ, ...MORE_FAQ].map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) }
-      : {}),
   };
+  if (isGuide || isCompare) {
+    page.headline = route.label;
+    page.image = `${SITE}/assets/og.png`;
+    page.datePublished = UPDATED;
+  }
+  // The one-paragraph answer is the passage voice assistants read out. Naming it says so.
+  const answerSelector = route.answerSelector ?? (ANSWER_PAGES.has(route.path) ? ".answer" : undefined);
+  if (answerSelector) {
+    page.speakable = { "@type": "SpeakableSpecification", cssSelector: [answerSelector] };
+  }
+  if (kind === "index") {
+    page.mainEntity = {
+      "@type": "ItemList",
+      itemListElement: GUIDES.map((g, i) => ({ "@type": "ListItem", position: i + 1, name: g.label, url: url(g.path) })),
+    };
+  }
+  if (kind === "faq") {
+    page.mainEntity = [...FAQ, ...MORE_FAQ].map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } }));
+  }
+
+  // Breadcrumbs: a guide sits under /guides, so the trail has three steps, not two.
+  const trail: { name: string; item: string }[] = [{ name: NAME, item: `${SITE}/` }];
+  if (route.path.startsWith("/guides/")) trail.push({ name: "Guides", item: url("/guides") });
+  if (route.path.startsWith("/compare/")) trail.push({ name: "Compare", item: url("/compare/screen-recording") });
+  if (route.path !== "/") trail.push({ name: route.label, item: url(route.path) });
   const crumbs = {
     "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: NAME, item: `${SITE}/` },
-      ...(route.path === "/" ? [] : [{ "@type": "ListItem", position: 2, name: route.label, item: url(route.path) }]),
-    ],
+    itemListElement: trail.map((t, i) => ({ "@type": "ListItem", position: i + 1, name: t.name, item: t.item })),
   };
-  const extra =
-    route.path === "/"
-      ? [APP, VIDEO, { ...howTo, "@id": `${SITE}/#howto` }, faqPage(`${SITE}/#faq`, FAQ)]
-      : route.path === "/guides/narrated-website-walkthrough"
-        ? [APP, howTo, VIDEO]
-        : route.path === "/download" || route.path === "/compare/screen-recording"
-          ? [APP]
-          : [];
+
+  const extra: unknown[] = [];
+  if (kind === "landing") {
+    extra.push(APP, VIDEO, { ...howTo, "@id": `${SITE}/#howto` }, faqPage(`${SITE}/#faq`, FAQ));
+  } else if (kind === "index") {
+    extra.push(APP);
+  } else if (kind === "guide") {
+    extra.push(APP, VIDEO);
+    if (GUIDE_STEPS[route.path]) extra.push(howToFor(route.path, route.label, 5));
+  } else if (kind === "compare") {
+    extra.push(APP);
+    const comp = competitor(route.path);
+    if (comp) extra.push(comp);
+  } else if (kind === "lab" || kind === "pricing" || kind === "download") {
+    extra.push(APP);
+  }
+
+  // A page's own questions, emitted as FAQPage so an engine can lift them directly.
+  const ownFaq: [string, string][] =
+    kind === "lab" ? LAB_FAQ : kind === "pricing" ? PRICING_FAQ : (route.faq ?? COMPARE_FAQ[route.path] ?? []);
+  if (ownFaq.length) extra.push(faqPage(`${url(route.path)}#faq`, ownFaq));
+
   return { "@context": "https://schema.org", "@graph": [ORG, PERSON, WEBSITE, page, crumbs, ...extra] };
 }
 
@@ -143,6 +234,7 @@ const setMeta = (html: string, attr: "name" | "property", key: string, value: st
 for (const route of ROUTES) {
   const head = [
     `<link rel="canonical" href="${url(route.path)}">`,
+    `<link rel="me" href="${REPO_URL}">`,
     `<meta property="og:url" content="${url(route.path)}">`,
     `<meta property="og:image" content="${SITE}/assets/og.png">`,
     `<meta property="og:image:width" content="1200">`,
@@ -179,7 +271,7 @@ const BOTS = [
 ];
 writeFileSync(
   join(out, "robots.txt"),
-  `# ${NAME}: public pages. Search engines and AI crawlers are welcome to read, index and cite them.\n\n${BOTS.map((b) => `User-agent: ${b}`).join("\n")}\nAllow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`,
+  `# ${NAME}: public pages. Search engines and AI crawlers are welcome to read, index and cite them.\n\n${BOTS.map((b) => `User-agent: ${b}`).join("\n")}\nAllow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\nSitemap: ${SITE}/sitemap-agents.xml\n`,
 );
 
 const urlEntry = (r: Route) =>
@@ -202,21 +294,13 @@ const urlEntry = (r: Route) =>
         : ""
     }
   </url>`;
-writeFileSync(
-  join(out, "sitemap.xml"),
-  `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
-${ROUTES.map(urlEntry).join("\n")}
-</urlset>
-`,
-);
-
 const pages = ROUTES.map((r) => `- [${r.label}](${url(r.path)}): ${r.description}`).join("\n");
 const links = [
   `- [Download for Windows (.exe)](${WINDOWS_EXE_URL}): recommended installer, no admin rights needed`,
   `- [Download for Windows (.msi)](${WINDOWS_MSI_URL}): per-machine package for IT rollouts`,
   `- [Releases](${RELEASES_URL}): every version and its notes`,
   `- [Source code](${REPO_URL}): MIT licensed`,
+  `- [Pricing in plain text](${SITE}/pricing.md): the price, in a format an agent can parse`,
   `- [Full answers](${SITE}/llms-full.txt): every FAQ answer in plain text`,
 ].join("\n");
 const facts = [
@@ -234,6 +318,49 @@ writeFileSync(join(out, "llms.txt"), `# ${NAME}\n\n> ${TAGLINE}. ${DEFINITION}\n
 writeFileSync(
   join(out, "llms-full.txt"),
   `# ${NAME}: full answers\n\n> ${DEFINITION}\n\n## Facts\n\n${facts}\n\n## How to make a narrated walkthrough\n\n${HOWTO.map(([t, d], i) => `${i + 1}. **${t}.** ${d}`).join("\n")}\n\n## Questions\n\n${[...FAQ, ...MORE_FAQ].map(([q, a]) => `### ${q}\n\n${a}`).join("\n\n")}\n\n## Demo transcript\n\n${transcript}\n\n## Pages\n\n${pages}\n\n## Links\n\n${links}\n- [Support](${ISSUES_URL})\n`,
+);
+
+// A price an agent can read without running JavaScript. An agent comparing tools on a buyer's
+// behalf cannot scrape a rendered pricing section; this file it can just parse.
+writeFileSync(
+  join(out, "pricing.md"),
+  `# Pricing — ${NAME}\n\nLast updated: ${UPDATED}\n\n## Free\n\n- Price: $0 total, forever\n- License: MIT\n- Seats: unlimited. There is no account system and no per-user pricing.\n- Recordings per day: no limit. The only ceiling is your machine.\n- Pages per recording: up to 30, on one site.\n- Watermark: none.\n- Paid tier: none. There is no paid tier and no plan for one.\n- Cloud narration voices: optional and not required. Use the built-in offline voices at no cost,\n  or bring your own ElevenLabs or OpenAI key.\n- Disk: about 600 MB (the app plus the recording browser it downloads once).\n- Network: only the sites you record. Recordings are never uploaded.\n\n## What you get\n\n- A desktop app for Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, and 64-bit Linux.\n- One link in, one video out: an MP4 with a spoken voice-over, WebVTT captions, a transcript,\n  the narration as a WAV file, and a list of every page visited with its HTTP status.\n- Pages behind a login, recorded with a test account you provide.\n- Walkcast Lab, in the same app: failed browser AI agent runs turned into classified causes\n  and replayable regression fixtures.\n\n## What it does not do\n\n- It does not record your screen. It records your website, in its own browser.\n- It does not submit forms. It stops at CAPTCHA and two-factor prompts.\n- It does not edit or splice video. It records one continuous visit.\n\n## Links\n\n- [Pricing page](${url("/pricing")})\n- [Download](${url("/download")})\n- [Source code](${REPO_URL})\n`,
+);
+
+// The machine-readable files belong in the crawlable map too, so a crawler that reads the
+// sitemap finds the text versions of the pages that matter to it.
+writeFileSync(
+  join(out, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
+${ROUTES.map(urlEntry).join("\n")}
+</urlset>
+`,
+);
+writeFileSync(
+  join(out, "sitemap-agents.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${SITE}/pricing.md</loc>
+    <lastmod>${UPDATED}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>${SITE}/llms.txt</loc>
+    <lastmod>${UPDATED}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>${SITE}/llms-full.txt</loc>
+    <lastmod>${UPDATED}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>
+`,
 );
 
 writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);

@@ -69,3 +69,104 @@ test("every route is its own prerendered, canonical, crawlable page", { timeout:
   }
   assert.equal(read(`${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
 });
+
+test("titles and descriptions fit the snippets they are shown in", async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const seen = new Set<string>();
+  for (const r of ROUTES) {
+    assert.ok(r.title.length <= 60, `${r.path} title fits a search result (${r.title.length})`);
+    assert.ok(r.description.length <= 160, `${r.path} description fits a snippet (${r.description.length})`);
+    assert.ok(!seen.has(r.title), `${r.path} title is unique`);
+    seen.add(r.title);
+    assert.ok(!r.description.includes(r.path), `${r.path} description does not read like a slug`);
+  }
+});
+
+test("the machine-readable files an agent needs are published and linked", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
+  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+
+  // An agent comparing tools cannot read a price out of a rendered page.
+  const pricing = read("pricing.md");
+  assert.match(pricing, /^# Pricing . Walkcast/m);
+  assert.match(pricing, /Price: \$0/, "pricing.md states the price in a parsable form");
+  assert.match(pricing, /Seats: unlimited/);
+  assert.match(pricing, /No paid tier|no paid tier/i);
+
+  const robots = read("robots.txt");
+  assert.match(robots, new RegExp(`Sitemap: ${SITE}/sitemap-agents\\.xml`), "the agent sitemap is advertised");
+  const agents = read("sitemap-agents.xml");
+  assert.match(agents, new RegExp(`<loc>${SITE}/pricing\\.md</loc>`));
+
+  const llms = read("llms.txt");
+  assert.match(llms, /pricing\.md/, "llms.txt points at the plain-text price");
+  for (const r of ROUTES) {
+    const loc = r.path === "/" ? `${SITE}/` : `${SITE}${r.path}`;
+    assert.ok(llms.includes(loc), `${r.path} is linked from llms.txt`);
+  }
+});
+
+test("answer engines are told where the answer is", { timeout: 180_000 }, async () => {
+  const { ROUTES, ANSWER_PAGES } = await import("../apps/web/src/content.ts");
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
+  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+
+  for (const path of ANSWER_PAGES) {
+    const r = ROUTES.find((x) => x.path === path)!;
+    const html = read(r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
+    const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
+      "@graph": { "@type": string; speakable?: { cssSelector?: string[] } }[];
+    };
+    const page = ld["@graph"].find((n) => n["@type"] !== "BreadcrumbList" && n.speakable);
+    assert.ok(page?.speakable?.cssSelector?.length, `${path} marks its answer as speakable`);
+    assert.ok(html.includes("<p class=\"answer\">"), `${path} actually has the answer paragraph it points at`);
+  }
+});
+
+test("the comparison pages are structured for citation", { timeout: 180_000 }, async () => {
+  const { COMPARES, COMPARE_FAQ } = await import("../apps/web/src/content.ts");
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
+  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+
+  for (const c of COMPARES) {
+    const html = read(`${c.path.slice(1)}/index.html`);
+    const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
+      "@graph": { "@type": string; name?: string; url?: string }[];
+    };
+    const types = ld["@graph"].map((n) => n["@type"]);
+    assert.ok(types.includes("Article"), `${c.path} is an Article`);
+    assert.ok(types.includes("FAQPage"), `${c.path} has a FAQPage`);
+    assert.ok(types.includes("SoftwareApplication"), `${c.path} names the product`);
+    // The competitor is named as an entity, so an engine can relate the two.
+    assert.ok(
+      ld["@graph"].some((n) => n["@type"] === "SoftwareApplication" && n.url?.startsWith("http") && !n.url.startsWith(SITE)),
+      `${c.path} names the competitor as its own entity`,
+    );
+    // A fair comparison says what the other tool is good at, and dates its prices.
+    assert.match(html, new RegExp(c.them.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${c.path} names ${c.them}`);
+    assert.match(html, /Where .* is better/, `${c.path} says where the other tool wins`);
+    assert.match(html, /Facts, with sources/, `${c.path} cites its sources`);
+    for (const [q] of COMPARE_FAQ[c.path] ?? []) {
+      assert.ok(html.includes(q), `${c.path} shows the question "${q}"`);
+    }
+  }
+});
+
+test("the guides index lists every guide as a structured list", { timeout: 180_000 }, async () => {
+  const { GUIDES } = await import("../apps/web/src/content.ts");
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
+  const html = readFileSync(join(OUT, "guides", "index.html"), "utf8");
+  const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
+    "@graph": { "@type": string; mainEntity?: { itemListElement?: { name: string; url: string }[] } }[];
+  };
+  const page = ld["@graph"].find((n) => n["@type"] === "CollectionPage")!;
+  assert.ok(page.mainEntity?.itemListElement?.length, "the guides index carries an ItemList");
+  for (const g of GUIDES) {
+    assert.ok(html.includes(`href="${g.path}"`), `the index links ${g.path}`);
+    assert.ok(
+      page.mainEntity!.itemListElement!.some((i) => i.url === `${SITE}${g.path}`),
+      `the ItemList names ${g.path}`,
+    );
+  }
+});

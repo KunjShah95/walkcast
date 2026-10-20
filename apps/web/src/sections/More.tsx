@@ -667,6 +667,7 @@ export function Footer() {
               <li><a href="/#agents">Walkcast Lab</a></li>
               <li><a href="/#uses">Use cases</a></li>
               <li><a href="/#pricing">Pricing</a></li>
+              <li><a href="/pricing">Pricing details</a></li>
               <li><a href="/#faq">FAQ</a></li>
             </ul>
           </div>
@@ -684,11 +685,14 @@ export function Footer() {
           <div>
             <h4>Learn</h4>
             <ul>
-              <li><a href="/guides/narrated-website-walkthrough">How-to guide</a></li>
+              <li><a href="/guides">All guides</a></li>
+              <li><a href="/guides/product-demo-video">Product demo video</a></li>
+              <li><a href="/guides/website-tutorial-video">Website tutorial video</a></li>
+              <li><a href="/compare/loom">Loom alternative</a></li>
+              <li><a href="/compare/scribe">Scribe alternative</a></li>
+              <li><a href="/compare/screen-studio">Screen Studio alternative</a></li>
               <li><a href="/compare/screen-recording">vs screen recording</a></li>
               <li><a href="/faq">All questions</a></li>
-              <li><a href="/download">Download details</a></li>
-              <li><a href="/privacy">Privacy</a></li>
             </ul>
           </div>
           <div>
@@ -703,6 +707,14 @@ export function Footer() {
         </div>
         <div className="legal">
           <span>© 2026 Walkcast. Open source under MIT.</span>
+          <a href="/privacy">Privacy</a>
+          <a href="/download">Download details</a>
+          <a href="/pricing.md" rel="noopener">
+            pricing.md
+          </a>
+          <a href="/llms.txt" rel="noopener">
+            llms.txt
+          </a>
           <a href={REPO_URL} aria-label="Walkcast on GitHub"><GithubIcon width={17} height={17} /></a>
         </div>
       </div>

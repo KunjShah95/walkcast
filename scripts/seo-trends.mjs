@@ -6,15 +6,30 @@
  *   - Google "related searches" (www.google.com/complete) -> neighbouring intents
  *   - Google Trends (trends.google.com undocumented endpoints) -> relative interest over time
  *
- * Output: JSON on stdout/file so it can be turned into a report.
+ * Output: JSON, merged into results/seo-trends.json.
  *
- *   node scripts/seo-trends.mjs            # trends + suggestions
- *   node scripts/seo-trends.mjs --sug-only # skip Trends (it rate-limits hard)
+ *   node scripts/seo-trends.mjs              # everything
+ *   node scripts/seo-trends.mjs --sug-only   # suggestions only
+ *   node scripts/seo-trends.mjs --trends-only # trends only, merges into the existing file
+ *
+ * Note on hosts: trends.google.com rate-limits the data endpoints hard (HTTP 429) from
+ * shared IPs, while the country domains serve the same API without that limit. The
+ * script rotates country hosts, so keep the explore call and the widget call on the
+ * same host or the token will not match.
  */
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+const TREND_HOSTS = [
+  "trends.google.co.uk",
+  "trends.google.co.in",
+  "trends.google.ca",
+  "trends.google.com.au",
+  "trends.google.de",
+  "trends.google.fr",
+];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -60,18 +75,18 @@ async function expand(seed) {
   return [...out].sort();
 }
 
-/** ------------------------------------------------------------------ trends */
+/* ------------------------------------------------------------------ trends */
 
 class Session {
-  constructor() {
+  constructor(host) {
+    this.host = host;
     this.cookies = new Map();
   }
   header() {
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   }
   absorb(res) {
-    const raw = res.headers.getSetCookie?.() ?? [];
-    for (const c of raw) {
+    for (const c of res.headers.getSetCookie?.() ?? []) {
       const [pair] = c.split(";");
       const idx = pair.indexOf("=");
       if (idx > 0) this.cookies.set(pair.slice(0, idx).trim(), pair.slice(idx + 1).trim());
@@ -82,6 +97,7 @@ class Session {
       headers: {
         "User-Agent": UA,
         "Accept-Language": "en-US,en;q=0.9",
+        Referer: `https://${this.host}/trends/`,
         Cookie: this.header(),
       },
       redirect: "follow",
@@ -91,43 +107,45 @@ class Session {
   }
 }
 
-/** Trends rate-limits hard on shared IPs: retry 429/5xx with a growing pause. */
-async function retry(s, url, tries = 6) {
-  let wait = 8000;
-  for (let i = 0; i < tries; i++) {
-    const res = await s.get(url);
-    if (res.ok) return res;
-    if (res.status !== 429 && res.status < 500) return res;
-    process.stderr.write(`  ${res.status} on ${url.split("?")[0]} - waiting ${wait / 1000}s\n`);
-    await sleep(wait);
-    wait = Math.min(wait * 2, 90000);
-  }
-  return s.get(url);
-}
-
-async function trendsSession() {
-  const s = new Session();
-  await s.get("https://trends.google.com/trends/");
-  return s;
-}
-
 function parseJsonp(text) {
-  return JSON.parse(text.slice(text.indexOf("{")));
+  const body = text.slice(text.indexOf("{"));
+  // A bot-challenge page comes back as HTML; treat it as a failure so the host is rotated.
+  if (!body.startsWith("{")) throw new Error("challenge page (not JSON)");
+  return JSON.parse(body);
+}
+
+/** Explore + widget calls on one host. Rotates hosts and retries on 429 or challenge pages. */
+async function withTrends(fn, label, attempts = 3) {
+  let lastError = "unknown";
+  for (let round = 0; round < attempts; round++) {
+    for (const host of TREND_HOSTS) {
+      const s = new Session(host);
+      try {
+        await s.get(`https://${host}/trends/`);
+        const result = await fn(s);
+        if (result) return result;
+      } catch (e) {
+        lastError = String(e);
+        process.stderr.write(`  ${host}: ${lastError}\n`);
+      }
+      await sleep(1200);
+    }
+    await sleep(4000 * (round + 1));
+  }
+  throw new Error(`${label}: ${lastError}`);
 }
 
 async function explore(s, req) {
-  const url = `https://trends.google.com/trends/api/explore?hl=en-US&tz=-480&req=${encodeURIComponent(
-    JSON.stringify(req)
-  )}`;
-  const res = await retry(s, url);
+  const url = `https://${s.host}/trends/api/explore?hl=en-US&tz=-480&req=${encodeURIComponent(JSON.stringify(req))}`;
+  const res = await s.get(url);
   if (!res.ok) throw new Error(`explore ${res.status}`);
   return parseJsonp(await res.text());
 }
 
-/**
- * Interest over time for a set of keywords, as comparable indices (0-100 within the group).
- */
+/** Interest over time for a set of keywords, as comparable indices (0-100 within the group). */
 async function interest(s, keywords, time = "today 12-m") {
+  // Trends accepts at most five comparison items per request.
+  if (keywords.length > 5) throw new Error(`too many keywords (${keywords.length}, max 5)`);
   const req = {
     comparisonItem: keywords.map((keyword) => ({ keyword, geo: "", time })),
     category: 0,
@@ -137,12 +155,12 @@ async function interest(s, keywords, time = "today 12-m") {
   const widget = json.widgets.find((w) => w.id === "TIMESERIES");
   if (!widget) throw new Error("no TIMESERIES widget");
   // The widget echoes the exact request shape Trends expects back; reuse it verbatim.
-  const url = `https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=-480&req=${encodeURIComponent(
-    JSON.stringify(widget.request)
+  const url = `https://${s.host}/trends/api/widgetdata/multiline?hl=en-US&tz=-480&req=${encodeURIComponent(
+    JSON.stringify(widget.request),
   )}&token=${widget.token}`;
-  const dres = await retry(s, url);
-  if (!dres.ok) throw new Error(`multiline ${dres.status}`);
-  const djson = parseJsonp(await dres.text());
+  const res = await s.get(url);
+  if (!res.ok) throw new Error(`multiline ${res.status}`);
+  const djson = parseJsonp(await res.text());
   const series = djson.default?.timelineData ?? [];
   const values = new Map(keywords.map((k) => [k, []]));
   for (const point of series) {
@@ -165,24 +183,25 @@ async function interest(s, keywords, time = "today 12-m") {
   return out;
 }
 
-/** "Top" and "rising" related queries for a seed - the "what is trending" signal. */
+/** "Top" and "rising" related queries for a seed - the "what is climbing" signal. */
 async function related(s, keyword, time = "today 12-m") {
   const req = { comparisonItem: [{ keyword, geo: "", time }], category: 0, property: "" };
   const json = await explore(s, req);
   const result = { rising: [], top: [] };
   for (const w of json.widgets.filter((x) => x.id?.startsWith("RELATED_QUERIES"))) {
-    const url = `https://trends.google.com/trends/api/widgetdata/relatedsearches?hl=en-US&tz=-480&req=${encodeURIComponent(
-      JSON.stringify(w.request)
+    const url = `https://${s.host}/trends/api/widgetdata/relatedsearches?hl=en-US&tz=-480&req=${encodeURIComponent(
+      JSON.stringify(w.request),
     )}&token=${w.token}`;
-    const dres = await retry(s, url);
-    if (!dres.ok) continue;
-    const djson = parseJsonp(await dres.text());
+    const res = await s.get(url);
+    if (!res.ok) continue;
+    const djson = parseJsonp(await res.text());
     for (const r of djson.default?.rankedList ?? []) {
-      for (const item of r.relatedKeywordQueries ?? []) {
+      // The widget calls the list `rankedKeyword`; each group is either top or rising.
+      for (const item of r.rankedKeyword ?? r.relatedKeywordQueries ?? []) {
         const entry = {
           query: item.query,
           score: item.value ?? 0,
-          rising: item.breakdown?.rising?.value ?? 0,
+          rising: item.breakdown?.risingValue ?? item.breakdown?.rising?.value ?? 0,
         };
         if (r.rising) result.rising.push(entry);
         else result.top.push(entry);
@@ -194,23 +213,7 @@ async function related(s, keyword, time = "today 12-m") {
   return result;
 }
 
-/** "Trending now" - the live breaking-topic list, for context on what the zeitgeist is doing. */
-async function trendingNow(s, geo = "US") {
-  const url = `https://trends.google.com/trends/api/dailytrends?hl=en-US&tz=-480&geo=${geo}&ns=15`;
-  const res = await retry(s, url);
-  if (!res.ok) throw new Error(`dailytrends ${res.status}`);
-  const djson = parseJsonp(await res.text());
-  const days = djson.default?.trendingSearchesDays ?? [];
-  const latest = days[0]?.trendingSearches ?? [];
-  return latest.map((t) => ({
-    query: t.title?.query,
-    traffic: t.breakdown?.[0]?.value ?? t.traffic?.[0]?.value ?? null,
-    related: (t.relatedQueries ?? []).map((r) => r.query),
-    news: (t.newsArticles ?? []).map((n) => n.title).slice(0, 3),
-  }));
-}
-
-/** ------------------------------------------------------------------ main */
+/* ------------------------------------------------------------------ seeds */
 
 const SEEDS = [
   // product / category
@@ -244,6 +247,7 @@ const SEEDS = [
   "video for website onboarding",
 ];
 
+/** Comparable inside a group only: the index is relative to the group's own peak. */
 const TREND_GROUPS = {
   "walkthrough-video": [
     "website walkthrough video",
@@ -266,52 +270,70 @@ const TREND_GROUPS = {
     "test automation",
     "playwright",
   ],
-  "video-tools": ["loom", "descript", "vidyard", "screen studio", "tldv", "clipchamp"],
+  "video-tools": ["loom", "descript", "vidyard", "screen studio", "tldv"],
+  "video-tools-2": ["clipchamp", "obs studio", "screenflow", "veed", "kapwing"],
 };
+
+const RELATED_SEEDS = [
+  "website walkthrough video",
+  "product demo video",
+  "video from url",
+  "browser agent",
+  "ai browser agent",
+  "browser agent testing",
+  "ai agent testing",
+  "screen recording software",
+  "website video maker",
+  "browser automation testing",
+];
 
 async function main() {
   const sugOnly = process.argv.includes("--sug-only");
-  const out = { generatedAt: new Date().toISOString(), seeds: {}, trends: {}, related: {} };
+  const trendsOnly = process.argv.includes("--trends-only");
+  const relatedOnly = process.argv.includes("--related-only");
+  const target = process.env.SEO_OUT ?? "results/seo-trends.json";
 
-  const session = sugOnly ? null : await trendsSession();
+  const out = existsSync(target)
+    ? JSON.parse(readFileSync(target, "utf8"))
+    : { generatedAt: new Date().toISOString(), seeds: {}, trends: {}, related: {} };
+  out.generatedAt = new Date().toISOString();
 
-  for (const seed of SEEDS) {
-    out.seeds[seed] = await expand(seed);
-    process.stderr.write(`suggestions: ${seed} (${out.seeds[seed].length})\n`);
-    await sleep(400);
+  if (!trendsOnly && !relatedOnly) {
+    for (const seed of SEEDS) {
+      out.seeds[seed] = await expand(seed);
+      process.stderr.write(`suggestions: ${seed} (${out.seeds[seed].length})\n`);
+      await sleep(400);
+    }
+  }
+
+  if (!sugOnly && !relatedOnly) {
+    for (const [name, kws] of Object.entries(TREND_GROUPS)) {
+      try {
+        out.trends[name] = await withTrends((s) => interest(s, kws), name);
+        process.stderr.write(`trends: ${name}\n`);
+      } catch (e) {
+        // Never let a rate-limited run destroy data that was fetched successfully earlier.
+        if (out.trends[name]?.error) out.trends[name] = { error: String(e) };
+        else process.stderr.write(`trends FAILED (keeping the earlier result): ${name} ${e}\n`);
+      }
+      await sleep(1500);
+    }
   }
 
   if (!sugOnly) {
-    for (const [name, kws] of Object.entries(TREND_GROUPS)) {
+    for (const seed of RELATED_SEEDS) {
+      const existing = out.related[seed];
+      if (existing && !existing.error && existing.top?.length) continue;
       try {
-        out.trends[name] = await interest(session, kws);
-        process.stderr.write(`trends: ${name}\n`);
-      } catch (e) {
-        out.trends[name] = { error: String(e) };
-        process.stderr.write(`trends FAILED: ${name} ${e}\n`);
-      }
-      await sleep(3000);
-    }
-
-    for (const seed of ["website walkthrough video", "browser agent", "ai agent testing"]) {
-      try {
-        out.related[seed] = await related(session, seed);
+        out.related[seed] = await withTrends((s) => related(s, seed), seed);
         process.stderr.write(`related: ${seed}\n`);
       } catch (e) {
-        out.related[seed] = { error: String(e) };
+        if (!existing) out.related[seed] = { error: String(e) };
       }
-      await sleep(3000);
-    }
-
-    try {
-      out.trendingNow = await trendingNow(session);
-      process.stderr.write(`trendingNow: ${out.trendingNow.length}\n`);
-    } catch (e) {
-      out.trendingNow = { error: String(e) };
+      await sleep(1500);
     }
   }
 
-  const target = process.env.SEO_OUT ?? "results/seo-trends.json";
   writeFileSync(target, JSON.stringify(out, null, 2));
   process.stderr.write(`written: ${target}\n`);
 }

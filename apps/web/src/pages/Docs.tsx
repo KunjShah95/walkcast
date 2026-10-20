@@ -1,41 +1,20 @@
 import { Check, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { AUTHOR, FAQ, HOWTO, MORE_FAQ, ROUTES, UPDATED } from "../content.ts";
+import { FAQ, GUIDE_STEPS, MORE_FAQ } from "../content.ts";
 import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { AppleIcon, DownloadButton, LinuxIcon, WindowsIcon } from "../ui.tsx";
+import { AppleIcon, LinuxIcon, WindowsIcon } from "../ui.tsx";
+import { Doc } from "./Doc.tsx";
+import { GuidesIndexPage, ProductDemoPage, WebsiteTutorialPage } from "./Guides.tsx";
+import { LoomComparePage, ScribeComparePage, ScreenStudioComparePage } from "./Compare.tsx";
+import { LabPage } from "./Lab.tsx";
+import { PricingPage } from "./Pricing.tsx";
 
 /**
  * The documents beside the landing page. Each answers one question completely, in plain HTML
  * (prerendered), so a search or answer engine can cite the page on its own.
  */
 
-function Doc({ path, eyebrow, children }: { path: string; eyebrow: string; children: ReactNode }) {
-  const route = ROUTES.find((r) => r.path === path)!;
-  return (
-    <article className="doc">
-      <div className="wrap doc-wrap">
-        <nav className="crumbs" aria-label="Breadcrumb">
-          <a href="/">Walkcast</a>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page">{route.label}</span>
-        </nav>
-        <p className="eyebrow">
-          <span className="eyebrow-n">{eyebrow}</span>
-          Updated <time dateTime={UPDATED}>{new Date(UPDATED + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time> · by{" "}
-          <a href={AUTHOR.url}>{AUTHOR.name}</a>
-        </p>
-        {children}
-        <aside className="doc-cta">
-          <div>
-            <b>Make your first walkthrough</b>
-            <p>Free for Windows, Mac and Linux. Version {VERSION}.</p>
-          </div>
-          <DownloadButton />
-        </aside>
-      </div>
-    </article>
-  );
-}
+export { Doc };
 
 /* ------------------------------------------------------------------ guide */
 
@@ -60,21 +39,14 @@ export function GuidePage() {
 
       <h2>Steps</h2>
       <ol className="steps">
-        {HOWTO.map(([title, text], i) => (
-          <li key={title} id={`step-${i + 1}`}>
+        {GUIDE_STEPS["/guides/narrated-website-walkthrough"]!.map((s, i) => (
+          <li key={s.title} id={`step-${i + 1}`}>
             <h3>
-              {i + 1}. {title}
+              {i + 1}. {s.title}
             </h3>
-            <p>{text}</p>
+            <p>{s.text}</p>
           </li>
         ))}
-        <li id="step-4">
-          <h3>4. Review, edit, share</h3>
-          <p>
-            Play the result in the app. Rewrite any line of the script and re-narrate, or swap in your own voice. Then share <code>recording.mp4</code>, or embed it with
-            its captions.
-          </p>
-        </li>
       </ol>
 
       <h2>What you get</h2>
@@ -346,8 +318,16 @@ export function PrivacyPage() {
 }
 
 export const DOC_PAGES: Record<string, () => ReactNode> = {
+  "/guides": GuidesIndexPage,
   "/guides/narrated-website-walkthrough": GuidePage,
+  "/guides/product-demo-video": ProductDemoPage,
+  "/guides/website-tutorial-video": WebsiteTutorialPage,
   "/compare/screen-recording": ComparePage,
+  "/compare/loom": LoomComparePage,
+  "/compare/screen-studio": ScreenStudioComparePage,
+  "/compare/scribe": ScribeComparePage,
+  "/lab": LabPage,
+  "/pricing": PricingPage,
   "/faq": FaqPage,
   "/download": DownloadPage,
   "/privacy": PrivacyPage,

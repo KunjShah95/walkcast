@@ -20,6 +20,8 @@
     "web:build": "node --import tsx apps/web/build.ts",
     "web:preview": "vite preview --config apps/web/vite.config.ts",
     "web:indexnow": "node --import tsx apps/web/indexnow.ts",
+    "seo:pull": "node scripts/seo-trends.mjs",
+    "seo:report": "node scripts/seo-report.mjs",
     "experiment": "tsx apps/desktop/cli.ts experiment",
     "ui:build": "vite build --config apps/desktop/dashboard/vite.config.ts",
     "ui:dev": "vite --config apps/desktop/dashboard/vite.config.ts",

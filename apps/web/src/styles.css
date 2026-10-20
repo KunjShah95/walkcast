@@ -542,7 +542,18 @@ footer { margin-top: clamp(100px, 12vw, 160px); overflow: hidden; }
 .faq-list { margin: 0; }
 .faq-list > div { border-top: 1px solid var(--line); padding: 22px 0; }
 .faq-list dt h2 { font-size: 20px; margin: 0 0 8px; letter-spacing: -0.02em; }
+.faq-list dt h3 { font-size: 19px; margin: 0 0 8px; letter-spacing: -0.02em; }
 .faq-list dd { margin: 0; }
+/* The guides index: a list of cards, each one a link plus a line of what it is for. */
+.guide-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.guide-list li { border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; margin: 0; }
+.guide-list a { text-decoration: none; font-size: 18px; letter-spacing: -0.02em; }
+.guide-list a:hover { text-decoration: underline; }
+.guide-list p { margin: 6px 0 0; font-size: 15px; }
+/* Claims with a source beside them, for a reader who wants to check them. */
+.sources { list-style: none; padding: 0; }
+.sources li { border-left: 2px solid var(--line); padding-left: 14px; margin: 12px 0; }
+.sources a { font-size: 14px; white-space: nowrap; }
 .dl-row { display: grid; gap: 12px; }
 .dl-tile { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border-radius: var(--r); background: var(--panel); text-decoration: none; color: var(--ink) !important; transition: background 0.15s; }
 .dl-tile:hover { background: var(--panel-2); }

@@ -7,6 +7,12 @@ classified, reproducible regression test.
 
 MIT licensed. The price is zero.
 
+**Website: [walkcast.kunjshah.in](https://walkcast.kunjshah.in)** — the landing page, the
+[guides](https://walkcast.kunjshah.in/guides), the [comparison pages](https://walkcast.kunjshah.in/compare/loom)
+and [Walkcast Lab](https://walkcast.kunjshah.in/lab). The site publishes
+[`llms.txt`](https://walkcast.kunjshah.in/llms.txt) for language models and
+[`pricing.md`](https://walkcast.kunjshah.in/pricing.md) as plain text.
+
 ---
 
 ## Architecture
@@ -50,6 +56,35 @@ the `recordSite()` and `runOnce()` pipelines step by step.
 
 The diagrams are editable Excalidraw files in [`docs/architecture/`](docs/architecture/) (open at
 [excalidraw.com](https://excalidraw.com)). Regenerate with `python docs/architecture/build.py`.
+
+---
+
+## Website
+
+The marketing site (`apps/web`) is a prerendered React app. Every page is a full HTML document with
+its own title, description, canonical URL, Open Graph tags and a JSON-LD graph, so a crawler reads
+it without running any JavaScript.
+
+| Page | What it is for |
+| --- | --- |
+| [walkcast.kunjshah.in](https://walkcast.kunjshah.in) | The landing page: what it does, what it costs, the FAQ |
+| [Guides](https://walkcast.kunjshah.in/guides) | How to make a [product demo video](https://walkcast.kunjshah.in/guides/product-demo-video), a [website tutorial video](https://walkcast.kunjshah.in/guides/website-tutorial-video) and a [narrated walkthrough](https://walkcast.kunjshah.in/guides/narrated-website-walkthrough) |
+| [Loom alternative](https://walkcast.kunjshah.in/compare/loom) · [Scribe alternative](https://walkcast.kunjshah.in/compare/scribe) · [Screen Studio alternative](https://walkcast.kunjshah.in/compare/screen-studio) · [vs screen recording](https://walkcast.kunjshah.in/compare/screen-recording) | Fair, sourced comparisons — including where the other tool is the better choice |
+| [Walkcast Lab](https://walkcast.kunjshah.in/lab) | Browser agent testing: failures turned into causes, evidence and replayable fixtures |
+| [Pricing](https://walkcast.kunjshah.in/pricing) | Free, MIT licensed, no seats, no watermark |
+| [Download](https://walkcast.kunjshah.in/download) · [Privacy](https://walkcast.kunjshah.in/privacy) · [FAQ](https://walkcast.kunjshah.in/faq) | Installers, what stays on your machine, every answer |
+
+Machine-readable files, published for crawlers and for agents evaluating the tool:
+
+- [`llms.txt`](https://walkcast.kunjshah.in/llms.txt) — a short quotable summary linking every page
+- [`llms-full.txt`](https://walkcast.kunjshah.in/llms-full.txt) — every FAQ answer in plain text
+- [`pricing.md`](https://walkcast.kunjshah.in/pricing.md) — the price and its limits, parsable without JavaScript
+- [`sitemap.xml`](https://walkcast.kunjshah.in/sitemap.xml) and [`sitemap-agents.xml`](https://walkcast.kunjshah.in/sitemap-agents.xml)
+- [`robots.txt`](https://walkcast.kunjshah.in/robots.txt) — every crawler welcome, search and AI alike
+
+The keyword and trend research behind this structure, pulled from Google, is in
+[`docs/SEO-KEYWORD-RESEARCH.md`](docs/SEO-KEYWORD-RESEARCH.md); the playbook is
+[`docs/SEO-AEO-GEO-PLAYBOOK.md`](docs/SEO-AEO-GEO-PLAYBOOK.md).
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-20T12:19:56.955Z",
+  "generatedAt": "2026-10-20T14:50:54.960Z",
   "seeds": {
     "website walkthrough video": [
       "create website walkthrough video",
@@ -2208,33 +2208,141 @@
   },
   "trends": {
     "walkthrough-video": {
-      "error": "Error: multiline 400"
+      "error": "Error: walkthrough-video: Error: explore 429"
     },
     "walkthrough-howto": {
-      "error": "Error: multiline 400"
+      "error": "Error: walkthrough-howto: Error: explore 429"
     },
     "browser-agents": {
-      "error": "Error: multiline 400"
+      "error": "Error: browser-agents: Error: explore 429"
     },
     "agent-testing": {
-      "error": "Error: multiline 400"
+      "error": "Error: agent-testing: Error: explore 429"
     },
     "video-tools": {
-      "error": "Error: explore 400"
+      "error": "Error: video-tools: Error: explore 429"
+    },
+    "video-tools-2": {
+      "error": "Error: video-tools-2: Error: explore 429"
     }
   },
   "related": {
     "website walkthrough video": {
-      "rising": [],
-      "top": []
+      "error": "Error: website walkthrough video: Error: explore 429"
     },
     "browser agent": {
-      "rising": [],
-      "top": []
+      "error": "Error: browser agent: Error: explore 429"
     },
     "ai agent testing": {
-      "rising": [],
-      "top": []
+      "error": "Error: ai agent testing: Error: explore 429"
+    },
+    "product demo video": {
+      "error": "Error: product demo video: Error: explore 429"
+    },
+    "video from url": {
+      "error": "Error: video from url: Error: explore 429"
+    },
+    "ai browser agent": {
+      "error": "Error: ai browser agent: Error: explore 429"
+    },
+    "browser agent testing": {
+      "error": "Error: browser agent testing: Error: explore 429"
+    },
+    "screen recording software": {
+      "error": "Error: screen recording software: Error: explore 429"
+    },
+    "website video maker": {
+      "error": "Error: website video maker: Error: explore 429"
+    },
+    "browser automation testing": {
+      "error": "Error: browser automation testing: Error: explore 429"
     }
+  },
+  "trendsSnapshot": {
+    "provenance": "Captured from trends.google.com on 2026-10-20, before the IP was rate-limited (HTTP 429) by the Trends data endpoints. Indices are relative within each group: 0-100 is that group's own peak, so only groups are comparable with groups.",
+    "groups": {
+      "walkthrough-video": {
+        "website walkthrough video": {
+          "average": 0,
+          "peak": 0,
+          "total": 0
+        },
+        "product demo video": {
+          "average": 0.9,
+          "peak": 2,
+          "total": 48
+        },
+        "screen recording software": {
+          "average": 1.3,
+          "peak": 2,
+          "total": 68
+        },
+        "loom": {
+          "average": 71.5,
+          "peak": 100,
+          "total": 3789
+        },
+        "scribe": {
+          "average": 34.8,
+          "peak": 50,
+          "total": 1847
+        }
+      },
+      "walkthrough-howto": {
+        "how to record website": {
+          "average": 31.9,
+          "peak": 100,
+          "total": 1693
+        },
+        "create product demo video": {
+          "average": 0.2,
+          "peak": 1,
+          "total": 9
+        },
+        "website tutorial video": {
+          "average": 12.5,
+          "peak": 58,
+          "total": 665
+        },
+        "explainer video": {
+          "average": 23.4,
+          "peak": 35,
+          "total": 1239
+        }
+      },
+      "agent-testing": {
+        "ai agent testing": {
+          "average": 2.4,
+          "peak": 5,
+          "total": 129
+        },
+        "browser agent testing": {
+          "average": 0,
+          "peak": 1,
+          "total": 2
+        },
+        "regression testing": {
+          "average": 4.4,
+          "peak": 8,
+          "total": 235
+        },
+        "test automation": {
+          "average": 14.5,
+          "peak": 33,
+          "total": 768
+        },
+        "playwright": {
+          "average": 60.5,
+          "peak": 100,
+          "total": 3209
+        }
+      }
+    },
+    "notCaptured": [
+      "browser-agents (browser agent, ai agent, browser automation, ai browser, stagehand)",
+      "video-tools (loom, descript, vidyard, screen studio, tldv)",
+      "video-tools-2 (clipchamp, obs studio, screenflow, veed, kapwing)",
+      "related and rising queries for every seed"
+    ]
   }
 }
