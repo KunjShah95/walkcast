@@ -104,7 +104,14 @@ export function withRates(s: StoredExperimentSummary): ServedExperimentSummary {
   };
 }
 
-/** A narrated site recording (src/record), as listed by the dashboard. */
+/** A share link: the token is the permission, and the link expires. */
+export interface ShareLink {
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** A named recording as it is listed by the dashboard. */
 export interface RecordingSummary {
   id: string;
   /** Account that asked for it (absent for CLI recordings). */
@@ -122,6 +129,8 @@ export interface RecordingSummary {
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
   /** What the recorder found on the site: console errors, failed requests, page timings. */
   insights?: RecordingInsights;
+  /** Share links: the token is the permission, and every link expires. */
+  shares?: ShareLink[];
   /** What the person asked the narration to be, and what spoke instead. */
   narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
 }

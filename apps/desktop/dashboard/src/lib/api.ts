@@ -339,7 +339,6 @@ export function transcriptUrl(id: string, format: "srt" | "vtt" | "json"): strin
 
 /**
  * What the recorder found on the site while it walked it.
- *
  * A walkthrough made now carries its insights in its summary; an older one is read from its
  * trace by the server, which runs the same analysis. `null` means the walkthrough has no
  * trace to read (a recording kept in object storage, or a snapshot with no server behind it).
@@ -354,6 +353,40 @@ export async function loadInsights(id: string): Promise<RecordingInsights | null
   } catch {
     return null;
   }
+}
+
+/** A share link: the token is the permission, and the link expires. */
+export interface ShareLink {
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/**
+ * Make a link that plays this walkthrough for whoever has it.
+ *
+ * No account, no sign-in on the other side. The link works until the day it names, and it can
+ * be switched off before then.
+ */
+export async function createShare(id: string, days = 7): Promise<{ url: string; share: ShareLink; shares: ShareLink[] }> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/share`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { url?: string; share?: ShareLink; shares?: ShareLink[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.url || !body.share) throw new Error(body.error ?? `Could not create the link (${res.status}).`);
+  return { url: body.url, share: body.share, shares: body.shares ?? [] };
+}
+
+/** Stop a link working. Without a token, every link for this walkthrough is stopped. */
+export async function revokeShare(id: string, token?: string): Promise<ShareLink[]> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/share${token ? `?token=${encodeURIComponent(token)}` : ""}`, { method: "DELETE" });
+  const body = (await res.json().catch(() => ({}))) as { shares?: ShareLink[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not stop the link (${res.status}).`);
+  return body.shares ?? [];
 }
 
 /** Generate captions from the recording's audio via STT. */

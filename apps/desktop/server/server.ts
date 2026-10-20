@@ -21,12 +21,13 @@ import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
 import { FAVICON, fontPath } from "../../../packages/brand/src/index.ts";
 import { openExternal } from "./open-external.ts";
-import { authPage, continueInBrowserPage, messagePage, notFoundPage } from "./pages.ts";
+import { authPage, continueInBrowserPage, messagePage, notFoundPage, sharePage } from "./pages.ts";
+import { newShareToken } from "./share.ts";
 import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
 import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from "../../../packages/core/src/webhooks.ts";
 import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
-import { analyzeRecording } from "../../../packages/core/src/record/insights.ts";
+import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insights.ts";
 import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
@@ -911,6 +912,83 @@ try {
       }
       return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
     }
+    // Share a walkthrough: a link that plays it for whoever has it, until it expires.
+    //
+    // The token is the permission and it lives in the walkthrough's own summary, so revoking
+    // a link is removing it from there. There is no account on the other side of the link:
+    // that is the whole point of sending someone one.
+    const shareApi = /^\/api\/recordings\/([\w.-]+)\/share$/.exec(url.pathname);
+    if (shareApi && (req.method === "POST" || req.method === "DELETE")) {
+      const id = shareApi[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      const summary = row.summary ?? (await listRecordings(user)).find((r) => r.id === id);
+      if (!summary) return json(404, { error: "Recording not found." });
+      const shares = (summary.shares ?? []).filter((s) => Date.parse(s.expiresAt) > Date.now());
+      if (req.method === "DELETE") {
+        const token = url.searchParams.get("token");
+        const kept = token ? shares.filter((s) => s.token !== token) : [];
+        summary.shares = kept;
+        await saveRecordingSummary(id, row.owner, summary);
+        return json(200, { ok: true, shares: kept });
+      }
+      const body = (await readJson(req).catch(() => ({}))) as { days?: number };
+      const days = clampInt(body.days, 1, 90, 7);
+      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString() };
+      summary.shares = [...shares, share];
+      await saveRecordingSummary(id, row.owner, summary);
+      log.info("recording.shared", { id, owner, until: share.expiresAt });
+      return json(200, { share, url: `${siteUrl}/share/${encodeURIComponent(id)}/${share.token}`, shares: summary.shares });
+    }
+    // The public side of a share link: the page, and the media it plays.
+    const shareView = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/?$/.exec(url.pathname);
+    const shareFile = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/([\w.-]+)$/.exec(url.pathname);
+    if ((shareView || shareFile) && (req.method === "GET" || req.method === "HEAD")) {
+      const [, id, token, file] = (shareFile ?? shareView) as unknown as [string, string, string, string | undefined];
+      const found = await findRecording(id);
+      const summary = found?.summary;
+      if (!summary) return json(404, { error: "This link is not valid." });
+      const share = (summary.shares ?? []).find((s) => s.token === token);
+      if (!share || Date.parse(share.expiresAt) <= Date.now()) return json(404, { error: "This link has expired." });
+      if (file) {
+        // Only the files this walkthrough published can be fetched through the link.
+        const allowed = new Set(
+          [summary.media.mp4, summary.media.webm, summary.media.video, summary.media.captions, summary.media.audio].filter((f): f is string => Boolean(f)),
+        );
+        if (!allowed.has(file)) return json(404, { error: "not found" });
+        const where = await media.locate(id, file);
+        if (!where) return json(404, { error: "not found" });
+        if ("redirect" in where) return redirect(where.redirect);
+        return streamFile(req, res, where.path, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
+      }
+      const base = `/share/${encodeURIComponent(id)}/${token}`;
+      const sources = [
+        summary.media.mp4 ? { url: `${base}/${summary.media.mp4}`, type: "video/mp4" } : null,
+        summary.media.webm ? { url: `${base}/${summary.media.webm}`, type: "video/webm" } : null,
+        summary.media.mp4 || summary.media.webm ? null : summary.media.video ? { url: `${base}/${summary.media.video}`, type: "video/webm" } : null,
+      ].filter((s): s is { url: string; type: string } => s !== null);
+      if (sources.length === 0) return json(404, { error: "This walkthrough has no video to share." });
+      const captions = summary.captions ?? [];
+      // A chapter starts where the recorder opened a page, exactly as it does in the app.
+      const chapters = captions.flatMap((c) => (/^Opening\b/.test(c.text) ? [{ start: c.start, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
+      return send(
+        200,
+        "text/html; charset=utf-8",
+        sharePage({
+          title: hostOf(summary.url),
+          host: summary.url,
+          recorded: summary.createdAt,
+          pages: summary.pages.length,
+          durationMs: summary.durationMs,
+          sources,
+          captions: summary.media.captions ? `${base}/${summary.media.captions}` : null,
+          chapters: chapters.length ? chapters : captions.length ? [{ start: 0, title: hostOf(summary.url) }] : [],
+          transcript: captions.map((c) => ({ start: c.start, text: c.text })),
+          expiresAt: share.expiresAt.slice(0, 10),
+          ...(summary.media.note && /failed|instead|could not reach/i.test(summary.media.note) ? { note: summary.media.note } : {}),
+        }),
+      );
+    }
     // What the recorder found on the site while it walked it.
     //
     // A walkthrough made now carries its insights in its summary. One made before this existed
@@ -1367,12 +1445,30 @@ try {
     const rows = await store.recordings(requireAuth ? (user?.id ?? "-") : null, 100);
     return rows.map((r) => ({ ...(r.summary as unknown as RecordingSummary), id: r.id, owner: r.owner ?? undefined, dir: `recordings/${r.id}` }));
   }
-  async function findRecording(id: string): Promise<{ owner: string | null } | null> {
+  async function findRecording(id: string): Promise<{ owner: string | null; summary?: RecordingSummary } | null> {
     if (store.kind === "file") {
       const r = data.recordings().find((x) => x.id === id || basename(x.dir) === id);
-      return r ? { owner: r.owner ?? null } : null;
+      return r ? { owner: r.owner ?? null, summary: r } : null;
     }
-    return store.recording(id);
+    const row = await store.recording(id);
+    return row ? { owner: row.owner ?? null, summary: row.summary as unknown as RecordingSummary } : null;
+  }
+
+  /**
+   * Write a walkthrough's summary back, wherever it is kept.
+   *
+   * A summary lives in two places on a shared server: the file on disk and the row in the
+   * database. Both are written, or the next reader sees one of them and not the other.
+   */
+  async function saveRecordingSummary(id: string, owner: string | null, summary: RecordingSummary): Promise<void> {
+    if (media.kind === "local") {
+      const file = join(root, "recordings", id, "recording.json");
+      if (existsSync(file)) writeFileSync(file, JSON.stringify(summary, null, 2));
+    }
+    if (store.kind !== "file") {
+      const { dir: _dir, ...rest } = summary;
+      await store.saveRecording({ id, owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
+    }
   }
 
   return {
@@ -1604,9 +1700,9 @@ async function readJson(req: IncomingMessage, limit = 100_000): Promise<Record<s
   }
 }
 
-function clampInt(raw: string | null, min: number, max: number, fallback: number): number {
+function clampInt(raw: string | number | null | undefined, min: number, max: number, fallback: number): number {
   const n = Number(raw);
-  return Number.isFinite(n) && raw !== null ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
+  return Number.isFinite(n) && raw !== null && raw !== undefined && raw !== "" ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {

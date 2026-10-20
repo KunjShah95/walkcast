@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { Insights } from "../components/Insights.tsx";
+import { SharePanel } from "../components/Share.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
 import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, deleteRecording, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
@@ -18,6 +19,8 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   // The recording whose Delete is waiting for a second click.
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Whether the share panel is open under the header.
+  const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
   }, []);
@@ -95,6 +98,19 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
                 >
                   Transcript
                 </a>
+                {!isSnapshot && caps?.live && (
+                  <button
+                    type="button"
+                    onClick={() => setSharing((on) => !on)}
+                    aria-expanded={sharing}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[12px]",
+                      sharing ? "border-signal/60 bg-signal-soft text-signal" : "border-line text-ink-2 hover:border-line-strong hover:text-ink",
+                    )}
+                  >
+                    Share
+                  </button>
+                )}
                 {!isSnapshot && caps?.live && confirmDelete !== current.id && (
                   <button
                     type="button"
@@ -143,6 +159,15 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
               </div>
             </div>
             {deleteError && <p className="rounded-xl border border-fail/30 bg-fail-soft px-4 py-3 text-[13px] text-fail">{deleteError}</p>}
+            {sharing && (
+              <SharePanel
+                recording={current}
+                onChange={(next) => {
+                  setOverrides((o) => ({ ...o, [current.dir]: { ...next, dir: current.dir } }));
+                  void refresh();
+                }}
+              />
+            )}
             <Studio
               key={current.dir}
               recording={current}

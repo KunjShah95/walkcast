@@ -6,7 +6,7 @@ import { CSS, MARK, NAME, esc } from "../../../packages/brand/src/index.ts";
  * static build (apps/web); nothing here links into it.
  */
 
-function shell(o: { title: string; body: string }): string {
+function shell(o: { title: string; body: string; css?: string }): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -18,7 +18,7 @@ function shell(o: { title: string; body: string }): string {
 <meta name="color-scheme" content="light">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
-<style>${CSS}</style>
+<style>${CSS}${o.css ?? ""}</style>
 </head>
 <body>
 <header class="top"><div class="wrap"><a class="brand" href="/app" aria-label="${NAME}">${MARK}<span>${NAME}</span></a></div></header>
@@ -109,6 +109,78 @@ export function notFoundPage(): string {
   <div class="actions"><a class="pill solid big" href="/app">Open the app</a></div>
 </div></section>`;
   return shell({ title: `Page not found · ${NAME}`, body });
+}
+
+/**
+ * A shared walkthrough, for someone who was sent the link.
+ *
+ * The point of the link is that it needs nothing from the person who opens it: no account, no
+ * sign-in, no app. The video plays, the captions are there, the transcript is readable, and
+ * the chapters seek the video. The brand is one line at the bottom, because this page is
+ * somebody else's property being shown, not the app's.
+ */
+export function sharePage(o: {
+  title: string;
+  host: string;
+  recorded: string;
+  pages: number;
+  durationMs: number;
+  sources: { url: string; type: string }[];
+  captions: string | null;
+  chapters: { start: number; title: string }[];
+  transcript: { start: number; text: string }[];
+  expiresAt: string;
+  note?: string;
+}): string {
+  const clock = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  const body = `
+<section class="share-head"><div class="wrap">
+  <p class="dh">Walkthrough</p>
+  <h1>${esc(o.title)}</h1>
+  <p class="lede">${esc(o.host)} · ${o.pages} page${o.pages === 1 ? "" : "s"} · ${clock(o.durationMs / 1000)} · recorded ${esc(o.recorded)}</p>
+</div></section>
+<section class="share"><div class="wrap narrow">
+  <div class="frame"><div class="win">
+    <video id="v" controls playsinline preload="metadata" class="share-video">
+      ${o.sources.map((s) => `<source src="${esc(s.url)}" type="${esc(s.type)}">`).join("")}
+      ${o.captions ? `<track kind="captions" src="${esc(o.captions)}" srclang="en" label="Narration" default>` : ""}
+    </video>
+  </div></div>
+  ${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}
+  <div class="share-grid">
+    <section>
+      <h2>Chapters</h2>
+      ${o.chapters.length ? `<ol class="share-list">${o.chapters.map((c) => `<li><button type="button" data-start="${c.start}"><span class="mono">${clock(c.start)}</span> ${esc(c.title)}</button></li>`).join("")}</ol>` : `<p class="dim">No chapters.</p>`}
+    </section>
+    <section>
+      <h2>Transcript</h2>
+      ${o.transcript.length ? `<ol class="share-list">${o.transcript.map((t) => `<li><button type="button" data-start="${t.start}"><span class="mono">${clock(t.start)}</span> ${esc(t.text)}</button></li>`).join("")}</ol>` : `<p class="dim">This walkthrough has no narration.</p>`}
+    </section>
+  </div>
+  <p class="fineprint">This link stops working on <b>${esc(o.expiresAt)}</b>. Recorded with ${NAME}.</p>
+</div></section>
+<script>
+(function(){var v=document.getElementById("v");document.querySelectorAll("[data-start]").forEach(function(b){b.addEventListener("click",function(){if(!v)return;v.currentTime=parseFloat(b.getAttribute("data-start"))||0;v.play()})})})();
+</script>`;
+  const css = `
+.share-head{padding:clamp(40px,7vw,84px) 0 8px;text-align:center}
+.share-head h1{font-size:clamp(28px,4.4vw,46px);letter-spacing:-.03em;margin:10px 0 0}
+.share-head .lede{margin-inline:auto}
+.share .frame{margin-top:clamp(20px,3vw,34px)}
+.share-video{display:block;width:100%;background:#000;aspect-ratio:16/10}
+.share-grid{display:grid;gap:clamp(20px,3vw,34px);margin-top:34px;grid-template-columns:1fr}
+@media (min-width:860px){.share-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.share-grid h2{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 10px}
+.share-list{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:420px;overflow:auto}
+.share-list button{display:flex;gap:10px;width:100%;text-align:left;border:0;background:transparent;font:14.5px/1.45 var(--sans);color:var(--ink-2);padding:7px 9px;border-radius:var(--r-sm);cursor:pointer}
+.share-list button:hover{background:var(--panel-2);color:var(--ink)}
+.share-list .mono{color:var(--dim);font-size:12.5px;flex:none;padding-top:1px}
+.share .note{margin:16px 0 0;font-size:14px;color:var(--muted)}
+`;
+  return shell({ title: `${o.title} · ${NAME}`, body, css });
 }
 
 /** A short message in the brand shell: what the system-browser tab shows after a desktop sign-in. */
