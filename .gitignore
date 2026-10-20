@@ -27,6 +27,10 @@ apps/desktop/src-tauri/gen
 .impeccable/questions/
 .playwright-mcp/
 
+# The regression gate's output: a machine-readable result and the comment it becomes.
+gate.json
+gate-summary.md
+
 # Scratch captured from a terminal rather than written by a build.
 # (testout*.txt, typecheck*.txt were committed this way by accident; keep it from recurring.)
 /*.txt
