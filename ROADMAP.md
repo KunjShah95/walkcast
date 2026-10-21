@@ -59,6 +59,20 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 - [x] Share links: a public page that plays the walkthrough with its captions, chapters and transcript, for anyone who has the link. The token is the permission, links expire, and the owner can stop one.
 - [x] Copy the failure (a lab run) as a note for a ticket: what the application recorded, what the agent claimed, the rules' findings, and the command that reproduces it.
 
+## Walkthrough notes, embedding and export (2026-10-21)
+- [x] Notes pinned to a second of the walkthrough: the owner's own reading of the video ("the CTA here is wrong"), stored with the walkthrough, listed and removed through one route (`/api/recordings/:id/annotations`), and scoped to the owner (`annotations` table + FileStore).
+- [x] A note rides on a share link only when the owner asks for it: each link carries its own answer, and a plain link shows the walkthrough alone.
+- [x] Embed a walkthrough in your own site: `?embed=1` on a share link is the same player with none of the app's shell around it, and the Share panel copies the one line of HTML.
+- [x] The whole visit as one Markdown document (pages, narration, notes, what the recorder found): `/api/recordings/:id/transcript?format=md` and `walkcast transcript <id> --format md`, with no server needed.
+
+## Daily-use additions (2026-10-21)
+- [x] A picture of every page, taken at the top of it before the walk scrolls: a strip of thumbnails under the player that seeks the video, a poster frame, and the same pictures on the share page. A walkthrough can now be skimmed instead of watched.
+- [x] Ctrl K searches everything the app knows: walkthroughs, their narration, runs, fixtures, and the places in the app.
+- [x] What to fix: the findings of a site's walkthroughs gathered into one list, the worst first, what is new since the last one marked, and copyable as a checklist for a ticket.
+- [x] What the agent runs cost: the tokens the gateway counted, and an estimate from a price list that says it is an estimate (`LAB_PRICE_INPUT_USD_PER_MTOK` overrides it).
+- [x] The regression gate: `npm run lab -- ci <fixtures>` replays every fixture and fails when one that used to pass stops passing, against a baseline file that remembers what each fixture did last time. A workflow runs it on pull requests and comments the table (docs/CI-GATE.md).
+- [x] Journeys: record a flow instead of crawling the site — `goto`, `click`, `fill`, `wait`, `scroll`, one per line — narrated step by step, and printed as a Playwright script.
+
 ## Up next (v0.6+)
 - [x] Voice cloning / custom voice upload for narration (upload + playback fallback).
 - [ ] Code-signed installers (Windows/macOS) to remove SmartScreen warnings. Blocked on buying certificates; unsigned by decision for now (docs/SIGNING.md).
