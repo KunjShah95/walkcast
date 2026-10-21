@@ -6,6 +6,7 @@ import {
   type RecordingDiff,
   type RecordingInsights,
 } from "../../../../../packages/core/src/record/insights.ts";
+import { checklist, checklistMarkdown } from "../../../../../packages/core/src/record/checklist.ts";
 import { loadInsights } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
 import type { RecordingSummary } from "../lib/types.ts";
@@ -171,7 +172,111 @@ export function Insights({ recording, others }: { recording: RecordingSummary; o
       </Panel>
 
       <Changes recording={recording} others={others} insights={insights} />
+      <WhatToFix recording={recording} others={others} />
     </div>
+  );
+}
+
+/**
+ * Everything the recorder found, gathered into a list of things to do.
+ *
+ * A walkthrough's findings are about that walkthrough. Someone who records the same site
+ * every week wants the other thing: what is still broken, and what broke since last time.
+ * The list is the evidence put in one place, with the walkthroughs it came from named.
+ */
+function WhatToFix({ recording, others }: { recording: RecordingSummary; others: RecordingSummary[] }) {
+  const site = hostOf(recording.url);
+  const walkthroughs = useMemo(
+    () =>
+      others
+        .filter((r) => hostOf(r.url) === site)
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+        .slice(-5),
+    [others, site],
+  );
+  const [found, setFound] = useState<RecordingInsights[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    void (async () => {
+      const all: RecordingInsights[] = [];
+      for (const r of walkthroughs) {
+        const one = r.insights ?? (await loadInsights(r.id));
+        if (!alive) return;
+        if (one) all.push(one);
+      }
+      if (!alive) return;
+      setFound(all);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [walkthroughs]);
+
+  const items = useMemo(() => checklist(found), [found]);
+  if (walkthroughs.length === 0) return null;
+
+  return (
+    <Panel>
+      <PanelHeader
+        eyebrow={`${walkthroughs.length} walkthrough${walkthroughs.length === 1 ? "" : "s"} of ${site}`}
+        title="What to fix"
+        aside={
+          items.length > 0 ? (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(checklistMarkdown(items, site, walkthroughs.length));
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                } catch {
+                  setCopied(false);
+                }
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-[12.5px] text-ink-2 hover:border-line-strong hover:text-ink"
+            >
+              {copied ? "Copied" : "Copy as a checklist"}
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="grid gap-3 px-4 py-3">
+        {loading && <p className="text-[13px] text-ink-3">Reading what each walkthrough found…</p>}
+        {!loading && items.length === 0 && (
+          <p className="text-[13px] text-ink-3">
+            Nothing to fix: no console errors, no failed requests, no broken pages, and every control named.
+          </p>
+        )}
+        {items.length > 0 && (
+          <ul className="grid gap-1.5">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-start gap-2.5 text-[13px] leading-snug">
+                <span
+                  className={cn(
+                    "mt-[3px] inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                    item.level === "fail" ? "bg-fail-soft text-fail" : item.level === "warn" ? "bg-warn-soft text-warn" : "bg-panel-3 text-ink-3",
+                  )}
+                  aria-hidden
+                >
+                  {item.level === "fail" ? "!" : item.level === "warn" ? "?" : "i"}
+                </span>
+                <span className="min-w-0">
+                  <span className="text-ink-2">{item.title}</span>
+                  {item.pages.length > 0 && <span className="ml-1.5 text-[12px] text-ink-3">{[...new Set(item.pages)].slice(0, 3).join(", ")}</span>}
+                  {item.isNew && <span className="ml-1.5 rounded-full bg-signal-soft px-1.5 py-px text-[10.5px] font-medium text-signal">new</span>}
+                  {item.seen > 1 && <span className="ml-1.5 text-[11.5px] text-ink-3">in {item.seen} walkthroughs</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Panel>
   );
 }
 
