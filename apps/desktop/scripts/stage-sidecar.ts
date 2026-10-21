@@ -3,6 +3,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
 import { builtinModules } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bareImports, packageOf } from "./sidecar-imports.ts";
 
 /**
  * Stages what the desktop installer ships next to the Tauri binary:
@@ -67,10 +68,9 @@ const walk = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : []));
 for (const file of walk(OUT)) {
   const src = readFileSync(file, "utf8");
-  for (const m of src.matchAll(/(?:from\s+|import\s*\(\s*|import\s+)["']([^"'.][^"']*)["']/g)) {
-    const spec = m[1]!;
+  for (const spec of bareImports(src)) {
     if (spec.startsWith("node:") || builtins.has(spec)) continue;
-    used.add(spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0]!);
+    used.add(packageOf(spec));
   }
 }
 
