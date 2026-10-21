@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Page } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
-import { BrowserTools, type Observation } from "../capture/tools.ts";
+import { BrowserTools, type Observation, type ObservedElement } from "../capture/tools.ts";
 import { buildMedia, localVoice, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
 import { engineFor, type VoiceEngine } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
@@ -13,6 +13,7 @@ import { captionsFor, type Caption } from "./narration.ts";
 import { blockedHost, guardContext } from "./ssrf.ts";
 import { attachEvidence } from "./failure.ts";
 import { analyzeRecording, type RecordingInsights } from "./insights.ts";
+import { parseJourney, type JourneyStep } from "./journey.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -52,6 +53,13 @@ export interface RecordOptions {
   ttsVoice?: string;
   /** Which language that provider speaks in, for providers whose voices are free-text ids. */
   ttsLanguage?: string;
+  /**
+   * A journey: the path through the site to record, one step per line.
+   *
+   * With a journey the recorder follows it exactly instead of crawling the site's links. The
+   * steps are read by `parseJourney`; a line that cannot be read is reported, not skipped.
+   */
+  journey?: string;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -86,6 +94,8 @@ export interface RecordingResult {
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
   /** What the recorder found on the site while it walked it. */
   insights?: RecordingInsights;
+  /** The journey that was followed, and the lines of it that could not be read. */
+  journey?: { steps: number; problems: { line: number; text: string; why: string }[] };
   /** Requests the SSRF guard refused. */
   blockedRequests?: string[];
 }
@@ -120,6 +130,9 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const id = `${start.hostname.replace(/[^a-z0-9.-]/gi, "_")}-${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   const dir = join(options.outDir, id);
   mkdirSync(dir, { recursive: true });
+  // The journey, read once. A line that cannot be read is said out loud rather than skipped:
+  // a journey that quietly does less than it says is worse than one that admits it.
+  const parsedJourney = options.journey ? parseJourney(options.journey) : { steps: [], problems: [] };
   // Request bodies stay out of the trace: they belong to the recorded site, not to us.
   const recorder = new Recorder(dir, { screenshots: false, bodies: false });
   const pace = options.paceMs ?? 800;
@@ -172,7 +185,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       // The budget covers the walk itself, starting the moment recording begins — browser launch and
       // sign-in still happen, but the cap is about the video the person watches, not our overhead.
       try {
-        stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds, dir);
+        stopReason = await browse(tools, page, recorder, options, start, pace, pages, skipped, (s) => (signIn = s), () => signIn, maxSeconds, dir, parsedJourney.steps);
       } catch (e) {
         // A blank tab (the first page never loaded) says nothing; only keep a page that drew.
         if (page.url() !== "about:blank") {
@@ -245,6 +258,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       media,
       dir,
       insights,
+      ...(options.journey ? { journey: { steps: parsedJourney.steps.length, problems: parsedJourney.problems } } : {}),
       ...(options.ttsProvider
         ? {
             narration: {
@@ -310,6 +324,99 @@ class NarratedTools extends BrowserTools {
   }
 }
 
+/**
+ * Follow a journey: the path through the site that somebody chose.
+ *
+ * Each step is one recorded action, so the narration says what happened and the trace holds
+ * the evidence, exactly as it does for a crawl. A step whose control is not on the page is
+ * recorded as a step that could not be done: the walkthrough says so rather than quietly
+ * doing something else.
+ */
+async function followJourney(
+  tools: NarratedTools,
+  page: Page,
+  recorder: Recorder,
+  options: RecordOptions,
+  start: URL,
+  pages: PageVisit[],
+  dir: string,
+  steps: JourneyStep[],
+): Promise<void> {
+  let shot = 1;
+  for (const step of steps) {
+    options.signal?.throwIfAborted();
+    if (step.kind === "wait") {
+      await page.waitForTimeout(step.ms);
+      continue;
+    }
+    if (step.kind === "scroll") {
+      await scrollThrough(tools);
+      continue;
+    }
+    if (step.kind === "goto") {
+      const url = new URL(step.path, start.origin).toString();
+      await tools.goto(url);
+      await tools.waitForQuiet(400, 8000);
+      shot += 1;
+      await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, url, false);
+      continue;
+    }
+    const obs = await tools.observe();
+    const target = findControl(obs, step.name);
+    if (!target) {
+      // A step that could not be done is part of the walkthrough, not a reason to stop.
+      await tools.record("journeyStep", { kind: step.kind, name: step.name, found: false }, async () => ({ found: false }));
+      options.onProgress?.(`No control named “${step.name}” on this page`);
+      continue;
+    }
+    if (step.kind === "click") await tools.click(target.index, obs);
+    else await tools.fill(target.index, step.value, obs);
+    await tools.waitForQuiet(400, 8000);
+    const after = normalize(page.url());
+    if (pages.length === 0 || pages[pages.length - 1]!.url !== after) {
+      shot += 1;
+      await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, after, false);
+    }
+  }
+}
+
+/** The control a journey step names, matched the way a person would match it. */
+function findControl(obs: Observation, name: string): ObservedElement | undefined {
+  const wanted = name.trim().toLowerCase();
+  const byName = (e: ObservedElement) => e.name.trim().toLowerCase();
+  return (
+    obs.elements.find((e) => byName(e) === wanted) ??
+    obs.elements.find((e) => byName(e).includes(wanted)) ??
+    obs.elements.find((e) => e.selector.toLowerCase().includes(wanted))
+  );
+}
+
+/**
+ * Note a page in the walkthrough: its status, its picture, and what was on it.
+ *
+ * The picture is taken at the top of the page, before any scrolling, so a journey that
+ * scrolls later still has a picture of the page as it was.
+ */
+async function recordPage(
+  tools: NarratedTools,
+  page: Page,
+  recorder: Recorder,
+  pages: PageVisit[],
+  dir: string,
+  shotName: string,
+  url: string,
+  scroll: boolean,
+): Promise<void> {
+  const status = await lastDocumentStatus(recorder, url);
+  const shotOk = await page.screenshot({ path: join(dir, shotName), type: "jpeg", quality: 72 }).then(
+    () => true,
+    () => false,
+  );
+  if (scroll) await scrollThrough(tools);
+  const obs = await tools.observe();
+  pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length, ...(shotOk ? { screenshot: shotName } : {}) });
+}
+
 async function browse(
   tools: NarratedTools,
   page: Page,
@@ -323,6 +430,7 @@ async function browse(
   getSignIn: () => RecordingResult["signIn"],
   maxSeconds: number | undefined,
   dir: string,
+  journey: JourneyStep[] = [],
 ): Promise<"pages" | "time" | "no-more-links"> {
   options.onProgress?.("Opening the site");
   const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
@@ -346,6 +454,17 @@ async function browse(
   // own, so it must not eat the cap the person asked for.
   const deadline = maxSeconds ? Date.now() + maxSeconds * 1000 : null;
   const outOfTime = () => deadline !== null && Date.now() >= deadline;
+  // A journey is a path somebody chose. It is followed exactly, and the walk ends when the
+  // journey does — not when the site's links run out.
+  if (journey.length > 0) {
+    // The page the walkthrough starts on is part of it: the journey says where to go next,
+    // not where to begin.
+    await recordPage(tools, page, recorder, pages, dir, "page-01.jpg", normalize(page.url()), false);
+    await followJourney(tools, page, recorder, options, start, pages, dir, journey);
+    const ok = !signIn.attempted || signIn.outcome === "signed-in";
+    await tools.done(ok, `Followed ${journey.length} step${journey.length === 1 ? "" : "s"}.`);
+    return "pages";
+  }
   // Checked before a page and again after it: the budget ends the walk at the next page boundary,
   // never mid-page, so the last thing on screen is a whole page rather than a cut-off scroll.
   while (queue.length && pages.length < options.maxPages && !outOfTime()) {

@@ -1625,8 +1625,21 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
     ...lengthBlock(b),
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
     ...voiceBlock(b),
+    ...journeyBlock(b),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
+}
+
+/**
+ * A journey: the path through the site to record, one step per line.
+ *
+ * Only the text is taken; the steps are read by the recorder itself, so a line that cannot be
+ * read is reported in the walkthrough rather than refused here.
+ */
+function journeyBlock(b: Record<string, unknown>): { journey?: string } {
+  const journey = typeof b.journey === "string" ? b.journey.trim() : "";
+  if (!journey) return {};
+  return { journey: journey.slice(0, 4000) };
 }
 
 /** The length cap in seconds, or nothing for "as many pages as it reaches". */

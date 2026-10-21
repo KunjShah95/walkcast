@@ -65,6 +65,13 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
       case "signInResult":
         say(step.startedAt, signInSentence(step.result as Context["signIn"]));
         break;
+      case "journeyStep": {
+        // A step of the journey that could not be done. The walkthrough says so, because a
+        // journey that quietly skipped a step is not the journey anybody asked for.
+        const name = typeof step.args.name === "string" ? step.args.name : "the control";
+        say(step.startedAt, `There is no control named “${name}” on this page, so that step is skipped.`);
+        break;
+      }
           }
     if (step.error) say(step.endedAt, `That step failed: ${step.error.slice(0, 120)}.`);
   }

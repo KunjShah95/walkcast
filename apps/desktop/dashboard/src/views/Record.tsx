@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
 import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
@@ -7,6 +7,7 @@ import { VoiceChooser } from "../components/VoiceChooser.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
 import { type Capabilities, type JobStatus, JobCancelled, SignInRequired, cancelJob, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
+import { journeyAsPlaywright, parseJourney } from "../../../../../packages/core/src/record/journey.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import type { LabIndex } from "../lib/types.ts";
 
@@ -32,6 +33,10 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   // ...and its language, for providers whose voice ids don't carry one.
   const [ttsLanguage, setTtsLanguage] = useState(prefs.ttsLanguages[ttsProvider] ?? "");
   const [authorized, setAuthorized] = useState(false);
+  // A journey: the path through the site to record, instead of the whole site.
+  const [journeyOn, setJourneyOn] = useState(false);
+  const [journey, setJourney] = useState("");
+  const [copiedScript, setCopiedScript] = useState(false);
   const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [needsAccount, setNeedsAccount] = useState(false);
@@ -81,9 +86,12 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     setAttempts((a) => [attempt, ...a]);
     try {
       const length = maxSeconds > 0 ? { maxSeconds } : {};
+      // A journey, when there is one, replaces the crawl: the recorder follows the path
+      // instead of the site's links.
+      const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
       // The sample site records with the same voice as a real one, so what you hear in the demo is
       // the voice you picked.
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length }, (s) => setJob(s));
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -107,6 +115,10 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   };
 
   const recent = (index.recordings ?? []).slice(0, 4);
+  // The journey, read as the person writes it: the steps, and the lines that could not be read.
+  const parsed = useMemo(() => parseJourney(journey), [journey]);
+  const journeySteps = parsed.steps;
+  const journeyProblems = parsed.problems;
 
   return (
     <div className="grid gap-6">
@@ -152,6 +164,49 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     Use my own site
                   </button>
                 </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 rounded-xl border border-line p-4">
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Record a journey instead of the whole site</span>
+                  <span className="block text-[12.5px] text-ink-3">One step per line: goto, click, fill, wait, scroll.</span>
+                </span>
+                <Toggle on={journeyOn} onChange={setJourneyOn} disabled={busy} label="Record a journey instead of the whole site" />
+              </label>
+              {journeyOn && (
+                <div className="grid gap-2">
+                  <textarea
+                    value={journey}
+                    onChange={(e) => setJourney(e.target.value)}
+                    rows={5}
+                    spellCheck={false}
+                    placeholder={'goto /pricing\nclick "Buy now"\nfill "Email" "jane@example.com"\nwait 500'}
+                    aria-label="The journey to record"
+                    className={cn(fieldClass, "h-auto resize-y font-mono text-[12.5px] leading-relaxed")}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12px] text-ink-3">{journeyProblems.length ? `${journeyProblems.length} line${journeyProblems.length === 1 ? "" : "s"} could not be read` : `${journeySteps.length} step${journeySteps.length === 1 ? "" : "s"}`}</span>
+                    <button
+                      type="button"
+                      disabled={busy || !target || journeySteps.length === 0}
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(journeyAsPlaywright(journey, target ?? ""));
+                        setCopiedScript(true);
+                        setTimeout(() => setCopiedScript(false), 2000);
+                      }}
+                      className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40"
+                    >
+                      {copiedScript ? "Copied" : "Copy as a Playwright script"}
+                    </button>
+                  </div>
+                  {journeyProblems.map((p) => (
+                    <p key={p.line} className="text-[12px] text-warn">
+                      Line {p.line}: {p.why}
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
 
