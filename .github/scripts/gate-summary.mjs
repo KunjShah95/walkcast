@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 function readJson(path) {
   const bytes = readFileSync(path);
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return JSON.parse(bytes.subarray(2).toString("utf16le"));
-  return JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
+  return JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
 }
 
 const raw = readJson("gate.json");
