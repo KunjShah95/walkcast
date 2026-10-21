@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { jobCompletedPayload } from "./payload.ts";
-import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
+import { DuplicateError, type Annotation, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
 
 interface Data {
   users: User[];
@@ -10,6 +10,7 @@ interface Data {
   limits: Record<string, { start: number; count: number }>;
   jobs: (Job & { idempotencyKey: string | null; lockedBy: string | null; leaseUntil: number | null })[];
   recordings: RecordingRow[];
+  annotations: Annotation[];
   schedules: Schedule[];
   webhooks: Webhook[];
   deliveries: (WebhookDelivery & { lockedBy: string | null; leaseUntil: number | null; finishedAt: string | null })[];
@@ -72,7 +73,7 @@ export class FileStore implements Store {
         loaded = {};
       }
     }
-    this.data = { users: [], sessions: [], limits: {}, jobs: [], recordings: [], schedules: [], webhooks: [], deliveries: [], ...loaded };
+    this.data = { users: [], sessions: [], limits: {}, jobs: [], recordings: [], annotations: [], schedules: [], webhooks: [], deliveries: [], ...loaded };
     // Jobs that were running when the process stopped go back to the queue.
     for (const j of this.data.jobs) if (j.status === "running") Object.assign(j, { status: "queued", lockedBy: null, leaseUntil: null });
   }
@@ -387,6 +388,27 @@ export class FileStore implements Store {
   deleteRecording(id: string) {
     return this.write(() => {
       this.data.recordings = this.data.recordings.filter((r) => r.id !== id);
+      // The notes went with the walkthrough: they are a reading of it, not a separate thing.
+      this.data.annotations = this.data.annotations.filter((a) => a.recordingId !== id);
+    });
+  }
+
+  async annotations(recordingId: string, owner: string | null) {
+    return this.data.annotations
+      .filter((a) => a.recordingId === recordingId && a.owner === owner)
+      .sort((a, b) => a.at - b.at || a.createdAt.localeCompare(b.createdAt))
+      .map((a) => ({ ...a }));
+  }
+  addAnnotation(annotation: Annotation) {
+    return this.write(() => {
+      this.data.annotations.push({ ...annotation });
+    });
+  }
+  removeAnnotation(id: string, owner: string | null) {
+    return this.write(() => {
+      const before = this.data.annotations.length;
+      this.data.annotations = this.data.annotations.filter((a) => !(a.id === id && a.owner === owner));
+      return this.data.annotations.length < before;
     });
   }
 

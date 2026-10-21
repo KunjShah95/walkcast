@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Capabilities, type Voice, mediaUrl, renarrate, sttCaptions, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
 import type { RecordingSummary } from "../lib/types.ts";
@@ -81,7 +81,7 @@ export function Studio({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(r.durationMs / 1000);
   const [prefs, setPrefs] = usePrefs();
-  const [tab, setTab] = useState<"transcript" | "script" | "voice">("transcript");
+  const [tab, setTab] = useState<"transcript" | "notes" | "script" | "voice">("transcript");
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
   const chapters = useMemo(() => chaptersOf(r), [r]);
@@ -297,6 +297,13 @@ export function Studio({
                   </a>
                 ) : null;
               })}
+            {!compact && (
+              // The whole visit as one document: the pages, the narration, the notes and what
+              // the recorder found — to paste into a ticket, a README or a chat.
+              <a href={transcriptUrl(r.id, "md")} download={`${r.id}.md`} className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
+                Markdown
+              </a>
+            )}
           </span>
         </div>
         {sttError && <p className="border-t border-line px-4 py-2.5 text-[12.5px] text-fail">{sttError}</p>}
@@ -308,6 +315,7 @@ export function Studio({
             {(
               [
                 ["transcript", "Transcript"],
+                ["notes", "Notes"],
                 ["script", "Edit script"],
                 ["voice", "Your voice"],
               ] as const
@@ -353,6 +361,14 @@ export function Studio({
             {r.captions.length === 0 && <li className="p-4 text-[13px] text-ink-3">This recording has no narration lines.</li>}
           </ol>
         )}
+        {tab === "notes" && (
+          <Notes
+            recording={r}
+            time={time}
+            seek={seek}
+            onError={setSttError}
+          />
+        )}
         {tab === "script" && (
           <ScriptEditor
             recording={r}
@@ -385,6 +401,136 @@ function editBlocker(caps?: Capabilities | null): string | null {
   if (!caps?.live) return "Editing needs the live server (npm run dev).";
   if (caps.voices && !caps.voices.editable) return "Editing narration needs recordings stored on this server's disk.";
   return null;
+}
+
+/**
+ * Notes pinned to a moment in the walkthrough.
+ *
+ * The video shows what the site did; the note says what the owner thinks about it — "the CTA
+ * here is wrong", "this page took two seconds to load". A note is private to the walkthrough's
+ * owner until they put it on a share link, and it travels with the Markdown export.
+ */
+function Notes({
+  recording,
+  time,
+  seek,
+  onError,
+}: {
+  recording: RecordingSummary;
+  time: number;
+  seek: (t: number, play?: boolean) => void;
+  onError: (message: string | null) => void;
+}) {
+  const [notes, setNotes] = useState<Annotation[]>([]);
+  const [text, setText] = useState("");
+  const [at, setAt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoaded(false);
+    void loadAnnotations(recording.id).then((found) => {
+      if (!alive) return;
+      setNotes(found);
+      setLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [recording.id]);
+
+  // The note being written is pinned to where the video is now, and follows it until it is saved.
+  useEffect(() => setAt(time), [time]);
+
+  const add = async () => {
+    const body = text.trim();
+    if (!body) return;
+    setBusy(true);
+    onError(null);
+    try {
+      const saved = await createAnnotation(recording.id, at, body);
+      setNotes((all) => [...all, saved].sort((a, b) => a.at - b.at));
+      setText("");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (note: Annotation) => {
+    setBusy(true);
+    onError(null);
+    try {
+      await deleteAnnotation(recording.id, note.id);
+      setNotes((all) => all.filter((n) => n.id !== note.id));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="grid gap-2 border-b border-line p-3">
+        <label className="text-[12.5px] text-ink-2">
+          Pin a note to <span className="font-mono text-ink">{clock(at)}</span>
+          <textarea
+            value={text}
+            rows={2}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void add();
+              }
+            }}
+            placeholder="What did you see here?"
+            aria-label="Note"
+            className="mt-1.5 w-full resize-none rounded-lg border bg-panel px-2.5 py-1.5 text-[13px] leading-snug outline-none transition-shadow focus:border-signal"
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          <Button tone="primary" size="sm" disabled={busy || !text.trim()} onClick={add}>
+            {busy ? "Saving…" : "Add note"}
+          </Button>
+          <span className="text-[11.5px] text-ink-3">Ctrl+Enter saves</span>
+        </div>
+      </div>
+      <ul className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        {notes.map((note) => (
+          <li key={note.id} className="group flex items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-panel-2">
+            <button
+              type="button"
+              onClick={() => seek(note.at)}
+              title="Jump to this moment"
+              className="mt-px shrink-0 font-mono text-[10.5px] text-signal hover:underline"
+            >
+              {clock(note.at)}
+            </button>
+            <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink-2">{note.text}</span>
+            <button
+              type="button"
+              onClick={() => remove(note)}
+              disabled={busy}
+              aria-label="Delete this note"
+              title="Delete this note"
+              className="shrink-0 text-[11.5px] text-ink-3 opacity-0 transition-opacity hover:text-fail focus:opacity-100 group-hover:opacity-100 disabled:opacity-40"
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+        {loaded && notes.length === 0 && (
+          <li className="p-4 text-[13px] text-ink-3">
+            No notes yet. Play the walkthrough and pin what you see — the note lands at the second you are watching.
+          </li>
+        )}
+      </ul>
+    </div>
+  );
 }
 
 /** Choose a voice, with a spoken sample. */

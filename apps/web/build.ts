@@ -308,6 +308,7 @@ const facts = [
   `- Version: ${VERSION}`,
   "- Price: free, MIT licensed, no paid tier, no watermark",
   "- Output: MP4 (H.264 + AAC), WebM, WebVTT captions, transcript, WAV narration, page list with HTTP status",
+  "- Sharing: a share link that plays the walkthrough for anyone who has it (no account, expiring), a one-line iframe embed, notes pinned to the second of the video, and the whole visit as a Markdown document",
   "- Voice: the voices built into Windows, offline (flite when run from source on Linux/macOS)",
   "- Limits: up to 30 pages per recording, same site only",
   "- Safety: password held in memory only, stops at CAPTCHA and 2FA, no form submissions after sign-in, respects robots.txt",

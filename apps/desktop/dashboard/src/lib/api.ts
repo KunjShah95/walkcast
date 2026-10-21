@@ -333,7 +333,7 @@ export async function deleteRecording(id: string): Promise<void> {
 }
 
 /** URL for a recording's transcript export in the requested format. */
-export function transcriptUrl(id: string, format: "srt" | "vtt" | "json"): string {
+export function transcriptUrl(id: string, format: "srt" | "vtt" | "json" | "md"): string {
   return `/api/recordings/${encodeURIComponent(id)}/transcript?format=${format}`;
 }
 
@@ -360,6 +360,8 @@ export interface ShareLink {
   token: string;
   createdAt: string;
   expiresAt: string;
+  /** Whether this link carries the owner's notes. */
+  includeNotes?: boolean;
 }
 
 /**
@@ -368,11 +370,11 @@ export interface ShareLink {
  * No account, no sign-in on the other side. The link works until the day it names, and it can
  * be switched off before then.
  */
-export async function createShare(id: string, days = 7): Promise<{ url: string; share: ShareLink; shares: ShareLink[] }> {
+export async function createShare(id: string, days = 7, includeNotes = false): Promise<{ url: string; share: ShareLink; shares: ShareLink[] }> {
   const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/share`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ days }),
+    body: JSON.stringify({ days, includeNotes }),
   });
   const body = (await res.json().catch(() => ({}))) as { url?: string; share?: ShareLink; shares?: ShareLink[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -400,4 +402,52 @@ export async function sttCaptions(id: string, language = "unknown"): Promise<Rec
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Request failed (${res.status}).`);
   return body.recording;
+}
+
+/**
+ * A note pinned to a moment in a walkthrough.
+ *
+ * The walkthrough is the evidence; the note is the owner's reading of it. They belong to the
+ * walkthrough's owner and stay theirs until they put them on a share link.
+ */
+export interface Annotation {
+  id: string;
+  recordingId: string;
+  at: number;
+  text: string;
+  createdAt: string;
+}
+
+/** The notes on a walkthrough, earliest moment first. */
+export async function loadAnnotations(id: string): Promise<Annotation[]> {
+  if (isSnapshot) return [];
+  try {
+    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations`);
+    if (!res.ok) return [];
+    const body = (await res.json().catch(() => ({}))) as { annotations?: Annotation[] };
+    return body.annotations ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Pin a note to a moment in the video. */
+export async function createAnnotation(id: string, at: number, text: string): Promise<Annotation> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ at, text }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { annotation?: Annotation; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.annotation) throw new Error(body.error ?? `Could not save the note (${res.status}).`);
+  return body.annotation;
+}
+
+/** Take a note back. */
+export async function deleteAnnotation(id: string, noteId: string): Promise<void> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations/${encodeURIComponent(noteId)}`, { method: "DELETE" });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not delete the note (${res.status}).`);
 }

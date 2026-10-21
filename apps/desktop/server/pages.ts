@@ -138,6 +138,8 @@ export function sharePage(o: {
   pictures?: { url: string; title: string }[];
   chapters: { start: number; title: string }[];
   transcript: { start: number; text: string }[];
+  /** The owner's notes, when the link was made to carry them. */
+  notes?: { at: number; text: string }[];
   expiresAt: string;
   note?: string;
 }): string {
@@ -170,6 +172,7 @@ export function sharePage(o: {
       ${o.transcript.length ? `<ol class="share-list">${o.transcript.map((t) => `<li><button type="button" data-start="${t.start}"><span class="mono">${clock(t.start)}</span> ${esc(t.text)}</button></li>`).join("")}</ol>` : `<p class="dim">This walkthrough has no narration.</p>`}
     </section>
   </div>
+  ${o.notes && o.notes.length ? `<section class="share-notes"><h2>Notes</h2><ol class="share-list">${o.notes.map((n) => `<li><button type="button" data-start="${n.at}"><span class="mono">${clock(n.at)}</span> ${esc(n.text)}</button></li>`).join("")}</ol></section>` : ""}
   <p class="fineprint">This link stops working on <b>${esc(o.expiresAt)}</b>. Recorded with ${NAME}.</p>
 </div></section>
 <script>
@@ -186,14 +189,71 @@ export function sharePage(o: {
 .share-pages img{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-radius:var(--r-sm);box-shadow:inset 0 0 0 1px var(--line);background:var(--panel-2)}
 .share-grid{display:grid;gap:clamp(20px,3vw,34px);margin-top:34px;grid-template-columns:1fr}
 @media (min-width:860px){.share-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
-.share-grid h2{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 10px}
+.share-grid h2,.share-notes h2{font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 10px}
 .share-list{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:420px;overflow:auto}
 .share-list button{display:flex;gap:10px;width:100%;text-align:left;border:0;background:transparent;font:14.5px/1.45 var(--sans);color:var(--ink-2);padding:7px 9px;border-radius:var(--r-sm);cursor:pointer}
 .share-list button:hover{background:var(--panel-2);color:var(--ink)}
 .share-list .mono{color:var(--dim);font-size:12.5px;flex:none;padding-top:1px}
 .share .note{margin:16px 0 0;font-size:14px;color:var(--muted)}
+.share-notes{margin-top:30px}
 `;
   return shell({ title: `${o.title} · ${NAME}`, body, css });
+}
+
+/**
+ * The same walkthrough as a player you can drop into your own site.
+ *
+ * An embed is somebody else's property being shown inside a page that is not this app, so
+ * there is no header, no transcript and no sign-in: just the video, its captions, and a line
+ * that says where it came from. The full page is one click away.
+ */
+export function embedPage(o: {
+  title: string;
+  sources: { url: string; type: string }[];
+  captions: string | null;
+  poster?: string | null;
+  notes?: { at: number; text: string }[];
+  expiresAt: string;
+  /** The full page, for the "open it" link. */
+  openUrl: string;
+}): string {
+  const clock = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  const body = `
+<div class="embed">
+  <video id="v" controls playsinline preload="metadata"${o.poster ? ` poster="${esc(o.poster)}"` : ""}>
+    ${o.sources.map((s) => `<source src="${esc(s.url)}" type="${esc(s.type)}">`).join("")}
+    ${o.captions ? `<track kind="captions" src="${esc(o.captions)}" srclang="en" label="Narration" default>` : ""}
+  </video>
+  ${o.notes && o.notes.length ? `<ul class="embed-notes">${o.notes.map((n) => `<li><span class="mono">${clock(n.at)}</span> ${esc(n.text)}</li>`).join("")}</ul>` : ""}
+  <p class="embed-foot"><a href="${esc(o.openUrl)}" target="_blank" rel="noopener">Watch it on ${NAME}</a></p>
+</div>`;
+  const css = `
+html,body{margin:0;background:transparent}
+body{font:14px/1.45 var(--sans,system-ui,sans-serif);color:var(--ink,#16181d)}
+.embed{max-width:960px;margin:0 auto}
+.embed video{display:block;width:100%;background:#000;aspect-ratio:16/10;border-radius:var(--r-sm,10px)}
+.embed-notes{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:4px}
+.embed-notes li{font-size:13.5px;color:var(--ink-2,#3a3f49)}
+.embed-notes .mono{color:var(--dim,#6b7280);font-size:12px;margin-right:8px;font-variant-numeric:tabular-nums}
+.embed-foot{margin:12px 0 0;font-size:12.5px}
+.embed-foot a{color:var(--signal,#b4531f);text-decoration:none;font-weight:600}
+.embed-foot a:hover{text-decoration:underline}
+`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(o.title)}</title>
+<meta name="robots" content="noindex, nofollow">
+<style>:root{--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--ink:#16181d;--ink-2:#3a3f49;--dim:#6b7280;--signal:#b4531f;--r-sm:10px}${css}</style>
+</head>
+<body>${body}
+</body>
+</html>`;
 }
 
 /** A short message in the brand shell: what the system-browser tab shows after a desktop sign-in. */

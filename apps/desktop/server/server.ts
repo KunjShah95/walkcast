@@ -21,13 +21,14 @@ import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
 import { FAVICON, fontPath } from "../../../packages/brand/src/index.ts";
 import { openExternal } from "./open-external.ts";
-import { authPage, continueInBrowserPage, messagePage, notFoundPage, sharePage } from "./pages.ts";
+import { authPage, continueInBrowserPage, embedPage, messagePage, notFoundPage, sharePage } from "./pages.ts";
 import { newShareToken } from "./share.ts";
 import { webManifest, SERVICE_WORKER } from "./pwa.ts";
 import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
 import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from "../../../packages/core/src/webhooks.ts";
 import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
 import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insights.ts";
+import { chaptersOf, toSrt, toVtt, transcriptMarkdown } from "../../../packages/core/src/record/transcript.ts";
 import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
@@ -932,9 +933,12 @@ try {
         await saveRecordingSummary(id, row.owner, summary);
         return json(200, { ok: true, shares: kept });
       }
-      const body = (await readJson(req).catch(() => ({}))) as { days?: number };
+      const body = (await readJson(req).catch(() => ({}))) as { days?: number; includeNotes?: boolean };
       const days = clampInt(body.days, 1, 90, 7);
-      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString() };
+      // Notes are the owner's private reading of the walkthrough. They go on a link only when
+      // the owner asks for it, and each link carries its own answer.
+      const includeNotes = body.includeNotes === true;
+      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(), includeNotes };
       summary.shares = [...shares, share];
       await saveRecordingSummary(id, row.owner, summary);
       log.info("recording.shared", { id, owner, until: share.expiresAt });
@@ -977,29 +981,34 @@ try {
       if (sources.length === 0) return json(404, { error: "This walkthrough has no video to share." });
       const captions = summary.captions ?? [];
       // A chapter starts where the recorder opened a page, exactly as it does in the app.
-      const chapters = captions.flatMap((c) => (/^Opening\b/.test(c.text) ? [{ start: c.start, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
+      const chapters = chaptersOf(captions, hostOf(summary.url));
       // A picture of each page: the page says what the walkthrough contains, not only that it
       // exists. Only the pictures this walkthrough took are offered.
       const pictures = summary.pages.filter((p) => Boolean(p.screenshot)).map((p) => ({ url: `${base}/${p.screenshot}`, title: p.title || p.url }));
-      return send(
-        200,
-        "text/html; charset=utf-8",
-        sharePage({
-          title: hostOf(summary.url),
-          host: summary.url,
-          recorded: readableWhen(summary.createdAt),
-          pages: summary.pages.length,
-          durationMs: summary.durationMs,
-          sources,
-          captions: summary.media.captions ? `${base}/${summary.media.captions}` : null,
-          poster: pictures[0]?.url ?? null,
-          pictures,
-          chapters: chapters.length ? chapters : captions.length ? [{ start: 0, title: hostOf(summary.url) }] : [],
-          transcript: captions.map((c) => ({ start: c.start, text: c.text })),
-          expiresAt: share.expiresAt.slice(0, 10),
-          ...(summary.media.note && /failed|instead|could not reach/i.test(summary.media.note) ? { note: summary.media.note } : {}),
-        }),
-      );
+      // The owner's notes, when this link was made to carry them.
+      const notes = share.includeNotes ? (await store.annotations(id, found?.owner ?? null)).map((a) => ({ at: a.at, text: a.text })) : [];
+      const page = {
+        title: hostOf(summary.url),
+        host: summary.url,
+        recorded: readableWhen(summary.createdAt),
+        pages: summary.pages.length,
+        durationMs: summary.durationMs,
+        sources,
+        captions: summary.media.captions ? `${base}/${summary.media.captions}` : null,
+        poster: pictures[0]?.url ?? null,
+        pictures,
+        chapters,
+        transcript: captions.map((c) => ({ start: c.start, text: c.text })),
+        notes,
+        expiresAt: share.expiresAt.slice(0, 10),
+        ...(summary.media.note && /failed|instead|could not reach/i.test(summary.media.note) ? { note: summary.media.note } : {}),
+      };
+      // The embed is the same walkthrough without the page around it: a player to drop into
+      // somebody else's site, with nothing of Walkcast's shell in the way.
+      if (url.searchParams.get("embed") === "1") {
+        return send(200, "text/html; charset=utf-8", embedPage({ ...page, openUrl: `${siteUrl}${base}` }));
+      }
+      return send(200, "text/html; charset=utf-8", sharePage(page));
     }
     // What the recorder found on the site while it walked it.
     //
@@ -1037,6 +1046,42 @@ try {
         })
         .filter((e): e is TraceEvent => e !== null);
       return json(200, { insights: analyzeRecording(facts, events) });
+    }
+    // Notes pinned to a moment in a walkthrough.
+    //
+    // The walkthrough is the evidence; the note is its owner's reading of it. Notes belong to
+    // the recording's owner and are nobody else's business: they are listed, added and removed
+    // through this one route, and a note only reaches a share link when its owner says so.
+    const annotationsMatch = /^\/api\/recordings\/([\w.-]+)\/annotations$/.exec(url.pathname);
+    if (annotationsMatch && (req.method === "GET" || req.method === "POST")) {
+      const id = annotationsMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (req.method === "GET") return json(200, { annotations: await store.annotations(id, row.owner ?? null) });
+      const body = (await readJson(req).catch(() => ({}))) as { at?: unknown; text?: unknown };
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text) return json(400, { error: "A note needs some text." });
+      if (text.length > 2000) return json(400, { error: "That note is too long (2000 characters at the most)." });
+      const at = Number(body.at);
+      if (!Number.isFinite(at) || at < 0) return json(400, { error: "A note needs a position in the video." });
+      const annotation = {
+        id: randomUUID(),
+        recordingId: id,
+        owner: row.owner ?? null,
+        at: Math.round(at * 1000) / 1000,
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      await store.addAnnotation(annotation);
+      return json(201, { annotation });
+    }
+    const annotationMatch = /^\/api\/recordings\/([\w.-]+)\/annotations\/([\w-]+)$/.exec(url.pathname);
+    if (annotationMatch && req.method === "DELETE") {
+      const [, id, noteId] = annotationMatch as unknown as [string, string, string];
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      const removed = await store.removeAnnotation(noteId, row.owner ?? null);
+      return removed ? json(200, { ok: true }) : json(404, { error: "Note not found." });
     }
     // Delete a recording: its files (local folder, or its objects in the bucket) and its index row.
     const deleteMatch = /^\/api\/recordings\/([\w.-]+)$/.exec(url.pathname);
@@ -1319,27 +1364,35 @@ try {
         if (located && "redirect" in located) return redirect(located.redirect);
         return json(404, { error: "not found" });
       }
-      let summary: { captions?: { start: number; end: number; text: string }[] } = {};
-      try { summary = JSON.parse(readFileSync(located.path, "utf8")); } catch { return json(500, { error: "bad recording" }); }
+      let summary: RecordingSummary = {} as RecordingSummary;
+      try { summary = JSON.parse(readFileSync(located.path, "utf8")) as RecordingSummary; } catch { return json(500, { error: "bad recording" }); }
       const caps = summary.captions ?? [];
       const format = (url.searchParams.get("format") ?? "json").toLowerCase();
       if (format === "json") return json(200, { captions: caps });
-      const fmt = (s: number) => {
-        const totalMs = Math.round(s * 1000);
-        const h = Math.floor(totalMs / 3600000);
-        const m = Math.floor((totalMs % 3600000) / 60000);
-        const sec = Math.floor((totalMs % 60000) / 1000);
-        const ms = totalMs % 1000;
-        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
-      };
       if (format === "srt") {
-        const body = caps.map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`).join("\n");
+        const body = toSrt(caps);
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
         return void res.end(body);
       }
       if (format === "vtt") {
-        const body = "WEBVTT\n\n" + caps.map((c) => `${fmt(c.start).replace(",", ".")} --> ${fmt(c.end).replace(",", ".")}\n${c.text}\n`).join("\n");
+        const body = toVtt(caps);
         res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" });
+        return void res.end(body);
+      }
+      if (format === "md" || format === "markdown") {
+        // The whole visit as one document: the pages it opened, the narration it spoke, the
+        // owner's notes and what the recorder found. Meant to be pasted somewhere else.
+        const notes = await store.annotations(id, row.owner ?? null);
+        const body = transcriptMarkdown({
+          url: summary.url ?? "",
+          createdAt: summary.createdAt,
+          durationMs: summary.durationMs ?? 0,
+          pages: summary.pages ?? [],
+          captions: caps,
+          notes: notes.map((n) => ({ at: n.at, text: n.text })),
+          findings: summary.insights?.findings ?? [],
+        });
+        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store" });
         return void res.end(body);
       }
       return json(400, { error: "unknown format" });

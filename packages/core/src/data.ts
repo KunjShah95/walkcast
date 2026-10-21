@@ -114,6 +114,8 @@ export interface ShareLink {
   token: string;
   createdAt: string;
   expiresAt: string;
+  /** Whether this link carries the owner's notes. Each link answers for itself. */
+  includeNotes?: boolean;
 }
 
 /** A named recording as it is listed by the dashboard. */

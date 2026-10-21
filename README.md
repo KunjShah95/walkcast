@@ -178,6 +178,24 @@ Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;
 honours `robots.txt`; paces requests; credentials registered as secrets (never on disk).
 
+### After the recording: notes, sharing, export
+
+The visit is the product, so the walkthrough is not the end of it:
+
+- **Notes** (`packages/core/src/record/transcript.ts`, `packages/core/src/store/`) — pin a note to
+  the second of the video you are watching ("the CTA here is wrong"). Notes belong to the
+  walkthrough's owner, are stored with it, travel with the Markdown export, and stay private
+  until a share link is made to carry them.
+- **Share links** — a token that plays the walkthrough for whoever has it: no account, no
+  sign-in, it expires on the day it names, and the owner can stop it before then. Each link
+  answers for itself about the notes.
+- **Embed** — `?embed=1` on a share link is the same walkthrough as a player with no shell
+  around it: one line of `<iframe>` for your own site.
+- **Export** — the captions as SRT or VTT (`/api/recordings/:id/transcript?format=`), and the
+  whole visit as one Markdown document: the pages it opened, the narration it spoke, the
+  owner's notes and what the recorder found. The same document is one command away without a
+  server: `walkcast transcript <recordingId> --format md`.
+
 ### Walkcast Lab (browser-agent regression testing)
 
 Turns a failed browser-agent run into a classified, reproducible regression test that checks the

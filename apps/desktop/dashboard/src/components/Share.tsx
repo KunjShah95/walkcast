@@ -14,6 +14,7 @@ import { Button } from "./ui.tsx";
  */
 export function SharePanel({ recording, onChange }: { recording: RecordingSummary; onChange?: (r: RecordingSummary) => void }) {
   const [days, setDays] = useState(7);
+  const [includeNotes, setIncludeNotes] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
     setBusy(true);
     setError(null);
     try {
-      const made = await createShare(recording.id, days);
+      const made = await createShare(recording.id, days, includeNotes);
       remember(made.shares);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -60,6 +61,13 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
     }
   };
 
+  /**
+   * The same walkthrough as a player to drop into somebody else's site: one line of HTML,
+   * no account, nothing of Walkcast's shell in the way.
+   */
+  const embedCode = (url: string) =>
+    `<iframe src="${url}${url.includes("?") ? "&" : "?"}embed=1" title="${recording.url.replace(/"/g, "&quot;")}" width="960" height="600" style="border:0;border-radius:10px" allowfullscreen loading="lazy"></iframe>`;
+
   return (
     <section className="rounded-2xl border border-line bg-panel">
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
@@ -83,6 +91,13 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
           </Button>
         </div>
       </header>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 text-[12.5px] text-ink-2">
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={includeNotes} onChange={(e) => setIncludeNotes(e.target.checked)} className="size-3.5 accent-signal" />
+          Include my notes on the page
+        </label>
+        <span className="text-[11.5px] text-ink-3">Your notes stay private until a link carries them.</span>
+      </div>
       {error && <p className="border-b border-line px-4 py-2.5 text-[12.5px] text-fail">{error}</p>}
       {links.length === 0 ? (
         <p className="px-4 py-3 text-[12.5px] text-ink-3">No links yet. The walkthrough stays private until you make one.</p>
@@ -94,12 +109,21 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
               <li key={link.token} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
                 <code className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-2">{url}</code>
                 <span className="shrink-0 font-mono text-[11.5px] text-ink-3">until {link.expiresAt.slice(0, 10)}</span>
+                {link.includeNotes && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-3">notes</span>}
                 <button
                   type="button"
                   onClick={() => copy(url)}
                   className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
                 >
                   {copied === url ? "Copied" : "Copy"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copy(embedCode(url))}
+                  title="Copy the HTML that embeds this walkthrough in your own site"
+                  className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
+                >
+                  {copied === embedCode(url) ? "Copied" : "Embed"}
                 </button>
                 <button
                   type="button"

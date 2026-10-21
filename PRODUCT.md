@@ -33,6 +33,7 @@ Every line of narration and every failure cause comes from what the browser actu
 ## Capabilities and Constraints
 
 - Confirmed wanted (2026-10-16): synced clickable transcript player with captions and per-page chapters; narration voice choice with preview; editable narration script with re-rendered voice-over; recording the user's own voice in-browser to replace or add to synthetic narration.
+- Added (2026-10-21): notes pinned to a moment in a walkthrough (private to the owner until a share link carries them); a one-line embed of a shared walkthrough for somebody else's site; the whole visit as one Markdown document.
 - Narration voice choice covers the provider's own voices, not just the flite names: picking ElevenLabs offers Rachel, Adam, Bella, ElevenLabs ids, and each can be sampled before recording.
 - Language is part of the voice, not a separate setting: a neural voice id carries its locale and providers reject a language that disagrees with it, so the picker shows the language and only asks for one where voice ids are free text.
 - Settings must cover: account and connected sign-ins (Google, OpenRouter, ChatGPT), sign out; recording defaults (voice, max pages, captions); connected model providers for Lab runs; usage and limits (daily recording/run quotas, jobs in flight).

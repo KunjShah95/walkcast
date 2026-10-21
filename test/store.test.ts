@@ -354,5 +354,32 @@ for (const [name, open] of backends) {
         await s.close();
       }
     });
+
+    test("annotations: one owner's notes on one walkthrough, and nobody else's", async () => {
+      const s = await open();
+      try {
+        await s.insertUser(user("u1", "a@example.com"));
+        await s.insertUser(user("u2", "b@example.com"));
+        await s.saveRecording({ id: "r1", owner: "u1", url: "https://1.example", createdAt: "2026-10-01T00:00:00.000Z", summary: {} });
+        const note = { id: "11111111-1111-4111-8111-111111111111", recordingId: "r1", owner: "u1", at: 2.5, text: "The button is wrong here.", createdAt: "2026-10-02T00:00:00.000Z" };
+        await s.addAnnotation(note);
+        const listed = await s.annotations("r1", "u1");
+        assert.equal(listed.length, 1);
+        assert.equal(listed[0]!.text, "The button is wrong here.");
+        assert.equal(listed[0]!.at, 2.5);
+        // Another account's notes are nobody else's business.
+        assert.deepEqual(await s.annotations("r1", "u2"), []);
+        // Another walkthrough's notes do not leak into this one.
+        await s.saveRecording({ id: "r2", owner: "u1", url: "https://2.example", createdAt: "2026-10-01T00:00:00.000Z", summary: {} });
+        await s.addAnnotation({ ...note, id: "22222222-2222-4222-8222-222222222222", recordingId: "r2" });
+        assert.equal((await s.annotations("r1", "u1")).length, 1);
+        // A note is taken back by its owner, and by nobody else.
+        assert.equal(await s.removeAnnotation(note.id, "u2"), false);
+        assert.equal(await s.removeAnnotation(note.id, "u1"), true);
+        assert.deepEqual(await s.annotations("r1", "u1"), []);
+      } finally {
+        await s.close();
+      }
+    });
   });
 }

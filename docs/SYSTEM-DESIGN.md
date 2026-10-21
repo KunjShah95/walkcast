@@ -169,6 +169,23 @@ user's webhooks hear only that user's jobs, and only the owner can list or delet
 - **Upgrade path.** On first start, an old `schedules.json` or `.lab/webhooks.json` is imported
   for the local owner and renamed to `*.imported`.
 
+## 6b. Notes on a walkthrough: the owner's reading of the evidence
+
+A walkthrough is the evidence; a note is its owner's reading of it ("the CTA here is wrong",
+"this page took two seconds to load"). Notes live in the store (migration
+`20261021000000_annotations.sql`) and are owner-scoped like every other table.
+
+- **The note belongs to the walkthrough's owner.** `annotations` carries the recording's owner,
+  and every read and write is filtered by it, so one account's notes are never another's. The
+  Postgres table also has a foreign key to `recordings`, so deleting a walkthrough takes its
+  notes with it; the FileStore sweeps them in the same serialized mutation.
+- **A note is private until a link carries it.** A note is never part of the shared page by
+  itself: the share page shows notes only when the share link was made with `includeNotes`, and
+  each link answers for itself.
+- **The token is still the permission.** The share page and its embed are served under the same
+  expiring token as the media, so a note can never outlive the permission to see the video it
+  is pinned to.
+
 ## 7. Desktop application shape
 
 The desktop app (Tauri shell + sidecar) runs the same `createApp` handler on a free

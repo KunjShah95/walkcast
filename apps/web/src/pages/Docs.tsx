@@ -63,8 +63,29 @@ export function GuidePage() {
           <tr><td><code>captions.vtt</code></td><td>WebVTT captions, timed to the voice.</td></tr>
           <tr><td><code>narration.wav</code></td><td>The voice-over on its own.</td></tr>
           <tr><td>Page list</td><td>Every page visited, with its title and HTTP status.</td></tr>
+          <tr><td>Notes</td><td>Your own notes, pinned to the second of the video they are about.</td></tr>
+          <tr><td>Share link</td><td>A link that plays the walkthrough for whoever has it, until the day it names.</td></tr>
         </tbody>
       </table>
+
+      <h2>Share it, or put it on your own site</h2>
+      <p>
+        A share link plays the walkthrough for whoever has it: no account, no sign-in, nothing to install. It stops working on the day you name, and you can stop it
+        before then. Each link answers for itself, so one link can carry your notes and another can leave them private.
+      </p>
+      <p>
+        To put the walkthrough on your own site, copy the embed code from the Share panel. It is one line of HTML — an iframe with the video, its captions and a link
+        back to the full page:
+      </p>
+      <pre className="code-block">
+        <code>{`<iframe src="https://your-walkcast-host/share/<id>/<token>?embed=1"
+        title="Walkthrough" width="960" height="600"
+        style="border:0;border-radius:10px" allowfullscreen loading="lazy"></iframe>`}</code>
+      </pre>
+      <p>
+        Notes you write while watching stay private until you put them on a link. The same walkthrough also comes out as one Markdown document — the pages, the
+        narration, your notes and what the recorder found — to paste into a ticket or a README.
+      </p>
 
       <h2>Embed it with captions</h2>
       <pre className="code-block">

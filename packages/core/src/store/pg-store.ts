@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { migrationFiles } from "./migrations.ts";
 import { jobCompletedPayload } from "./payload.ts";
-import { DuplicateError, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
+import { DuplicateError, type Annotation, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
 
 type Row = Record<string, unknown>;
 
@@ -310,6 +310,28 @@ export class PgStore implements Store {
     await this.sql`delete from recordings where id = ${id}`;
   }
 
+  // ---------------------------------------------------------------- annotations
+
+  async annotations(recordingId: string, owner: string | null) {
+    // The primary, not the read replica: a note written a moment ago must be there when its
+    // owner looks for it again.
+    const rows = await this.sql`
+      select * from annotations
+      where recording_id = ${recordingId} and owner is not distinct from ${owner}
+      order by at_seconds, created_at`;
+    return rows.map(toAnnotation);
+  }
+  async addAnnotation(a: Annotation) {
+    await this.sql`
+      insert into annotations (id, recording_id, owner, at_seconds, text, created_at)
+      values (${a.id}, ${a.recordingId}, ${a.owner}, ${a.at}, ${a.text}, ${a.createdAt})`;
+  }
+  async removeAnnotation(id: string, owner: string | null) {
+    if (!UUID.test(id)) return false;
+    const rows = await this.sql`delete from annotations where id = ${id} and owner is not distinct from ${owner} returning id`;
+    return rows.length > 0;
+  }
+
   // ---------------------------------------------------------------- schedules
 
   async schedules(owner: string | null) {
@@ -504,4 +526,15 @@ function toDelivery(r: Row): WebhookDelivery {
 
 function toRecording(r: Row): RecordingRow {
   return { id: String(r.id), owner: (r.owner as string | null) ?? null, url: String(r.url), createdAt: iso(r.created_at)!, summary: r.summary as Record<string, unknown> };
+}
+
+function toAnnotation(r: Row): Annotation {
+  return {
+    id: String(r.id),
+    recordingId: String(r.recording_id),
+    owner: (r.owner as string | null) ?? null,
+    at: Number(r.at_seconds),
+    text: String(r.text),
+    createdAt: iso(r.created_at)!,
+  };
 }

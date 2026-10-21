@@ -79,6 +79,24 @@ export interface RecordingRow {
 }
 
 /**
+ * A note pinned to a moment in a walkthrough.
+ *
+ * The walkthrough is the evidence; the note is the owner's reading of it — "the CTA here is
+ * wrong", "this page took two seconds to load". It belongs to the recording's owner and stays
+ * theirs until they choose to put it on a share link.
+ */
+export interface Annotation {
+  id: string;
+  recordingId: string;
+  /** The account the note belongs to; null when there are no accounts (local use). */
+  owner: string | null;
+  /** Seconds from the start of the video. */
+  at: number;
+  text: string;
+  createdAt: string;
+}
+
+/**
  * Where a queued job stands. Both numbers come from the same read, because both answer "is the
  * fleet keeping up": `ahead` is the line the user is standing in, `oldestQueuedMs` is the number
  * the scale-out alarm watches (docs/SCALING.md §7).
@@ -217,6 +235,13 @@ export interface Store {
   recordings(owner: string | null, limit: number): Promise<RecordingRow[]>;
   recording(id: string): Promise<RecordingRow | null>;
   deleteRecording(id: string): Promise<void>;
+
+  // annotations (notes pinned to a moment in a walkthrough)
+  /** The notes on one recording, oldest moment first. Only the owner's own notes come back. */
+  annotations(recordingId: string, owner: string | null): Promise<Annotation[]>;
+  addAnnotation(annotation: Annotation): Promise<void>;
+  /** False when nothing of `owner`'s matched the id. */
+  removeAnnotation(id: string, owner: string | null): Promise<boolean>;
 
   // schedules
   schedules(owner: string | null): Promise<Schedule[]>;

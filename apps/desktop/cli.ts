@@ -28,6 +28,8 @@ import { Worker } from "../../packages/core/src/jobs/worker.ts";
 import { createMedia } from "../../packages/core/src/media/store.ts";
 import { log } from "../../packages/core/src/ops/log.ts";
 import { PgStore, createStore, databaseUrl, migrate } from "../../packages/core/src/store/index.ts";
+import { toSrt, toVtt, transcriptMarkdown } from "../../packages/core/src/record/transcript.ts";
+import type { RecordingSummary } from "../../packages/core/src/data.ts";
 
 function untilSignal(): Promise<NodeJS.Signals> {
   return new Promise((resolve) => {
@@ -84,6 +86,10 @@ Commands:
                                         recordings/. Stops at CAPTCHA or 2FA. The password is read from the
                                         env var (default LAB_SITE_PASSWORD) and never written to disk.
   rediagnose [dirs...]                  Re-apply the current classifier rules to stored runs (default runs/)
+  transcript <recordingId> [--format md|srt|vtt|json] [--out file]
+                                         The walkthrough as text: one Markdown document (pages,
+                                         narration, notes, what the recorder found) or the captions
+                                         as SRT/VTT. Reads recordings/<id>/recording.json; no server.
   providers                             List model providers and whether their API key is set
   doctor                                Check environment: node, browsers, ffmpeg/flite, .env keys, and repository state
   check-model <provider:model>          Smoke-test a model on both channels (tool call + JSON schema)
@@ -133,6 +139,7 @@ const { positionals, values } = parseArgs({
     // New failures go to runs/_fixtures; pass --fixtures fixtures to add one to the committed CI gate.
     fixtures: { type: "string", default: join("runs", "_fixtures") },
     "baseline-file": { type: "string" },
+    format: { type: "string", default: "md" },
     update: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     out: { type: "string" },
@@ -225,6 +232,38 @@ async function main(): Promise<number> {
         }
       }
       console.log(`Re-diagnosed ${total} runs; ${changed} changed.`);
+      return 0;
+    }
+    case "transcript": {
+      // The walkthrough as text, without a server: a recording folder holds everything needed.
+      const id = target;
+      if (!id) throw new Error("transcript needs a recording id (the folder name under recordings/)");
+      if (id.includes("..") || id.includes("/") || id.includes("\\")) throw new Error("The recording id must be one folder name.");
+      const file = join("recordings", id, "recording.json");
+      if (!existsSync(file)) throw new Error(`No recording at ${file}`);
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary;
+      const caps = summary.captions ?? [];
+      const format = (values.format ?? "md").toLowerCase();
+      let body: string;
+      if (format === "srt") body = toSrt(caps);
+      else if (format === "vtt") body = toVtt(caps);
+      else if (format === "json") body = JSON.stringify({ captions: caps }, null, 2);
+      else if (format === "md" || format === "markdown") {
+        body = transcriptMarkdown({
+          url: summary.url,
+          createdAt: summary.createdAt,
+          durationMs: summary.durationMs,
+          pages: summary.pages ?? [],
+          captions: caps,
+          findings: summary.insights?.findings ?? [],
+        });
+      } else throw new Error("--format must be md, srt, vtt or json");
+      if (values.out) {
+        writeFileSync(values.out, body.endsWith("\n") ? body : `${body}\n`);
+        console.log(`wrote ${values.out}`);
+      } else {
+        process.stdout.write(body.endsWith("\n") ? body : `${body}\n`);
+      }
       return 0;
     }
     case "doctor": {
