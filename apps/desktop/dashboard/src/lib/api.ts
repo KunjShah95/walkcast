@@ -103,7 +103,7 @@ export interface Capabilities {
   queue?: number | null;
   stagehand?: boolean;
   /** Every runnable agent version; `kind` "scripted" needs no model key and no Chrome. */
-  agents?: { id: string; kind: string; description: string }[];
+  agents?: { id: string; kind: string; description: string; budget?: { tokens: number | null; usd: number | null } | null }[];
   providers?: string[];
   /** Speech-to-text providers with a key, for auto-captions. */
   sttProviders?: string[];

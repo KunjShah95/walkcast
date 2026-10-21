@@ -63,6 +63,7 @@ Total: **5 agents** (3 scripted + 2 Stagehand).
 |---|---|
 | `/api/agents/usage` aggregate per agent id | **Done.** `GET /api/agents/usage?windowMs=` returns total / succeeded / failed / active per agent, plus its exposure and daily ceiling. Counts only, no inputs or owners (`Store.agentUsage`). |
 | Per-agent rate limits / quotas | **Done.** Model-backed agents get a per-account daily ceiling on live runs (`LAB_LLM_RUNS_PER_DAY`, default 20; per-agent override `LAB_AGENT_RUNS_PER_DAY_<ID>`). Replay and scripted model modes are free and not counted. Enforced with the store's atomic `hit()`, so it holds across instances. |
+| A ceiling on what one run may cost | **Done.** Every live run carries a per-run budget (`packages/core/src/llm/budget.ts`): 250k tokens or ~$5 by default, per agent with `LAB_AGENT_TOKEN_BUDGET_<ID>` / `LAB_AGENT_COST_BUDGET_USD_<ID>`. The daily quota says how often a run may start; the budget says what one may cost. A run that reaches a ceiling stops and is reported as `budget-exhausted`, not as an agent failure. Replays and scripted runs are never charged against it. |
 | Canary that runs one scripted agent per deploy | **Covered by CI.** The `regression-fixtures` job runs `lab compare fixtures --agents v1 --trials 3` on every push (release gate); a regression in the harness or v1 fails the build before release. |
 | Document which agents are safe to expose | **Done**, table below; also returned as `exposure` in `/api/capabilities` and `/api/agents/usage`. |
 
@@ -71,4 +72,4 @@ Total: **5 agents** (3 scripted + 2 Stagehand).
 | Agent | Exposure | Why |
 |---|---|---|
 | `v0`, `v1`, `v2` | `public` | Deterministic scripts. No model calls, no provider cost; safe on any server. |
-| `sh-p0`, `sh-p1` | `lab` | Drive a real model through the gateway. On a server reachable from other machines, live runs are refused unless `LAB_ALLOW_LIVE_RUNS=1`, and they count against the per-agent daily ceiling. Replays of a recorded fixture cost nothing and are always allowed. |
+| `sh-p0`, `sh-p1` | `lab` | Drive a real model through the gateway. On a server reachable from other machines, live runs are refused unless `LAB_ALLOW_LIVE_RUNS=1`, and they count against the per-agent daily ceiling. Replays of a recorded fixture cost nothing and are always allowed. A live run that reaches its per-run budget stops on purpose and is reported as `budget-exhausted`. |

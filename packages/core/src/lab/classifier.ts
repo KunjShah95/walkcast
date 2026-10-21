@@ -22,6 +22,7 @@ export type FindingLabel =
   | "app-dropped-field"
   | "app-error"
   | "agent-error"
+  | "budget-exhausted"
   | "unexplained";
 
 export interface Finding {
@@ -37,6 +38,9 @@ export interface Diagnosis {
   verdict: "pass" | "fail";
   findings: Finding[];
 }
+
+/** The run stopped because it reached its model budget, not because the agent misbehaved. */
+const BUDGET_EXHAUSTED = /budget exhausted/i;
 
 export interface ClassifierInput {
   events: TraceEvent[];
@@ -335,13 +339,25 @@ export function diagnose(input: ClassifierInput): Diagnosis {
   }
 
   if (agentError) {
-    findings.push({
-      label: "agent-error",
-      kind: "cause",
-      confidence: "rule",
-      explanation: `The agent stopped with an error before finishing: ${agentError}. This is a harness or infrastructure failure (crash, missing API key, provider outage, exhausted replay), not a judgement of the agent's behaviour.`,
-      evidenceSteps: claim ? [claim.stepId] : [],
-    });
+    // A run that hit its model budget was stopped by the harness, not by the agent: it is its
+    // own cause, because "the agent errored" would blame the agent for a money decision.
+    if (BUDGET_EXHAUSTED.test(agentError)) {
+      findings.push({
+        label: "budget-exhausted",
+        kind: "cause",
+        confidence: "rule",
+        explanation: `The run reached its model budget and was stopped: ${agentError}. The agent's behaviour is not what failed here; raise the budget (LAB_AGENT_TOKEN_BUDGET / LAB_AGENT_COST_BUDGET_USD) or replay a recorded run, which costs nothing.`,
+        evidenceSteps: claim ? [claim.stepId] : [],
+      });
+    } else {
+      findings.push({
+        label: "agent-error",
+        kind: "cause",
+        confidence: "rule",
+        explanation: `The agent stopped with an error before finishing: ${agentError}. This is a harness or infrastructure failure (crash, missing API key, provider outage, exhausted replay), not a judgement of the agent's behaviour.`,
+        evidenceSteps: claim ? [claim.stepId] : [],
+      });
+    }
   }
 
   // Causes on a passing run were handled by the agent: report them as incidents, not failures.

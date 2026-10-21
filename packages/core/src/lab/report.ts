@@ -18,6 +18,16 @@ export function writeRunReport(result: RunResult, events: TraceEvent[], task: Ta
   lines.push(`- **Verdict:** ${result.diagnosis.verdict.toUpperCase()} (expectation: ${result.expectation})`);
   lines.push(`- **Agent claim:** ${result.claim ? `${result.claim.success ? "success" : "failure"} — "${result.claim.summary}"` : "none"}`);
   lines.push(`- **Duration:** ${result.durationMs} ms · **Steps:** ${result.steps} · **Model calls:** ${result.modelCalls}`);
+  if (result.budget) {
+    const b = result.budget;
+    lines.push(
+      `- **Budget:** ${b.spentTokens.toLocaleString("en-US")} tokens` +
+        (b.limitTokens === null ? " (no ceiling)" : ` of ${b.limitTokens.toLocaleString("en-US")}`) +
+        ` · ~$${b.spentUsd.toFixed(4)}` +
+        (b.limitUsd === null ? " (no ceiling)" : ` of $${b.limitUsd.toFixed(2)}`) +
+        (b.exhausted ? ` · **exhausted** — ${b.reason}` : ""),
+    );
+  }
   if (result.agentError) lines.push(`- **Agent error:** ${result.agentError}`);
   lines.push("");
 

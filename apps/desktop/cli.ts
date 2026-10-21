@@ -8,6 +8,7 @@ import { FAULTS, TASK_FAULTS, TASK_IDS, allScenarios, isTaskId, normalizeScenari
 import { startApp } from "../../packages/core/src/app/server.ts";
 import { allAgents } from "../../packages/core/src/agents/registry.ts";
 import type { GatewayMode } from "../../packages/core/src/llm/gateway.ts";
+import { budgetLimitsFor, RunBudget } from "../../packages/core/src/llm/budget.ts";
 import { backendFor, defaultSelection, type ModelSelection } from "../../packages/core/src/llm/model-spec.ts";
 import { PROVIDERS, apiKey, baseURL } from "../../packages/core/src/llm/providers.ts";
 import { causes, symptoms } from "../../packages/core/src/lab/classifier.ts";
@@ -46,7 +47,7 @@ Commands:
   list                                  List faults and agent versions
   app --fault <id> [--seed n] [--port p]  Serve MiniCRM for manual exploration (login demo / demo-pass)
   run --fault <id> --agent <id> [--task t] [--seed n] [--fixtures dir] [--screenshots] [--video]
-      [--model-mode m] [--agent-model spec] [--stagehand-model spec]
+      [--model-mode m] [--agent-model spec] [--stagehand-model spec] [--token-budget n] [--cost-budget usd]
                                         Run once; write trace + report; on failure save a fixture
                                         (default runs/_fixtures) and exit 1. Tasks: create-lead,
                                         reassign-lead, lookup-owner
@@ -103,6 +104,9 @@ deepseek, huggingface (hf), xai (grok), together, fireworks, cerebras, ollama (l
 Agents: v0/v1/v2 are scripted; sh-p0/sh-p1 are Claude + Stagehand v4 (need Chrome or Edge, or LAB_CHROME_PATH).
 Model modes (Stagehand agents): live (any configured provider; see "providers"), replay
 (recorded model calls, $0), scripted (deterministic stand-in for plumbing tests).
+Budget (live runs only): --token-budget / --cost-budget cap what one run may spend, on top of
+the agent's own ceiling (LAB_AGENT_TOKEN_BUDGET, LAB_AGENT_COST_BUDGET_USD; per agent
+LAB_AGENT_TOKEN_BUDGET_<ID>). A run that reaches a ceiling stops and says so; a replay never does.
 `;
 
 const { positionals, values } = parseArgs({
@@ -114,6 +118,8 @@ const { positionals, values } = parseArgs({
     "model-mode": { type: "string" },
     "agent-model": { type: "string" },
     "stagehand-model": { type: "string" },
+    "token-budget": { type: "string" },
+    "cost-budget": { type: "string" },
     baseline: { type: "string", default: "v0" },
     candidates: { type: "string", default: "v1,v2" },
     seed: { type: "string", default: "1" },
@@ -194,7 +200,7 @@ async function main(): Promise<number> {
       const against = values.against;
       if (!against) throw new Error("check needs --against <baselineDir>, plus --agent and --fault for the new run");
       const fault = requireFault();
-      const result = await runOnce({ fault, seed: Number(values.seed), agent: values.agent!, task: requireTask(), outDir: runsDir, ...(modelMode() ? { modelMode: modelMode() } : {}), ...(models() ? { models: models() } : {}) });
+      const result = await runOnce({ fault, seed: Number(values.seed), agent: values.agent!, task: requireTask(), outDir: runsDir, ...(modelMode() ? { modelMode: modelMode() } : {}), ...(models() ? { models: models() } : {}), ...(budget() ? { budget: budget() } : {}) });
       const report = diffDirs(against, join("runs", result.runDir.split(/[\\/]/).pop()!));
       printDiff(report);
       return report.broken.length || report.outcome.verdict[1] === "fail" ? 1 : 0;
@@ -445,8 +451,19 @@ async function main(): Promise<number> {
         video: values.video,
         ...(modelMode() ? { modelMode: modelMode() } : {}),
         ...(models() ? { models: models() } : {}),
+        ...(budget() ? { budget: budget() } : {}),
       });
       console.log(`${result.diagnosis.verdict.toUpperCase()}  symptoms=[${symptoms(result.diagnosis).join(", ")}] causes=[${causes(result.diagnosis).join(", ")}]`);
+      if (result.budget && (result.modelCalls > 0 || result.budget.exhausted)) {
+        const b = result.budget;
+        console.log(
+          `budget: ${b.spentTokens.toLocaleString("en-US")} tokens` +
+            (b.limitTokens === null ? " (no ceiling)" : ` of ${b.limitTokens.toLocaleString("en-US")}`) +
+            ` · ~$${b.spentUsd.toFixed(4)}` +
+            (b.limitUsd === null ? " (no ceiling)" : ` of $${b.limitUsd.toFixed(2)}`) +
+            (b.exhausted ? ` · EXHAUSTED — ${b.reason}` : ""),
+        );
+      }
       console.log(`report: ${join(result.runDir, "report.md")}`);
       if (result.agentError) {
         console.log(`agent error: ${result.agentError}  (no fixture saved: this is a harness/infra failure, not agent behaviour)`);
@@ -573,6 +590,20 @@ function models(): ModelSelection | undefined {
   const defaults = defaultSelection();
   const agent = values["agent-model"] ?? defaults.agent;
   return { agent, stagehand: values["stagehand-model"] ?? values["agent-model"] ?? defaults.stagehand };
+}
+
+/**
+ * --token-budget / --cost-budget override what one run may spend on model calls. Without
+ * them the agent's own ceiling applies (LAB_AGENT_TOKEN_BUDGET / LAB_AGENT_COST_BUDGET_USD).
+ */
+function budget(): RunBudget | undefined {
+  if (!values["token-budget"] && !values["cost-budget"]) return undefined;
+  const limits = budgetLimitsFor(values.agent!, process.env);
+  const tokens = values["token-budget"] === undefined ? limits.tokens : Number(values["token-budget"]);
+  const dollars = values["cost-budget"] === undefined ? limits.usd : Number(values["cost-budget"]);
+  if (tokens !== null && !Number.isFinite(tokens)) throw new Error("--token-budget must be a number of tokens");
+  if (dollars !== null && !Number.isFinite(dollars)) throw new Error("--cost-budget must be a number of dollars");
+  return new RunBudget({ tokens, usd: dollars });
 }
 
 /** Two small live calls: one agent turn that must call a tool, one schema-constrained Stagehand-style call. */

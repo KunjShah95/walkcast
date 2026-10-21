@@ -78,6 +78,7 @@ const LABEL: Record<string, string> = {
   "app-dropped-field": "App dropped a field",
   "app-error": "App error",
   "agent-error": "Agent crashed",
+  "budget-exhausted": "Ran out of model budget",
   unexplained: "Unexplained",
 };
 

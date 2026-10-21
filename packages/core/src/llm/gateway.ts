@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { ClientLLM } from "@browserbasehq/stagehand";
 import type { Recorder } from "../capture/recorder.ts";
 import { scrub, unscrub } from "../capture/secrets.ts";
+import { type BudgetState, type RunBudget } from "./budget.ts";
 import { type CassetteEntry as GenericEntry, type CassetteHooks, CassettePlayer, hashRequest, promptText, readCassette as readEntries, writeCassette } from "./cassette.ts";
 
 export { normalizeText, remapElementIds } from "./cassette.ts";
@@ -72,6 +73,12 @@ export class ModelGateway {
     private readonly backend: ModelBackend | null,
     private readonly recorder: Recorder,
     cassette?: CassetteEntry[],
+    /**
+     * What this run may spend. Enforced in live mode only: a replay spends nothing and a
+     * scripted run talks to a stand-in, so neither may fail differently because a ceiling
+     * was reached.
+     */
+    readonly budget?: RunBudget,
   ) {
     this.status = { mode, calls: 0, drifted: [], exhausted: false, inputTokens: 0, outputTokens: 0 };
     if (mode === "replay") {
@@ -80,6 +87,16 @@ export class ModelGateway {
     } else if (!backend) {
       throw new Error(`Mode '${mode}' needs a model backend`);
     }
+  }
+
+  /** What the run has spent against its budget, or null when it has no budget. */
+  get budgetState(): BudgetState | null {
+    return this.budget?.state ?? null;
+  }
+
+  /** The budget, but only where it applies: a replay spends nothing. */
+  private get liveBudget(): RunBudget | undefined {
+    return this.mode === "live" ? this.budget : undefined;
   }
 
   async agent(request: AgentRequest): Promise<AgentResponse> {
@@ -118,6 +135,9 @@ export class ModelGateway {
       response = played.response;
       model = `replay:${played.entry.model}`;
     } else {
+      // The ceiling is checked before the call, not after: a run that has spent its budget
+      // must not start a call it cannot pay for.
+      this.liveBudget?.assertCanCall();
       requestHash = hashRequest(channel, request, HOOKS);
       response = await live(this.backend!);
       const routed = this.backend as Partial<{ servedBy(c: Channel): string }>;
@@ -141,6 +161,9 @@ export class ModelGateway {
       outputTokens: usage.output,
       latencyMs,
     });
+    // Counted after the call was recorded, so the cassette keeps the call that went over the
+    // ceiling: a replay of this run must show the same last call.
+    this.liveBudget?.spend(model, usage.input, usage.output);
     return response;
   }
 

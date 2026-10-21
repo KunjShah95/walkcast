@@ -73,6 +73,11 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 - [x] The regression gate: `npm run lab -- ci <fixtures>` replays every fixture and fails when one that used to pass stops passing, against a baseline file that remembers what each fixture did last time. A workflow runs it on pull requests and comments the table (docs/CI-GATE.md).
 - [x] Journeys: record a flow instead of crawling the site — `goto`, `click`, `fill`, `wait`, `scroll`, one per line — narrated step by step, and printed as a Playwright script.
 
+## Model spend guards (2026-10-21)
+- [x] A per-run model budget: every live run carries a ceiling on tokens and on estimated dollars (250k tokens / ~$5 by default; `LAB_AGENT_TOKEN_BUDGET`, `LAB_AGENT_COST_BUDGET_USD`, per agent with the `_SH_P1` style suffix). The run stops when it reaches one and reports `budget-exhausted`, which is not a verdict on the agent. Replays and scripted runs cost nothing and are never charged against it.
+- [ ] Backoff and retry inside a backend on 429/5xx, before the fallback chain moves on: today a single-provider run fails hard on a rate limit.
+- [ ] Provider-level health: error rate and latency per provider in `/api/metrics`, so a provider degrading shows up before runs start failing.
+
 ## Up next (v0.6+)
 - [x] Voice cloning / custom voice upload for narration (upload + playback fallback).
 - [ ] Code-signed installers (Windows/macOS) to remove SmartScreen warnings. Blocked on buying certificates; unsigned by decision for now (docs/SIGNING.md).

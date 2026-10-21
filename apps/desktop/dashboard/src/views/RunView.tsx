@@ -118,6 +118,12 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
                 v={`${shortTokens(run.inputTokens)} in · ${shortTokens(run.outputTokens)} out${cost !== null ? ` · ≈ ${usd(cost)}` : ""}`}
               />
             )}
+            {result.budget && result.budget.spentTokens > 0 && (
+              <Meta
+                k="budget"
+                v={`${shortTokens(result.budget.spentTokens)} of ${result.budget.limitTokens === null ? "∞" : shortTokens(result.budget.limitTokens)} tokens${result.budget.exhausted ? " · exhausted" : ""}`}
+              />
+            )}
             <Meta k="browser" v={result.browserVersion ?? "–"} />
           </dl>
         </div>

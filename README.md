@@ -223,6 +223,12 @@ Model gateway (`packages/core/src/llm/gateway.ts`) runs in three modes: `live`, 
 `scripted`. Models picked as `provider:model`, separately for the agent loop and Stagehand element
 resolution, optionally as a comma-separated fallback chain.
 
+A live run may spend money, so it carries a ceiling (`packages/core/src/llm/budget.ts`): tokens
+and estimated dollars per run, from `LAB_AGENT_TOKEN_BUDGET` / `LAB_AGENT_COST_BUDGET_USD`
+(per agent: `LAB_AGENT_TOKEN_BUDGET_<ID>`; `off` for no ceiling). The run stops when it reaches
+one and says so — the cause is `budget-exhausted`, not a verdict on the agent. Replays and
+scripted runs are never charged against it.
+
 Workflow regression: `baseline save`, `check`, `diff`. Dashboard: Overview, Fault replay, Record,
 Runs, Fixtures, Experiments, Compare.
 
@@ -347,6 +353,9 @@ computed on the scrubbed form.
 - Redaction isn't a general-purpose PII redactor: don't record real customer data.
 - The agents are scripts; numbers in `results/` validate the harness, not any model.
 - Live (paid) model runs are disabled on exposed servers unless `LAB_ALLOW_LIVE_RUNS=1`.
+- A live run stops when it reaches its model budget (250k tokens or ~$5 by default): the money a
+  single run may spend is a ceiling, not a suggestion. The daily quota bounds how often a run may
+  start; the budget bounds what one may cost.
 
 ---
 

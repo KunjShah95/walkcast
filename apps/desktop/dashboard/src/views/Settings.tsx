@@ -208,19 +208,28 @@ const links: { label: string; connected: boolean; available: boolean; href: stri
 
 function Providers({ caps }: { caps: Capabilities }) {
   const ids = caps.providers ?? [];
-  if (ids.length === 0) return null;
+  const budgets = (caps.agents ?? []).filter((a) => a.budget && a.kind !== "scripted");
+  if (ids.length === 0 && budgets.length === 0) return null;
   return (
     <Panel>
       <PanelHeader eyebrow="Lab runs" title="Model providers" />
-      <ul className="divide-y divide-line">
-        {ids.map((id) => (
-          <li key={id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
-            <span className="font-mono">{id}</span>
-            <span className="text-[12.5px] text-pass">Configured</span>
-          </li>
-        ))}
-      </ul>
+      {ids.length > 0 && (
+        <ul className="divide-y divide-line">
+          {ids.map((id) => (
+            <li key={id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
+              <span className="font-mono">{id}</span>
+              <span className="text-[12.5px] text-pass">Configured</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="px-4 py-2.5 text-[12px] text-ink-3">{caps.liveModels ? "Live model runs are allowed here." : "Live model runs are disabled on this server."}</p>
+      {budgets.length > 0 && (
+        <p className="px-4 pb-2.5 text-[12px] text-ink-3">
+          One live run may spend up to{" "}
+          {budgets.map((a) => `${a.budget!.tokens === null ? "any number of" : a.budget!.tokens!.toLocaleString("en-US")} tokens${a.budget!.usd === null ? "" : ` (~$${a.budget!.usd!.toFixed(2)})`}`).join(", ")}. A run that reaches the ceiling stops and says so.
+        </p>
+      )}
     </Panel>
   );
 }

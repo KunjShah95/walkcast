@@ -13,6 +13,7 @@ import { Recorder, type ClaimEvent } from "../capture/recorder.ts";
 import { BrowserTools } from "../capture/tools.ts";
 import { log } from "../ops/log.ts";
 import { ModelGateway, readCassette, type GatewayMode, type GatewayStatus } from "../llm/gateway.ts";
+import { type BudgetState, budgetFor, type RunBudget } from "../llm/budget.ts";
 import { ScriptedModel } from "../llm/scripted-model.ts";
 import { backendForSelection, defaultSelection, type ModelSelection } from "../llm/model-spec.ts";
 import { type Diagnosis, diagnose } from "./classifier.ts";
@@ -41,6 +42,12 @@ export interface RunOptions {
    * third-party service being up or answering the same way.
    */
   har?: string;
+  /**
+   * What this run may spend on model calls. Defaults to the agent's ceiling from the
+   * environment (LAB_AGENT_TOKEN_BUDGET / LAB_AGENT_COST_BUDGET_USD). Only live runs are
+   * charged against it.
+   */
+  budget?: RunBudget;
 }
 
 export interface RunResult {
@@ -65,6 +72,8 @@ export interface RunResult {
   browserVersion: string;
   runDir: string;
   cost?: { mode: string; calls: number; inputTokens: number; outputTokens: number };
+  /** What the run spent against its budget, and whether it hit a ceiling. */
+  budget?: BudgetState | null;
 }
 
 /** One Playwright browser per process for scripted agents; each run gets its own context. */
@@ -126,9 +135,22 @@ export function browserLost(events: { type: string; error?: string; stepId?: num
 export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
+  const mode = options.modelMode ?? "live";
   const runId = `${task.id === "create-lead" ? "" : `${task.id}.`}${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const runDir = join(options.outDir, runId);
-  log.info("run.start", { runId, agent: spec.id, kind: spec.kind, task: task.id, fault: options.fault, seed: options.seed, mode: options.modelMode ?? "live" });
+  // A live run may spend money, so it carries a ceiling. Replay and scripted runs cost
+  // nothing and are never charged against one, and a scripted agent never calls a model.
+  const budget = options.budget ?? (mode === "live" && spec.kind !== "scripted" ? budgetFor(spec.id) : undefined);
+  log.info("run.start", {
+    runId,
+    agent: spec.id,
+    kind: spec.kind,
+    task: task.id,
+    fault: options.fault,
+    seed: options.seed,
+    mode,
+    ...(budget ? { token_budget: budget.limits.tokens, cost_budget_usd: budget.limits.usd } : {}),
+  });
   const recorder = new Recorder(runDir, { screenshots: options.screenshots ?? false });
   assertApplicable(normalizeScenario(options.fault), task.id);
   const app = await startApp({ fault: options.fault, seed: options.seed, task: task.id, seedLeads: seedFor(task) });
@@ -146,11 +168,10 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   if (spec.kind === "scripted" || spec.kind === "plugin") {
     return scriptedSession(spec, runDir, options.video ?? false, thirdPartyPattern(app.url));
   } else {
-    const mode = options.modelMode ?? "live";
     selection = mode === "live" ? (options.models ?? defaultSelection()) : null;
     const backend = mode === "live" ? backendForSelection(selection!) : mode === "scripted" ? new ScriptedModel() : null;
     const cassette = mode === "replay" ? readCassette(options.cassette ?? "") : undefined;
-    gateway = new ModelGateway(mode, backend, recorder, cassette);
+    gateway = new ModelGateway(mode, backend, recorder, cassette, budget);
     return stagehandSession(spec, gateway);
   }
   }
@@ -195,6 +216,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   const cost = gateway
     ? { mode: gateway.status.mode, calls: gateway.status.calls, inputTokens: gateway.status.inputTokens, outputTokens: gateway.status.outputTokens }
     : { mode: options.modelMode ?? "live", calls: 0, inputTokens: 0, outputTokens: 0 };
+  const budgetState = gateway?.budgetState ?? budget?.state ?? null;
 
   const claim = recorder.claim() ?? null;
   const oracle = evaluateOracle(task, app.state, claim ?? undefined);
@@ -233,6 +255,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     browserVersion: session.browserVersion,
     runDir,
     cost,
+    budget: budgetState,
   };
   writeFileSync(join(runDir, "result.json"), JSON.stringify(scrub({ ...result, appState: app.state }), null, 2));
   writeRunReport(result, recorder.events, task);

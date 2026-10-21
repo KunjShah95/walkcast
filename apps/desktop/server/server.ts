@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
 import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
+import { budgetLimitsFor } from "../../../packages/core/src/llm/budget.ts";
 import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
 import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
@@ -735,7 +736,7 @@ export function createApp(o: ServeOptions = {}): App {
         providers: [...new Set([...configuredProviders().map((p) => p.id), ...connectedProviders(user)])],
         sttProviders: configuredSttProviders(),
         demoSite: demoSiteEnabled(exposed),
-        agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description, exposure: agentExposure(a), dailyLimit: agentDailyLimit(a) })),
+        agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description, exposure: agentExposure(a), dailyLimit: agentDailyLimit(a), budget: budgetLimitsFor(a.id) })),
         scenarios: allScenarios("pairs"),
         limits: LIMITS,
         usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
@@ -1276,7 +1277,7 @@ try {
         windowMs,
         agents: usage.map((u) => {
           const spec = known.get(u.agent);
-          return { ...u, kind: spec?.kind ?? "unknown", exposure: spec ? agentExposure(spec) : "unknown", dailyLimit: spec ? agentDailyLimit(spec) : null };
+          return { ...u, kind: spec?.kind ?? "unknown", exposure: spec ? agentExposure(spec) : "unknown", dailyLimit: spec ? agentDailyLimit(spec) : null, budget: spec ? budgetLimitsFor(spec.id) : null };
         }),
       });
     }

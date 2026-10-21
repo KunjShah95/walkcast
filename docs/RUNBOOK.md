@@ -37,6 +37,10 @@ This file is the operating manual: what to turn on, what to read, and what to do
 | `LAB_PLUGINS` | optional | same value | comma-separated plugin modules (docs/PLUGINS.md); load the same set on web and workers |
 | `LAB_LLM_RUNS_PER_DAY` | 20 | – | per-account daily ceiling for model-backed agents (live runs) |
 | `LAB_AGENT_RUNS_PER_DAY_<ID>` | optional | – | per-agent override, e.g. `LAB_AGENT_RUNS_PER_DAY_SH_P1=5` |
+| `LAB_AGENT_TOKEN_BUDGET` | 250000 | – | tokens one live run may spend; `off` for no ceiling |
+| `LAB_AGENT_COST_BUDGET_USD` | 5 | – | estimated dollars one live run may spend; `off` for no ceiling |
+| `LAB_AGENT_TOKEN_BUDGET_<ID>` | optional | – | per-agent token ceiling, e.g. `LAB_AGENT_TOKEN_BUDGET_SH_P1` |
+| `LAB_AGENT_COST_BUDGET_USD_<ID>` | optional | – | per-agent dollar ceiling |
 
 ## 3. Readiness
 
@@ -45,7 +49,7 @@ This file is the operating manual: what to turn on, what to read, and what to do
 - `GET /api/metrics` → `queue.depth`, `queue.oldestQueuedMs`, per-kind duration p50/p95, and `alarm.state` (`ok`/`alarm` against `LAB_QUEUE_ALARM_MS`).
 - Logs: `queue.stats` every 30 s (turn it into a CloudWatch metric with a filter on `oldest_queued_ms`) and `queue.alarm` at warn level while the oldest job is older than the threshold.
 - `walkcast doctor` → store reachability, applied/pending migrations, queue depth and every running lease (expired ones flagged).
-- `GET /api/agents/usage?windowMs=` → runs per agent id (total/succeeded/failed/active), with exposure and daily ceiling.
+- `GET /api/agents/usage?windowMs=` → runs per agent id (total/succeeded/failed/active), with exposure, daily ceiling and per-run model budget.
 - Smoke command: `npm run doctor` (Node, env, browsers, ffmpeg+flite, repo dirty state). Exit
   code 0 only on a runnable machine (only fails if Node < 22).
 
@@ -89,6 +93,16 @@ This file is the operating manual: what to turn on, what to read, and what to do
 ### f. Job bloat / slow claims
 - Prune manually: `delete from jobs where status in (...) and finished_at < now() - interval '30 days'`.
 - Add the partial index if it was dropped.
+
+### g. A live run stopped with "budget exhausted"
+- The harness stopped the run on purpose: it reached the per-run ceiling (250k tokens or ~$5 by
+  default). This is not an agent failure and no fixture is written for it.
+- The run's report says how much it spent; `/api/agents/usage` shows the budget next to each
+  agent.
+- If the run needed more: raise `LAB_AGENT_TOKEN_BUDGET` / `LAB_AGENT_COST_BUDGET_USD` (per agent
+  with the `_SH_P1` style suffix), or replay the recorded cassette, which costs nothing.
+- If it did not need more: the agent looped. Look at the cassette (`model-calls.jsonl`) to see
+  which calls repeated.
 
 ## 5. Rollback (every change is reversible)
 
