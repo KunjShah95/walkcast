@@ -24,7 +24,7 @@ export function ReplayFixture({ dir, agent, go, onDone }: { dir: string; agent: 
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ReplayResult | null>(null);
   useEffect(() => {
-    if (!isSnapshot) void loadCapabilities().then(setCaps);
+    if (!isSnapshot) void loadCapabilities().then(setCaps, (e: Error) => setError(`Couldn't load what this server can run: ${e.message}`));
   }, []);
   // The agent that failed may be one this computer can't run (an AI agent without Chrome or Edge).
   useEffect(() => {

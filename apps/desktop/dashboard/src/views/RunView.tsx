@@ -120,10 +120,7 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
               />
             )}
             {result.budget && result.budget.spentTokens > 0 && (
-              <Meta
-                k="budget"
-                v={`${shortTokens(result.budget.spentTokens)} of ${result.budget.limitTokens === null ? "∞" : shortTokens(result.budget.limitTokens)} tokens${result.budget.exhausted ? " · exhausted" : ""}`}
-              />
+              <Meta k="budget" v={<BudgetMeter spent={result.budget.spentTokens} limit={result.budget.limitTokens} exhausted={result.budget.exhausted} />} />
             )}
             <Meta k="browser" v={result.browserVersion ?? "–"} />
           </dl>
@@ -244,6 +241,26 @@ function failureNote(detail: RunDetail, fixture?: { dir: string; id: string }): 
     lines.push(`npm run lab -- replay ${fixture.dir} --agent ${run.agent} --trials 3 --model-mode replay`);
   }
   return lines.join("\n");
+}
+
+/**
+ * What a live run spent against its ceiling, as a bar and in words. Ochre past 80% of the
+ * ceiling, red when the run was stopped by it; no bar when there was no ceiling to measure.
+ */
+function BudgetMeter({ spent, limit, exhausted }: { spent: number; limit: number | null; exhausted: boolean }) {
+  const share = limit ? Math.min(1, spent / limit) : null;
+  return (
+    <span className="inline-flex items-center gap-2" title={exhausted ? "The run stopped at its model budget" : undefined}>
+      {share !== null && (
+        <span className="relative inline-block h-1.5 w-24 overflow-hidden rounded-full bg-panel-2" role="meter" aria-valuemin={0} aria-valuemax={limit ?? 0} aria-valuenow={spent} aria-label="Model budget used">
+          <span className={`absolute inset-y-0 left-0 rounded-full ${exhausted ? "bg-rec" : share > 0.8 ? "bg-signal" : "bg-pass"}`} style={{ width: `${Math.max(2, share * 100)}%` }} />
+        </span>
+      )}
+      <span>
+        {shortTokens(spent)} of {limit === null ? "no ceiling" : shortTokens(limit)} tokens{exhausted ? " · stopped here" : ""}
+      </span>
+    </span>
+  );
 }
 
 function Meta({ k, v }: { k: string; v: ReactNode }) {

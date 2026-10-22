@@ -57,6 +57,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** The account the run is for. Stamped into the run's folder before anything else is written. */
   owner?: string;
+  /** Told what a live run has spent after each model call (see RunBudget.onSpend). */
+  onSpend?: (state: BudgetState) => void;
 }
 
 export interface RunResult {
@@ -151,6 +153,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   // A live run may spend money, so it carries a ceiling. Replay and scripted runs cost
   // nothing and are never charged against one, and a scripted agent never calls a model.
   const budget = options.budget ?? (mode === "live" && spec.kind !== "scripted" ? budgetFor(spec.id) : undefined);
+  if (budget && options.onSpend) budget.onSpend = options.onSpend;
   log.info("run.start", {
     runId,
     agent: spec.id,

@@ -156,7 +156,17 @@ function FailureCase({ run, go }: { run: RunSummary; go: (r: Route) => void }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    loadRun(run.dir).then(setDetail, (e: Error) => setError(e.message));
+    // A new failure starts clean, and an answer for the previous one is ignored when it lands late.
+    let live = true;
+    setDetail(null);
+    setError(null);
+    loadRun(run.dir).then(
+      (d) => live && setDetail(d),
+      (e: Error) => live && setError(e.message),
+    );
+    return () => {
+      live = false;
+    };
   }, [run.dir]);
 
   const findings = detail?.result.diagnosis.findings.filter((f) => f.kind !== "incident") ?? [];

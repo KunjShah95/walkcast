@@ -64,6 +64,8 @@ export class RunBudget {
   private outputTokens = 0;
   private spentUsd = 0;
   private reason: string | null = null;
+  /** Told after every counted call, so a live run can show what it has spent so far. */
+  onSpend: ((state: BudgetState) => void) | null = null;
 
   constructor(limits: BudgetLimits) {
     this.limits = limits;
@@ -112,6 +114,11 @@ export class RunBudget {
     this.outputTokens += output;
     const cost = estimateCost(model, input, output);
     if (cost !== null) this.spentUsd += cost;
+    try {
+      this.onSpend?.(this.state);
+    } catch {
+      /* a progress display must never stop a run */
+    }
     if (this.limits.tokens !== null && this.spentTokens > this.limits.tokens) {
       this.exhaustTokens(true);
       throw new BudgetExceededError(this.reason!);

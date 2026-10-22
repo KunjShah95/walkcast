@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import type { BudgetState } from "../llm/budget.ts";
 import { scrub, scrubText, unregisterSecret } from "../capture/secrets.ts";
 import { type TaskId, isTaskId, normalizeScenario } from "../app/faults.ts";
 import { log } from "../ops/log.ts";
@@ -461,6 +462,8 @@ export class Worker {
         ...(input.modelMode ? { modelMode: input.modelMode } : {}),
         signal,
         ...owner,
+        // A live run's spend, as the job's progress line, so the app shows it while it runs.
+        onSpend: (b) => onProgress(spendLine(b)),
       });
       // A failure the agent caused becomes a regression fixture, as `lab run` does. Runs started
       // from the app never saved one, so the Fixtures page stayed empty in the desktop app. A
@@ -481,6 +484,14 @@ export class Worker {
 }
 
 const CANCELLED = "cancelled by its owner";
+
+/** "Model spend: 142k of 250k tokens · ≈ $0.41 of $5.00" */
+export function spendLine(b: BudgetState): string {
+  const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const tokens = `${k(b.spentTokens)}${b.limitTokens === null ? "" : ` of ${k(b.limitTokens)}`} tokens`;
+  const usd = b.spentUsd > 0 ? ` · ≈ $${b.spentUsd.toFixed(2)}${b.limitUsd === null ? "" : ` of $${b.limitUsd.toFixed(2)}`}` : "";
+  return `Model spend: ${tokens}${usd}`;
+}
 
 /**
  * Settle with `work`, or reject the moment `signal` fires. A lab run closes its own browser when

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { LengthPicker, VoicePicker, lengthLabel } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
-import { PageHead, Panel, PanelHeader } from "../components/ui.tsx";
+import { PageHead, Panel, PanelHeader, Stamp } from "../components/ui.tsx";
 import { Updates } from "../components/Updates.tsx";
 import { type Capabilities, type Me, type Voice, isSnapshot, loadCapabilities } from "../lib/api.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
@@ -206,19 +206,57 @@ const links: { label: string; connected: boolean; available: boolean; href: stri
   );
 }
 
+/** How a provider has answered live calls in the last day, as /api/metrics reports it (llm/health.ts). */
+interface ProviderHealth {
+  provider: string;
+  calls: number;
+  failures: number;
+  errorRate: number;
+  p95Ms: number | null;
+  state: "ok" | "degraded" | "down" | "idle";
+  lastError: { at: string; status: number | null; message: string } | null;
+}
+
+function useProviderHealth(): ProviderHealth[] {
+  const [health, setHealth] = useState<ProviderHealth[]>([]);
+  useEffect(() => {
+    if (isSnapshot) return;
+    let live = true;
+    // Health is a nicety: a server that cannot say leaves the list as it was.
+    fetch(`/api/metrics?windowMs=${86_400_000}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m: { providers?: ProviderHealth[] } | null) => live && m?.providers && setHealth(m.providers))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return health;
+}
+
+function HealthStamp({ h }: { h: ProviderHealth | undefined }) {
+  if (!h) return <span className="text-[12.5px] text-pass">Configured</span>;
+  const pct = `${Math.round(h.errorRate * 100)}% of ${h.calls} calls failing`;
+  if (h.state === "down") return <span title={h.lastError?.message}><Stamp tone="fail">Down · {pct}</Stamp></span>;
+  if (h.state === "degraded") return <span title={h.lastError?.message}><Stamp tone="warn">Degraded · {pct}</Stamp></span>;
+  return <span className="text-[12.5px] text-pass">Healthy · {h.calls} calls{h.p95Ms !== null ? ` · p95 ${(h.p95Ms / 1000).toFixed(1)} s` : ""}</span>;
+}
+
 function Providers({ caps }: { caps: Capabilities }) {
-  const ids = caps.providers ?? [];
+  const health = useProviderHealth();
+  // Configured providers, plus any that answered (or failed) a live call in the last day.
+  const ids = [...new Set([...(caps.providers ?? []), ...health.map((h) => h.provider)])];
   const budgets = (caps.agents ?? []).filter((a) => a.budget && a.kind !== "scripted");
   if (ids.length === 0 && budgets.length === 0) return null;
   return (
     <Panel>
-      <PanelHeader eyebrow="Lab runs" title="Model providers" />
+      <PanelHeader eyebrow="Lab runs" title="Model providers" aside={health.length > 0 ? <span className="text-[12px] text-ink-3">Last 24 hours</span> : undefined} />
       {ids.length > 0 && (
         <ul className="divide-y divide-line">
           {ids.map((id) => (
             <li key={id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
               <span className="font-mono">{id}</span>
-              <span className="text-[12.5px] text-pass">Configured</span>
+              <HealthStamp h={health.find((h) => h.provider === id)} />
             </li>
           ))}
         </ul>

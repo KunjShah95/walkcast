@@ -48,10 +48,24 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [choosing, setChoosing] = useState(false);
   const busy = job !== null;
 
+  // Start waits until the server has said what it can do and who is signed in: on a failed load
+  // the defaults would have offered a recording the server then refuses.
+  const [settled, setSettled] = useState(isSnapshot);
   useEffect(() => {
     if (isSnapshot) return;
-    loadCapabilities().then(setCaps);
-    loadMe().then((me) => setNeedsAccount(Boolean(me && me.authRequired && !me.user)));
+    let live = true;
+    void Promise.allSettled([
+      loadCapabilities().then((c) => live && setCaps(c)),
+      loadMe().then((me) => live && setNeedsAccount(Boolean(me && me.authRequired && !me.user))),
+    ]).then((results) => {
+      if (!live) return;
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failed) setError(`Couldn't reach the app's server (${failed.reason instanceof Error ? failed.reason.message : String(failed.reason)}). Reload to try again.`);
+      else setSettled(true);
+    });
+    return () => {
+      live = false;
+    };
   }, []);
   useEffect(() => {
     if (initialUrl) setUrl(initialUrl);
@@ -60,7 +74,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const target = demo ? "sample:minicrm" : normalizeUrl(url);
   const limitHit = caps?.limits && caps.usage ? caps.usage.recordingsToday >= caps.limits.recordingsPerDay : false;
   const blocked = isSnapshot ? "This is a snapshot: it plays recordings but can't make new ones." : (caps?.jobsUnavailable ?? (limitHit ? "You've reached today's recording limit. It resets 24 hours after your oldest recording today." : null));
-  const ready = Boolean(target) && authorized && !blocked && !busy;
+  const ready = Boolean(target) && authorized && !blocked && !busy && settled;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,8 +242,14 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     <button
                       type="button"
                       disabled={busy || !target || journeySteps.length === 0}
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(journeyAsPlaywright(journey, target ?? ""));
+                      onClick={async () => {
+                        // "Copied" only once the clipboard took it: a refused write must not say so.
+                        try {
+                          await navigator.clipboard.writeText(journeyAsPlaywright(journey, target ?? ""));
+                        } catch {
+                          setError("The browser would not let the script be copied. Select it from the journey box instead.");
+                          return;
+                        }
                         setCopiedScript(true);
                         setTimeout(() => setCopiedScript(false), 2000);
                       }}

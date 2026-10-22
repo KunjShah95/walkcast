@@ -119,7 +119,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
       <div>
         <div className="eyebrow">{new Date(s.meta?.startedAt ?? Date.now()).toLocaleString()} · {s.meta?.seeds ?? 0} seeds/fault · {s.meta?.trials ?? 0} trials/replay</div>
         <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight">{id}</h1>
-        <p className="mt-2 max-w-[80ch] rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-[13px]">{s.meta.caveat}</p>
+        <p className="mt-2 max-w-[80ch] rounded-lg border border-warn/40 bg-warn-soft px-3 py-2 text-[13px]">{s.meta?.caveat ?? "An older summary: it was written before experiments recorded their caveats."}</p>
       </div>
 
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -132,12 +132,12 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
           good={fs ? fs.falseSuccesses === 0 : undefined}
         />
         <Metric k="Reproduced" v={`${reproducedAll}/${reproduction.length}`} note={`fixtures, every one of ${s.meta?.trials ?? 0} trials${ci(reproduced.k, reproduced.n)}`} good={reproducedAll === reproduction.length} />
-        <Metric k="Cost" v={`${s.cost.modelCalls}`} note={`model calls · median run ${ms(s.cost.medianRunMs)}`} />
+        <Metric k="Cost" v={s.cost ? `${s.cost.modelCalls}` : "–"} note={s.cost ? `model calls · median run ${ms(s.cost.medianRunMs)}` : "not recorded in this summary"} />
       </dl>
 
       <div className="grid items-start gap-4 lg:grid-cols-5">
         <Panel className="min-w-0 lg:col-span-2">
-          <PanelHeader eyebrow={`Baseline ${s.meta.baseline}`} title="Detection by fault" />
+          <PanelHeader eyebrow={`Baseline ${s.meta?.baseline ?? "?"}`} title="Detection by fault" />
           <div className="overflow-x-auto">
             <table className="tabular w-full text-left text-[13px]">
               <thead>
@@ -215,7 +215,7 @@ function Experiment({ id, s }: { id: string; s: Summary }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {s.rates.passByAgent.map((r) => (
+              {(s.rates?.passByAgent ?? []).map((r) => (
                 <tr key={r.agent}>
                   <td className="px-4 py-2 font-mono">{r.agent}</td>
                   <td className="px-2 py-2 font-mono">
