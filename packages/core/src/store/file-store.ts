@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { scheduleDue } from "../cron.ts";
 import { jobCompletedPayload } from "./payload.ts";
 import { DuplicateError, type Annotation, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
 
@@ -255,6 +256,9 @@ export class FileStore implements Store {
       for (const job of candidates) {
         if (job.status === "running" && (job.leaseUntil ?? 0) < now && job.attempts >= job.maxAttempts) {
           Object.assign(job, { status: "failed", error: "The worker stopped responding too many times.", secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
+          // A job failed by the sweep is as finished as one failed by its worker: its owner's
+          // webhooks hear about it the same way.
+          this.outbox(job);
           continue;
         }
         Object.assign(job, { status: "running", lockedBy: workerId, leaseUntil: now + leaseMs, attempts: job.attempts + 1, startedAt: new Date().toISOString(), finishedAt: null, error: null });
@@ -286,13 +290,18 @@ export class FileStore implements Store {
       else Object.assign(job, { status: "failed", error: outcome.error, secret: null, finishedAt: new Date().toISOString(), lockedBy: null, leaseUntil: null });
       // Outbox rows in the same serialized mutation as the transition (PgStore: same transaction).
       if (job.status !== "succeeded" && job.status !== "failed") return;
-      const payload = jobCompletedPayload(strip(job));
-      const now = new Date().toISOString();
-      for (const w of this.data.webhooks) {
-        if (w.owner !== job.owner) continue;
-        this.data.deliveries.push({ id: randomUUID(), webhookId: w.id, owner: w.owner, url: w.url, event: "job.completed", payload, status: "pending", attempts: 0, nextAt: now, lastError: null, createdAt: now, lockedBy: null, leaseUntil: null, finishedAt: null });
-      }
+      this.outbox(job);
     });
+  }
+
+  /** The owner's `job.completed` deliveries for a job that just reached a terminal state. Call inside write(). */
+  private outbox(job: Data["jobs"][number]): void {
+    const payload = jobCompletedPayload(strip(job));
+    const now = new Date().toISOString();
+    for (const w of this.data.webhooks) {
+      if (w.owner !== job.owner) continue;
+      this.data.deliveries.push({ id: randomUUID(), webhookId: w.id, owner: w.owner, url: w.url, event: "job.completed", payload, status: "pending", attempts: 0, nextAt: now, lastError: null, createdAt: now, lockedBy: null, leaseUntil: null, finishedAt: null });
+    }
   }
   cancel(jobId: string) {
     return this.write(() => {
@@ -434,7 +443,7 @@ export class FileStore implements Store {
     return this.write(() => {
       const now = Date.now();
       const due = this.data.schedules
-        .filter((x) => x.authorized && (!x.lastRunAt || now - Date.parse(x.lastRunAt) >= x.intervalMs))
+        .filter((x) => x.authorized && scheduleDue(x, new Date(now)))
         .sort((a, b) => (a.lastRunAt ?? "").localeCompare(b.lastRunAt ?? ""))
         .slice(0, limit);
       const stamp = new Date(now).toISOString();

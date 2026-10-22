@@ -1121,7 +1121,12 @@ try {
       // The embed is the same walkthrough without the page around it: a player to drop into
       // somebody else's site, with nothing of Walkcast's shell in the way.
       if (url.searchParams.get("embed") === "1") {
-        return send(200, "text/html; charset=utf-8", embedPage({ ...page, openUrl: `${siteUrl}${base}` }));
+        // The one page meant to live in another site's iframe, so it drops X-Frame-Options and
+        // names who may frame it instead: anyone, or the sites listed in LAB_EMBED_ANCESTORS.
+        const { "X-Frame-Options": _xfo, ...framable } = securityHeaders;
+        const ancestors = (process.env.LAB_EMBED_ANCESTORS ?? "").trim() || "*";
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", ...framable, "Content-Security-Policy": `frame-ancestors ${ancestors}` });
+        return void res.end(embedPage({ ...page, openUrl: `${siteUrl}${base}` }));
       }
       return send(200, "text/html; charset=utf-8", sharePage(page));
     }

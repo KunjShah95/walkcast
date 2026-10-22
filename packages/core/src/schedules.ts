@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { cronMinGapMs, looksLikeCron, parseCron } from "./cron.ts";
 import { log } from "./ops/log.ts";
 import type { Schedule, Store } from "./store/index.ts";
 
@@ -45,21 +46,12 @@ export function parseInterval(input: unknown): number {
       const mult = unit === "ms" ? 1 : unit.startsWith("s") ? 1000 : unit.startsWith("m") ? 60000 : unit.startsWith("h") ? 3600000 : 86400000;
       return Math.max(1000, Math.trunc(n * mult));
     }
-    // cron-ish: */N units
-    const parts = s.split(/\s+/);
-    if (parts.length >= 5) {
-      const minute = parts[0]!;
-      const mm = /^\*\/(\d+)$/.exec(minute);
-      if (mm) return Math.max(60000, Number(mm[1]) * 60000);
-      if (minute === "*") return 60000;
-      // hourly/day shortcuts via standard cron not fully parsed; default 1h
-      return 3600000;
-    }
-    const lower = s.toLowerCase();
-    if (lower === "@hourly") return 3600000;
-    if (lower === "@daily") return 86400000;
-    if (lower === "@weekly") return 7 * 86400000;
-    if (lower === "@minutely") return 60000;
+    if (s.toLowerCase() === "@minutely") return 60000;
+    // Cron fires on the calendar (cron.ts, scheduleDue); its interval is the shortest gap between
+    // two firings, which is what the "no faster than every 15 minutes" guard measures. A cron the
+    // parser cannot read throws, and the caller answers 400 instead of guessing hourly.
+    if (looksLikeCron(s)) return cronMinGapMs(parseCron(s));
+    throw new Error(`Can't read the interval "${s}". Use a duration like 30m, 6h or 1d, or five-field cron like 0 9 * * 1.`);
   }
   return 3600000;
 }

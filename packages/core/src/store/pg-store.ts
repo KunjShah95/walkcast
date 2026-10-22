@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { scheduleDue } from "../cron.ts";
 import { migrationFiles } from "./migrations.ts";
 import { jobCompletedPayload } from "./payload.ts";
 import { DuplicateError, type Annotation, type Job, type JobKind, type NewJob, type RecordingRow, type Schedule, type Store, type User, type Webhook, type WebhookDelivery } from "./types.ts";
@@ -151,10 +152,21 @@ export class PgStore implements Store {
   }
 
   async claim(workerId: string, leaseMs: number, kind?: JobKind) {
-    // Retirement sweep on expired, exhausted jobs (lease machinery, same statement family).
-    await this.sql`
-      update jobs set status = 'failed', error = 'The worker stopped responding too many times.', secret = null, finished_at = now(), locked_by = null, lease_until = null
-      where status = 'running' and lease_until < now() and attempts >= max_attempts`;
+    // Retirement sweep on expired, exhausted jobs. A job failed here is as finished as one failed
+    // by its worker, so its job.completed deliveries are written in the same transaction (finish()).
+    await this.sql.begin(async (tx) => {
+      const retired = await tx`
+        update jobs set status = 'failed', error = 'The worker stopped responding too many times.', secret = null, finished_at = now(), locked_by = null, lease_until = null
+        where status = 'running' and lease_until < now() and attempts >= max_attempts
+        returning *`;
+      for (const r of retired) {
+        const payload = jobCompletedPayload(toJob(r));
+        await tx`
+          insert into webhook_deliveries (webhook_id, owner, url, event, payload)
+          select id, owner, url, 'job.completed', ${tx.json(payload as postgres.JSONValue)}
+          from webhooks where owner is not distinct from ${(r.owner as string | null) ?? null}`;
+      }
+    });
     const [r] = await this.sql`
       update jobs set status = 'running', locked_by = ${workerId}, attempts = attempts + 1, started_at = now(),
         finished_at = null, error = null,
@@ -352,19 +364,17 @@ export class PgStore implements Store {
     return rows.length > 0;
   }
   async claimDueSchedules(limit: number) {
-    // One statement: the row lock taken by the inner select makes a concurrent claimer skip the
-    // row, so every due schedule is stamped (and therefore enqueued) by exactly one instance.
-    const rows = await this.sql`
-      update schedules set last_run_at = now()
-      where id in (
-        select id from schedules
-        where authorized and (last_run_at is null or last_run_at <= now() - (interval_ms * interval '1 millisecond'))
-        order by last_run_at nulls first
-        for update skip locked
-        limit ${limit}
-      )
-      returning *`;
-    return rows.map(toSchedule);
+    // Whether a cron schedule is due is a calendar question (cron.ts), not a SQL one, so the due
+    // rows are picked in code. The rows stay locked for the transaction and a concurrent claimer
+    // skips them, so every due schedule is still stamped (and enqueued) by exactly one instance.
+    return this.sql.begin(async (tx) => {
+      const rows = await tx`select * from schedules where authorized order by last_run_at nulls first for update skip locked`;
+      const now = new Date();
+      const due = rows.map(toSchedule).filter((s) => scheduleDue(s, now)).slice(0, limit);
+      if (due.length === 0) return [];
+      const stamped = await tx`update schedules set last_run_at = now() where id in ${tx(due.map((s) => s.id))} returning *`;
+      return stamped.map(toSchedule);
+    });
   }
 
   // ---------------------------------------------------------------- webhooks + outbox

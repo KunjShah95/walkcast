@@ -153,3 +153,21 @@ test("a share link stops working on the day it names", async () => {
     await srv.close?.();
   }
 });
+
+test("the embed can sit in another site's iframe; the share page and the app cannot", async () => {
+  const root = mkdtempSync(join(tmpdir(), "walkcast-share-"));
+  roots.push(root);
+  const id = aRecording(root);
+  const srv = await serveDashboard(7300 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  try {
+    const made = await fetch(`${srv.url}/api/recordings/${id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: 7 }) });
+    const { url } = (await made.json()) as { url: string };
+    const embed = await fetch(`${url}?embed=1`);
+    assert.equal(embed.status, 200);
+    assert.equal(embed.headers.get("x-frame-options"), null, "X-Frame-Options would blank the iframe on every other site");
+    assert.match(embed.headers.get("content-security-policy") ?? "", /frame-ancestors \*/);
+    assert.equal((await fetch(url)).headers.get("x-frame-options"), "SAMEORIGIN", "the full share page stays unframable");
+  } finally {
+    await srv.close?.();
+  }
+});

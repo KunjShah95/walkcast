@@ -106,14 +106,29 @@ export async function processOutbox(store: Store, workerId: string, opts: Dispat
   for (const d of batch) {
     try {
       await deliver(d, opts);
-      await store.completeDelivery(d.id, workerId, { ok: true });
-      log.info("webhook.delivered", { delivery: d.id, type: d.event, attempts: d.attempts });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const retryAt = d.attempts >= MAX_ATTEMPTS ? null : new Date(Date.now() + backoffMs(d.attempts));
       await store.completeDelivery(d.id, workerId, { ok: false, error, retryAt }).catch(() => undefined);
       log.warn("webhook.failed", { delivery: d.id, type: d.event, attempts: d.attempts, error, final: retryAt === null });
+      continue;
     }
+    // The receiver has it. A failure to write that down is ours, not the send's: try again, and
+    // never mark a delivered event failed, which would POST it a second time. If the write still
+    // fails, the lease lapses and the event may be re-sent once; receivers dedupe on
+    // X-Walkcast-Delivery, which stays the same.
+    let recorded = false;
+    for (let attempt = 0; attempt < 3 && !recorded; attempt++) {
+      recorded = await store.completeDelivery(d.id, workerId, { ok: true }).then(
+        () => true,
+        async (e) => {
+          log.warn("webhook.bookkeeping_failed", { delivery: d.id, attempt: attempt + 1, error: String(e) });
+          await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
+          return false;
+        },
+      );
+    }
+    log.info("webhook.delivered", { delivery: d.id, type: d.event, attempts: d.attempts, recorded });
   }
   return batch.length;
 }
