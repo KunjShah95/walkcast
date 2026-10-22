@@ -143,7 +143,7 @@ export interface JobStatus {
 /**
  * Submit a job and wait for it: the server answers at once (202) and the work happens on a
  * queue worker, so a recording that takes minutes never depends on one long HTTP request.
- * The idempotency key makes a double-click or a retried POST start one job, not two.
+ * Two clicks on the same form share one job; the idempotency key covers a retried POST.
  */
 async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<string> {
   const result = await submitForResult(path, input, onProgress);
@@ -151,43 +151,88 @@ async function submitAndWait(path: string, input: unknown, onProgress?: (s: JobS
   return result.dir;
 }
 
+type SubmitFlight = {
+  promise: Promise<NonNullable<JobStatus["result"]>>;
+  listeners: Set<(s: JobStatus) => void>;
+};
+
+/** The submissions currently running, keyed by what was asked. */
+const inFlight = new Map<string, SubmitFlight>();
+
+/** "The same submission", whatever order the object's keys were written in. */
+function submissionKey(path: string, input: unknown): string {
+  const stable = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+      return Object.fromEntries(entries.map(([k, v]) => [k, stable(v)]));
+    }
+    return value;
+  };
+  return `${path}\n${JSON.stringify(stable(input))}`;
+}
+
 /** submitAndWait, handing back the job's whole result rather than only its directory. */
 async function submitForResult(path: string, input: unknown, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
-  const key = crypto.randomUUID();
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
-  // A proxy's HTML error page is not JSON: fall back to the status rather than "Unexpected token <".
-  const body = (await res.json().catch(() => ({}))) as { job?: JobStatus; error?: string };
-  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
-  if (!res.ok || !body.job) throw new Error(body.error ?? `Request failed (${res.status}).`);
-  let job = body.job;
-  onProgress?.(job);
-  for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
-    await new Promise((r) => setTimeout(r, delay));
-    // The job runs on the server whatever happens to this request: a dropped connection (the app
-    // server restarting, Wi-Fi blinking) is a reason to ask again, not to report the job failed.
-    let poll: Response;
-    try {
-      poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
-    } catch {
-      continue;
-    }
-    if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
-    // 404/410 are permanent, not transient: the job belongs to a different account (the server
-    // hides it as 404) or the queue has forgotten it. Only the 5xx/network cases are worth
-    // retrying — treating 404 as transient spun the recorder forever with no error. Not a
-    // sign-in problem, so not SignInRequired (that opens the create-account prompt).
-    if (poll.status === 404 || poll.status === 410) {
-      throw new Error("This job is no longer available. It belongs to a different account, or the server restarted.");
-    }
-    if (!poll.ok) continue; // transient (deploy, network); keep waiting
-    const next = (await poll.json().catch(() => null)) as { job?: JobStatus } | null;
-    if (!next?.job) continue;
-    job = next.job;
-    onProgress?.(job);
+  // A double-click is two submits of the same thing. Sharing the in-flight call means the second
+  // one joins the first job instead of starting a second one; the idempotency key below still
+  // covers a retried POST within that one call. The entry is removed when the job settles, so a
+  // deliberate re-run later starts fresh.
+  const fingerprint = submissionKey(path, input);
+  const running = inFlight.get(fingerprint);
+  if (running) {
+    if (onProgress) running.listeners.add(onProgress);
+    return running.promise;
   }
-  if (job.status === "cancelled") throw new JobCancelled("Cancelled.");
-  if (job.status !== "succeeded" || !job.result) throw new Error(job.error ?? `The job ${job.status}.`);
-  return job.result;
+  const listeners = new Set<(s: JobStatus) => void>();
+  if (onProgress) listeners.add(onProgress);
+  const emit = (s: JobStatus) => {
+    for (const listener of listeners) listener(s);
+  };
+  const key = crypto.randomUUID();
+  const promise = (async () => {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
+    // A proxy's HTML error page is not JSON: fall back to the status rather than "Unexpected token <".
+    const body = (await res.json().catch(() => ({}))) as { job?: JobStatus; error?: string };
+    if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+    if (!res.ok || !body.job) throw new Error(body.error ?? `Request failed (${res.status}).`);
+    let job = body.job;
+    emit(job);
+    for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
+      await new Promise((r) => setTimeout(r, delay));
+      // The job runs on the server whatever happens to this request: a dropped connection (the app
+      // server restarting, Wi-Fi blinking) is a reason to ask again, not to report the job failed.
+      let poll: Response;
+      try {
+        poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
+      } catch {
+        continue;
+      }
+      if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
+      // 404/410 are permanent, not transient: the job belongs to a different account (the server
+      // hides it as 404) or the queue has forgotten it. Only the 5xx/network cases are worth
+      // retrying — treating 404 as transient spun the recorder forever with no error. Not a
+      // sign-in problem, so not SignInRequired (that opens the create-account prompt).
+      if (poll.status === 404 || poll.status === 410) {
+        throw new Error("This job is no longer available. It belongs to a different account, or the server restarted.");
+      }
+      if (!poll.ok) continue; // transient (deploy, network); keep waiting
+      const next = (await poll.json().catch(() => null)) as { job?: JobStatus } | null;
+      if (!next?.job) continue;
+      job = next.job;
+      emit(job);
+    }
+    if (job.status === "cancelled") throw new JobCancelled("Cancelled.");
+    if (job.status !== "succeeded" || !job.result) throw new Error(job.error ?? `The job ${job.status}.`);
+    return job.result;
+  })();
+  const flight: SubmitFlight = { promise, listeners };
+  inFlight.set(fingerprint, flight);
+  try {
+    return await promise;
+  } finally {
+    if (inFlight.get(fingerprint) === flight) inFlight.delete(fingerprint);
+  }
 }
 
 /** One fixture replayed k times with one agent: the pass^k check. */
