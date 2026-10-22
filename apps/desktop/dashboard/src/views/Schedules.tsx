@@ -112,7 +112,7 @@ export function Schedules() {
       <PageHead
         title="Scheduled"
         dim="recordings"
-        description="Walkcast records up to 8 pages on this computer's clock. Each visit lands in the Library, where What changed compares it with the last one."
+        description="Walkcast records up to 8 pages on this computer's clock. Each visit lands in the Library, where What changed lines it up against an earlier visit."
         actions={<Stamp tone="muted">{items.length} of 20</Stamp>}
       />
 

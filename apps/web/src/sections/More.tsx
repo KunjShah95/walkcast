@@ -225,7 +225,7 @@ export function Bento() {
           <Card className="b-auto">
             <span className="soft-ic"><CalendarClock size={18} /></span>
             <h3>Put the walk on a schedule.</h3>
-            <p>Every morning, every Monday at nine, or any five-field cron. Each visit lands in the Library, where the what-changed panel compares it with the last one.</p>
+            <p>Every morning, every Monday at nine, or any five-field cron. Each visit lands in the Library, where the what-changed panel can line it up against an earlier visit.</p>
             <div className="auto-days" aria-hidden="true">
               {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
                 <span key={i} className={i === 4 ? "on" : ""}>{d}</span>
@@ -236,7 +236,7 @@ export function Bento() {
           <Card className="b-hook" delay={0.05}>
             <span className="soft-ic"><Webhook size={18} /></span>
             <h3>Send it into your stack.</h3>
-            <p>A <code>job.completed</code> webhook posts to Slack, Zapier or your own server when the video is ready. Deliveries retry, and the app logs every attempt.</p>
+            <p>A <code>job.completed</code> webhook posts to Slack, Zapier or your own server when a walkthrough or Lab run finishes. Deliveries retry, and the app logs every attempt.</p>
             <div className="hook-line" aria-hidden="true">
               <span>POST /hooks/walkcast</span>
               <b>200 OK</b>
