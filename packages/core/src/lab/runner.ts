@@ -315,7 +315,11 @@ function finishHar(path: string): string | null {
     }
     writeFileSync(path, JSON.stringify(scrub(har)));
     return "network.har";
-  } catch {
+  } catch (e) {
+    // A HAR that could not be scrubbed still holds cookies, tokens and typed values. The run
+    // says it has no HAR, so nobody would look for it: it must not stay on disk raw.
+    rmSync(path, { force: true });
+    log.warn("run.har_dropped", { path, error: String(e) });
     return null;
   }
 }

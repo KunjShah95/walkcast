@@ -185,8 +185,15 @@ export async function replayFixture(
   if (manifest.environment.playwrightVersion !== playwrightVersion()) drift.push(`playwright ${manifest.environment.playwrightVersion} → ${playwrightVersion()}`);
   const cassette = manifest.original.model ? join(fixture.dir, manifest.original.model.cassette) : undefined;
   const sameAgent = spec.id === manifest.original.agent.id;
+  // A fixture made by this agent replays its recorded calls. If those calls are gone, going live
+  // would spend money and report live behaviour as the recording's: refuse, unless the caller
+  // asked for live. Another agent has no recorded calls of its own and goes live, said in drift.
+  if (spec.kind !== "scripted" && options.modelMode === undefined && sameAgent && cassette && !existsSync(cassette)) {
+    throw new Error(`The fixture's recorded model calls (${manifest.original.model!.cassette}) are missing, so a replay would call the model live. Restore the file, or ask for --model-mode live.`);
+  }
   const modelMode: GatewayMode | undefined =
     spec.kind === "scripted" ? undefined : (options.modelMode ?? (sameAgent && cassette && existsSync(cassette) ? "replay" : "live"));
+  if (modelMode === "live" && options.modelMode === undefined) drift.push(`agent ${spec.id} has no recorded calls for this fixture, so its model is called live`);
   if (modelMode === "replay" && !sameAgent) drift.push(`replaying ${manifest.original.agent.id}'s model calls with agent ${spec.id}`);
   const har = manifest.environment.network ? join(fixture.dir, manifest.environment.network) : undefined;
   if (har && !existsSync(har)) drift.push(`recorded network traffic ${manifest.environment.network} is missing; third-party requests go to the live network`);

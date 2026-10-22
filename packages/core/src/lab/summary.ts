@@ -2,8 +2,9 @@ import { formatRate } from "./stats.ts";
 
 export interface ExperimentSummary {
   meta: Record<string, unknown> & { startedAt: string; caveat: string; trials: number; seeds: number; baseline: string; candidates: string[] };
-  detection: { fault: string; runs: number; failing: number; correctlyAttributed: number; spuriousCauses: string[]; unexplained: number }[];
-  falsePositives: { baselineCleanRunsFailed: number; baselineCleanRuns: number; candidateCleanRunsFailed: number; candidateCleanRuns: number };
+  /** `runs` excludes runs the harness stopped; those are `harnessErrors` (absent in older summaries). */
+  detection: { fault: string; runs: number; harnessErrors?: number; failing: number; correctlyAttributed: number; spuriousCauses: string[]; unexplained: number }[];
+  falsePositives: { baselineCleanRunsFailed: number; baselineCleanRuns: number; candidateCleanRunsFailed: number; candidateCleanRuns: number; harnessErrors?: number };
   reproduction: { fixture: string; reproduced: number; trials: number; drift: string[] }[];
   regression: { fixture: string; agent: string; passes: number; trials: number; passAll: boolean; causes: string[] }[];
   falseSuccess: { runs: number; successClaims: number; falseSuccesses: number };

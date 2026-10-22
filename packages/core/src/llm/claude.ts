@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
 import { lookup } from "./credentials.ts";
+import { llmMaxRetries } from "./retry.ts";
 
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -48,7 +49,8 @@ export class ClaudeBackend implements ModelBackend {
     const authToken = apiKey ? undefined : lookup("ANTHROPIC_AUTH_TOKEN");
     const signature = `${apiKey ?? ""}|${authToken ?? ""}`;
     if (!this.client || this.clientKey !== signature) {
-      this.client = new Anthropic({ apiKey: apiKey ?? null, authToken: authToken ?? null });
+      // The SDK retries 429/5xx itself, honouring Retry-After; give it the lab-wide count (retry.ts).
+      this.client = new Anthropic({ apiKey: apiKey ?? null, authToken: authToken ?? null, maxRetries: llmMaxRetries() });
       this.clientKey = signature;
     }
     return this.client;

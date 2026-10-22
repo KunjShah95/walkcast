@@ -1,6 +1,10 @@
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
 import { lookup } from "./credentials.ts";
 import { RateLimiter } from "./rate-limit.ts";
+import { HttpStatusError, withRetry } from "./retry.ts";
+
+/** The longest one call may take, request and streamed answer together. */
+const CALL_TIMEOUT_MS = 180_000;
 
 // ChatGPT plan usage requires stream: true and store: false; requests cannot carry system-role
 // messages, temperature, max_output_tokens, etc. System prompt goes through `instructions`.
@@ -106,18 +110,22 @@ export class ChatGPTResponsesBackend implements ModelBackend {
 
   private async raw(body: Record<string, unknown>, estTokens: number): Promise<any> {
     await this.limiter.acquire(estTokens);
-    const token = accessToken();
-    const resp = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    // A rate limit or a server error before the stream starts is retried (retry.ts); once the
+    // stream is open, a failure is the call's and is not replayed.
+    const resp = await withRetry(async () => {
+      const r = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        // Covers the request and the stream read below: a stalled stream must not hold the run.
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      });
+      if (!r.ok) {
+        const errText = await r.text().catch(() => "");
+        throw new HttpStatusError(`chatgpt Responses API ${r.status}: ${errText.slice(0, 300)}`, r.status, r.headers.get("retry-after"));
+      }
+      return r;
     });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      const error = new Error(`chatgpt Responses API ${resp.status}: ${errText.slice(0, 300)}`);
-      (error as any).status = resp.status;
-      throw error;
-    }
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";

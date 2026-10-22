@@ -63,6 +63,11 @@ export interface ExperimentOptions {
   owner?: string;
 }
 
+/** A run the harness ended, not the agent: a crash, a lost browser, or a spent budget. */
+function harnessStopped(r: RunResult): boolean {
+  return Boolean(r.agentError) || Boolean(r.budget?.exhausted);
+}
+
 export async function runExperiment(options: ExperimentOptions): Promise<string> {
   const { seeds, trials, concurrency, baseline, candidates, outDir } = options;
   const stop = options.signal ? { signal: options.signal } : {};
@@ -82,7 +87,10 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   const baselineRuns = await pool(jobs, concurrency, (j) => runOnce({ fault: j.fault, seed: j.seed, agent: baseline, task, outDir: runsDir, ...mode }));
 
   const detection = faults.map((fault) => {
-    const runs = baselineRuns.filter((r) => r.fault === fault);
+    const all = baselineRuns.filter((r) => r.fault === fault);
+    // A run the harness stopped (the agent crashed, the browser died, the budget ran out) says
+    // nothing about whether the fault was detected: it is counted apart, not as a detection.
+    const runs = all.filter((r) => !harnessStopped(r));
     const failing = runs.filter((r) => r.diagnosis.verdict === "fail");
     const expected = expectedCauses(fault, task.id);
     // A failing run is attributed correctly when at least one of the injected faults' causes is
@@ -92,6 +100,7 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
     return {
       fault,
       runs: runs.length,
+      harnessErrors: all.length - runs.length,
       failing: failing.length,
       correctlyAttributed: correct.length,
       spuriousCauses: [...new Set(spurious)],
@@ -135,10 +144,11 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
     },
     detection,
     falsePositives: {
-      baselineCleanRunsFailed: baselineRuns.filter((r) => r.fault === "none" && r.diagnosis.verdict === "fail").length,
-      baselineCleanRuns: baselineRuns.filter((r) => r.fault === "none").length,
-      candidateCleanRunsFailed: controls.filter((r) => r.diagnosis.verdict === "fail").length,
-      candidateCleanRuns: controls.length,
+      baselineCleanRunsFailed: baselineRuns.filter((r) => r.fault === "none" && !harnessStopped(r) && r.diagnosis.verdict === "fail").length,
+      baselineCleanRuns: baselineRuns.filter((r) => r.fault === "none" && !harnessStopped(r)).length,
+      candidateCleanRunsFailed: controls.filter((r) => !harnessStopped(r) && r.diagnosis.verdict === "fail").length,
+      candidateCleanRuns: controls.filter((r) => !harnessStopped(r)).length,
+      harnessErrors: [...baselineRuns.filter((r) => r.fault === "none"), ...controls].filter(harnessStopped).length,
     },
     reproduction: reproduction.map((r) => ({ fixture: r.fixture, reproduced: r.reproduced, trials: r.trials.length, drift: r.environmentDrift })),
     regression: comparisons.map((c) => ({ fixture: c.fixture, agent: c.agent, passes: c.passes, trials: c.trials.length, passAll: c.passAll, causes: [...new Set(c.trials.flatMap((t) => t.causes))] })),

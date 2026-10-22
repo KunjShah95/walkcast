@@ -14,6 +14,8 @@ export class TokenBucket {
     this.last = Date.now();
   }
   async acquire(cost = 1): Promise<void> {
+    // More than the bucket can ever hold would wait forever: refuse it now instead.
+    if (cost > this.capacity) throw new Error(`This request needs ${cost} units, more than the ${this.capacity} the rate limit allows at once.`);
     while (true) {
       const now = Date.now();
       const elapsed = (now - this.last) / 1000;

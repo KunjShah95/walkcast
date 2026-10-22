@@ -31,6 +31,7 @@ import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
 import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insights.ts";
 import { chaptersOf, toSrt, toVtt, transcriptMarkdown } from "../../../packages/core/src/record/transcript.ts";
 import { guideHtml, guideMarkdown, guideSteps } from "../../../packages/core/src/record/guide.ts";
+import { providerHealth } from "../../../packages/core/src/llm/health.ts";
 import { isShape, socialExport } from "../../../packages/core/src/record/social.ts";
 import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
@@ -1436,7 +1437,8 @@ try {
       const snap = await store.metrics(windowMs);
       const alarmMs = queueAlarmMs();
       // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
-      return json(200, { ...snap, alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs } });
+      // How each model provider has been answering this process's live calls (llm/health.ts).
+      return json(200, { ...snap, alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs }, providers: providerHealth(windowMs) });
     }
     // ---------------------------------------------------------------- webhooks (owner-scoped)
     if (url.pathname === "/api/webhooks" && req.method === "GET") {

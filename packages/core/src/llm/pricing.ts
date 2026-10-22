@@ -47,10 +47,13 @@ export function priceFor(model: string | null | undefined): TokenPrice | null {
 
 /** The price the account set for itself, if it set one. */
 function ownPrice(): TokenPrice | null {
-  const input = Number(process.env.LAB_PRICE_INPUT_USD_PER_MTOK);
-  const output = Number(process.env.LAB_PRICE_OUTPUT_USD_PER_MTOK);
-  if (!Number.isFinite(input) && !Number.isFinite(output)) return null;
-  return { input: Number.isFinite(input) ? input : 0, output: Number.isFinite(output) ? output : 0, source: "yours" };
+  // Both sides, as real numbers, or none: a blank line in .env read as $0 and switched the
+  // dollar ceiling off for every run, which is the failure the ceiling exists to prevent.
+  const read = (raw: string | undefined) => (raw === undefined || raw.trim() === "" ? NaN : Number(raw));
+  const input = read(process.env.LAB_PRICE_INPUT_USD_PER_MTOK);
+  const output = read(process.env.LAB_PRICE_OUTPUT_USD_PER_MTOK);
+  if (!Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
+  return { input, output, source: "yours" };
 }
 
 /** What a run's tokens cost, in dollars. `null` when the model has no price we can name. */

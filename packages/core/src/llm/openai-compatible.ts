@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletion, ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { AgentRequest, AgentResponse, ModelBackend, StagehandParams, StagehandResult } from "./gateway.ts";
 import { apiKey, baseURL, type ProviderInfo } from "./providers.ts";
+import { llmMaxRetries } from "./retry.ts";
 
 /**
  * Backend for any provider with an OpenAI-compatible Chat Completions API.
@@ -25,7 +26,8 @@ export class OpenAICompatibleBackend implements ModelBackend {
     if (!key && !info.keyOptional) throw new Error(`${info.label}: set ${info.apiKeyEnv.join(" or ")} to use provider '${info.id}'.`);
     const url = baseURL(info);
     if (!url) throw new Error(`${info.label}: set LAB_${info.id.toUpperCase()}_BASE_URL.`);
-    this.client = new OpenAI({ apiKey: key ?? "not-needed", baseURL: url, maxRetries: 2 });
+    // The SDK retries 429/5xx itself, honouring Retry-After; give it the lab-wide count (retry.ts).
+    this.client = new OpenAI({ apiKey: key ?? "not-needed", baseURL: url, maxRetries: llmMaxRetries() });
     this.name = `${info.id}:${model}`;
     this.jsonSchemaUnsupported = info.structuredOutput === "json_object";
   }
