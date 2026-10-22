@@ -597,13 +597,34 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
   };
 }
 
-/** Play an uploaded custom voice sample as narration (fallback: copy the first sample). */
-function customVoiceEngine(): VoiceEngine | null {
-  const dir = join(process.cwd(), "data", "voices");
+/**
+ * The uploaded sample to narrate with: the one the person picked, or the only one on disk.
+ * With several samples and no choice, there is no safe answer — another account's voice is not
+ * a fallback. Exported so the rule can be tested without a browser or ffmpeg.
+ */
+export function pickCustomVoiceSample(dir: string, picked?: string): string | null {
   if (!existsSync(dir)) return null;
-  const files = readdirSync(dir).filter((f: string) => /\.(wav|mp3|ogg|m4a)$/i.test(f));
+  const files = readdirSync(dir)
+    .filter((f: string) => /\.(wav|mp3|ogg|m4a)$/i.test(f))
+    .sort();
   if (files.length === 0) return null;
-  const sample = join(dir, files[0]!);
+  const wanted = picked?.trim();
+  if (wanted) return files.find((f) => f.slice(0, f.lastIndexOf(".")) === wanted) ?? null;
+  return files.length === 1 ? (files[0] ?? null) : null;
+}
+
+/**
+ * Play an uploaded custom voice sample as narration.
+ *
+ * The sample is chosen by the voice id the person picked, not by directory order: on a shared
+ * server, several accounts can have samples in the same folder, and `files[0]` would narrate in
+ * whoever uploaded first.
+ */
+function customVoiceEngine(picked?: string): VoiceEngine | null {
+  const dir = join(process.cwd(), "data", "voices");
+  const chosen = pickCustomVoiceSample(dir, picked);
+  if (!chosen) return null;
+  const sample = join(dir, chosen);
   return {
     id: "custom-voice",
     kind: "custom-voice",
@@ -636,7 +657,7 @@ export function engineFor(provider: string | undefined, voice: FliteVoice = "slt
   if (p === "murf") return murfEngine(cloudVoice);
   if (p === "reverie") return reverieEngine(cloudVoice, cloudLanguage);
   if (p === "custom" || p === "maya") return customTtsEngine(cloudVoice, cloudLanguage);
-  if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine();
+  if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine(cloudVoice);
   // "flite" is what the dashboard sends for its local default: return null so the caller uses the
   // machine's built-in voice (media.localVoice: flite where ffmpeg has it, Windows speech otherwise).
   // Forcing flite here would fail on every Windows PC, whose ffmpeg builds have no flite.

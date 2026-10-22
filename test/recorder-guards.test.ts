@@ -12,6 +12,7 @@ import { SEED_LEADS } from "../packages/core/src/lab/task.ts";
 import { OVERLAY_SCRIPT, clearOverlays } from "../packages/core/src/record/overlays.ts";
 import { parseRobots, robotsAllows } from "../packages/core/src/record/robots.ts";
 import { recordSite } from "../packages/core/src/record/site.ts";
+import { pickCustomVoiceSample } from "../packages/core/src/record/voice.ts";
 import { readFocus } from "../packages/core/src/record/zoom.ts";
 
 process.env.LAB_LOG = "off";
@@ -95,4 +96,21 @@ test("a journey stops at the page limit the person set", { timeout: 240_000 }, a
   } finally {
     await app.close();
   }
+});
+
+test("a custom voice narrates with the sample its owner picked, never another account's", () => {
+  const dir = mkroot();
+  assert.equal(pickCustomVoiceSample(dir), null, "an empty folder has nothing to narrate with");
+  assert.equal(pickCustomVoiceSample(join(dir, "missing")), null, "a folder that was never created is not an error");
+
+  writeFileSync(join(dir, "one.wav"), "RIFF");
+  assert.equal(pickCustomVoiceSample(dir), "one.wav", "the only sample is the obvious choice");
+
+  writeFileSync(join(dir, "two.mp3"), "ID3");
+  writeFileSync(join(dir, "notes.txt"), "not a voice");
+  assert.equal(pickCustomVoiceSample(dir), null, "with several samples and no pick there is no safe fallback");
+
+  assert.equal(pickCustomVoiceSample(dir, "two"), "two.mp3", "the picked id wins over directory order");
+  assert.equal(pickCustomVoiceSample(dir, " one "), "one.wav", "a stray space in the picker's value still matches");
+  assert.equal(pickCustomVoiceSample(dir, "someone-else"), null, "an id with no sample of its own is refused, not substituted");
 });
