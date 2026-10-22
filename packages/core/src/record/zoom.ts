@@ -133,7 +133,9 @@ export function readFocus(dir: string): FocusFile | null {
   if (!existsSync(path)) return null;
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as FocusFile;
-    return Array.isArray(parsed.moments) ? parsed : null;
+    // A plan with no usable frame size would build a filter ffmpeg rejects: treat it as no plan.
+    const size = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 16 && n <= 8192;
+    return Array.isArray(parsed.moments) && size(parsed.width) && size(parsed.height) ? parsed : null;
   } catch {
     return null;
   }

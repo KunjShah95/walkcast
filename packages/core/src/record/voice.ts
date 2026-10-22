@@ -517,7 +517,8 @@ export function murfEngine(cloudVoice?: string): VoiceEngine | null {
       if (!res.ok) throw await ttsError("murf", res);
       const json = (await res.json()) as { audioFile?: string };
       if (!json.audioFile) throw new Error("murf returned no audio");
-      const audioRes = await fetch(json.audioFile);
+      // The same ceiling as the synthesis: a stalled CDN must not hold the recording forever.
+      const audioRes = await fetch(json.audioFile, { signal: AbortSignal.timeout(60_000) });
       // The download is a second request to Murf's CDN: a 403 or an expired link answers with an
       // error page, and that page used to be written to the clip as if it were the audio.
       if (!audioRes.ok) throw new Error(`murf TTS failed (${audioRes.status}): the audio file could not be downloaded.`);
@@ -582,7 +583,7 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
         const encoded = json.audio || json.audioContent;
         if (encoded) { await writeFile(outFile, Buffer.from(encoded, "base64")); await ensureWav(outFile, cwd); return; }
         if (json.url) {
-          const a = await fetch(json.url);
+          const a = await fetch(json.url, { signal: AbortSignal.timeout(60_000) });
           if (!a.ok) throw new Error(`custom TTS failed (${a.status}): the audio file could not be downloaded.`);
           await writeFile(outFile, Buffer.from(await a.arrayBuffer()));
           await ensureWav(outFile, cwd);

@@ -30,7 +30,9 @@ test("refuses to record without an authorization attestation", async () => {
   await assert.rejects(recordSite({ url: app.url, maxPages: 1, authorized: false, outDir: out }), /authorized/);
 });
 
-test("signs in, browses same-origin pages, narrates, and never writes the password", { timeout: 180_000 }, async (t) => {
+// Alone this takes about 90 s; the full suite runs browser and ffmpeg files side by side, and the
+// old 180 s ceiling was what failed there, not the recorder.
+test("signs in, browses same-origin pages, narrates, and never writes the password", { timeout: 420_000 }, async (t) => {
   // The offline voice is opt-in (recordings are silent without a voice key); this test wants it.
   process.env.LAB_ROBOT_VOICE = "1";
   t.after(() => delete process.env.LAB_ROBOT_VOICE);
@@ -48,9 +50,9 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
   if (canNarrate()) {
     assert.equal(r.media.mp4, "recording.mp4", what);
     assert.equal(r.media.voice, "flite", what);
-    // Spoken lines never overlap.
-    for (let i = 1; i < r.captions.length; i++) assert.ok(r.captions[i]!.start >= r.captions[i - 1]!.end - 0.01);
   }
+  // One caption on screen at a time, spoken or silent.
+  for (let i = 1; i < r.captions.length; i++) assert.ok(r.captions[i]!.start >= r.captions[i - 1]!.end - 0.01, `caption ${i} overlaps the one before`);
   assert.deepEqual(filesContain(r.dir, "demo-pass"), []);
   assert.deepEqual(filesContain(r.dir, "postData"), [], "request bodies stay out of site recordings");
 });

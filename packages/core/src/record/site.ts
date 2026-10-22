@@ -12,6 +12,8 @@ import { getBrowser, warmBrowserEnabled } from "./browser.ts";
 import { captionsFor, type Caption, type NarrationStyle } from "./narration.ts";
 import { briefInPage, type Brief } from "./brief.ts";
 import { blockedHost, guardContext, startGuardProxy } from "./ssrf.ts";
+import { OVERLAY_SCRIPT, clearOverlays, overlaysEnabled } from "./overlays.ts";
+import { parseRobots, robotsAllows, type RobotsRule } from "./robots.ts";
 import { attachEvidence } from "./failure.ts";
 import { analyzeRecording, type RecordingInsights } from "./insights.ts";
 import { parseJourney, type JourneyStep } from "./journey.ts";
@@ -179,6 +181,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     // that decided whether a recording "starts" instantly (docs/SCALING.md §4.3).
     options.onProgress?.("Starting the browser");
     const browser = await getBrowser();
+    options.signal?.throwIfAborted();
     let contextRef: Awaited<ReturnType<typeof browser.newContext>> | null = null;
     const abort = () => void contextRef?.close().catch(() => undefined);
     options.signal?.addEventListener("abort", abort, { once: true });
@@ -194,10 +197,15 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
         ...(proxy ? { proxy: { server: proxy.server, bypass: "<-loopback>" } } : {}),
       });
       contextRef = context;
+      // Cancelled while the browser was starting: the abort listener had no context to close
+      // then, so stop here, before anything is opened or typed.
+      options.signal?.throwIfAborted();
       if (options.blockPrivate) blockedRequests = await guardContext(context);
       await context.addInitScript("window.__name = (fn) => fn;");
       // The pointer the viewer follows: Playwright's video has no mouse of its own.
       await context.addInitScript(CURSOR_SCRIPT);
+      // Consent banners and chat bubbles stay out of the video (overlays.ts).
+      if (overlaysEnabled()) await context.addInitScript(OVERLAY_SCRIPT);
       const page = await context.newPage();
       videoStart = recorder.now();
       recorder.attach(context, page);
@@ -447,10 +455,16 @@ async function followJourney(
   pages: PageVisit[],
   dir: string,
   steps: JourneyStep[],
-): Promise<void> {
+  limits: { outOfTime: () => boolean; maxPages: number },
+): Promise<{ done: number; stopped: "time" | "pages" | null }> {
   let shot = 1;
+  let done = 0;
   for (const step of steps) {
     options.signal?.throwIfAborted();
+    // The limits the person set hold for a journey as they do for a crawl.
+    if (limits.outOfTime()) return { done, stopped: "time" };
+    if (step.kind === "goto" && pages.length >= limits.maxPages) return { done, stopped: "pages" };
+    done += 1;
     if (step.kind === "wait") {
       await page.waitForTimeout(step.ms);
       continue;
@@ -461,8 +475,18 @@ async function followJourney(
     }
     if (step.kind === "goto") {
       const url = new URL(step.path, start.origin).toString();
-      await tools.goto(url);
+      const went = await tools.goto(url).then(
+        () => true,
+        () => false,
+      );
       await tools.waitForQuiet(400, 8000);
+      if (!went && normalize(page.url()) !== normalize(url)) {
+        // The page did not open: say so, and do not count the page that is still on screen.
+        await tools.record("journeyStep", { kind: "goto", name: step.path, found: false }, async () => ({ found: false }));
+        options.onProgress?.(`Could not open ${step.path}`);
+        continue;
+      }
+      await clearOverlays(page);
       shot += 1;
       await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, url, false);
       continue;
@@ -475,8 +499,17 @@ async function followJourney(
       options.onProgress?.(`No control named “${step.name}” on this page`);
       continue;
     }
-    if (step.kind === "click") await tools.click(target.index, obs);
-    else await tools.fill(target.index, step.value, obs);
+    try {
+      if (step.kind === "click") await tools.click(target.index, obs);
+      else await tools.fill(target.index, step.value, obs);
+    } catch (e) {
+      // A control that is there but will not take the action is a step that failed, recorded
+      // as such; the rest of the journey still runs.
+      const error = (e instanceof Error ? e.message : String(e)).split("\n")[0]!.slice(0, 160);
+      await tools.record("journeyStep", { kind: step.kind, name: step.name, found: true, error }, async () => ({ found: true, error }));
+      options.onProgress?.(`Could not ${step.kind} “${step.name}”`);
+      continue;
+    }
     await tools.waitForQuiet(400, 8000);
     const after = normalize(page.url());
     if (pages.length === 0 || pages[pages.length - 1]!.url !== after) {
@@ -484,6 +517,7 @@ async function followJourney(
       await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, after, false);
     }
   }
+  return { done, stopped: null };
 }
 
 /** The control a journey step names, matched the way a person would match it. */
@@ -540,10 +574,13 @@ async function browse(
   journey: JourneyStep[] = [],
 ): Promise<"pages" | "time" | "no-more-links"> {
   options.onProgress?.("Opening the site");
-  const disallowed = options.ignoreRobots ? [] : await robotsDisallow(tools, start.origin);
+  const robots = options.ignoreRobots ? [] : await robotsRules(tools, start.origin);
   await tools.goto(start.toString());
   await tools.waitForQuiet(400, 8000);
+  await clearOverlays(page);
 
+  // Last moment to honour a cancel before a password is typed into the site.
+  options.signal?.throwIfAborted();
   if (options.username || options.password) {
     options.onProgress?.("Signing in");
     const outcome = await signInFlow(tools, options.username ?? "", options.password ?? "");
@@ -567,10 +604,17 @@ async function browse(
     // The page the walkthrough starts on is part of it: the journey says where to go next,
     // not where to begin.
     await recordPage(tools, page, recorder, pages, dir, "page-01.jpg", normalize(page.url()), false);
-    await followJourney(tools, page, recorder, options, start, pages, dir, journey);
+    const walked = await followJourney(tools, page, recorder, options, start, pages, dir, journey, { outOfTime, maxPages: options.maxPages });
     const ok = !signIn.attempted || signIn.outcome === "signed-in";
-    await tools.done(ok, `Followed ${journey.length} step${journey.length === 1 ? "" : "s"}.`);
-    return "pages";
+    const steps = (n: number) => `${n} step${n === 1 ? "" : "s"}`;
+    const tail =
+      walked.stopped === "time"
+        ? `Stopping at your ${formatLength(options.maxSeconds ?? 0)} limit after ${steps(walked.done)} of ${journey.length}.`
+        : walked.stopped === "pages"
+          ? `Stopping at your ${options.maxPages}-page limit after ${steps(walked.done)} of ${journey.length}.`
+          : `Followed ${steps(journey.length)}.`;
+    await tools.done(ok, tail);
+    return walked.stopped ?? "pages";
   }
   // Checked before a page and again after it: the budget ends the walk at the next page boundary,
   // never mid-page, so the last thing on screen is a whole page rather than a cut-off scroll.
@@ -579,14 +623,30 @@ async function browse(
     const remaining = deadline === null ? null : Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     options.onProgress?.(remaining === null ? `Page ${pages.length + 1} of up to ${options.maxPages}` : `Page ${pages.length + 1} · ${formatLength(remaining)} left`);
     const next = queue.shift()!;
-    if (disallowed.some((p) => new URL(next).pathname.startsWith(p))) {
+    const nextUrl = new URL(next);
+    if (!robotsAllows(robots, `${nextUrl.pathname}${nextUrl.search}`)) {
       skipped.push({ url: next, reason: "robots.txt disallows it" });
       continue;
     }
     if (normalize(page.url()) !== next) {
       await page.waitForTimeout(pace);
-      await tools.goto(next).catch(() => undefined);
+      const went = await tools.goto(next).then(
+        () => true,
+        () => false,
+      );
       await tools.waitForQuiet(400, 8000);
+      // A page that would not open leaves the last one on screen: that is not a second visit.
+      if (!went && normalize(page.url()) !== next) {
+        skipped.push({ url: next, reason: "the page could not be opened" });
+        continue;
+      }
+      await clearOverlays(page);
+      // Sent back somewhere already in the walkthrough (a redirect to sign-in, or home).
+      const landed = normalize(page.url());
+      if (landed !== next && pages.some((p) => normalize(p.url) === landed)) {
+        skipped.push({ url: next, reason: `it led back to ${landed}, which is already in the walkthrough` });
+        continue;
+      }
     }
     const status = await lastDocumentStatus(recorder, next);
     // One picture of each page, at the top of it, before the scroll.
@@ -768,22 +828,11 @@ async function scrollThrough(tools: BrowserTools): Promise<void> {
   });
 }
 
-async function robotsDisallow(tools: BrowserTools, origin: string): Promise<string[]> {
+/** The site's robots.txt rules for every crawler (robots.ts), or none when it has no file. */
+async function robotsRules(tools: BrowserTools, origin: string): Promise<RobotsRule[]> {
   try {
     const res = await tools.page.request.get(`${origin}/robots.txt`, { timeout: 5000 });
-    if (!res.ok()) return [];
-    const lines = (await res.text()).split(/\r?\n/);
-    const out: string[] = [];
-    let applies = false;
-    for (const raw of lines) {
-      const line = raw.replace(/#.*/, "").trim();
-      const [k, ...v] = line.split(":");
-      const key = k?.trim().toLowerCase();
-      const value = v.join(":").trim();
-      if (key === "user-agent") applies = value === "*";
-      else if (applies && key === "disallow" && value) out.push(value);
-    }
-    return out;
+    return res.ok() ? parseRobots(await res.text()) : [];
   } catch {
     return [];
   }

@@ -128,20 +128,21 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
   const mp4 = join(dir, "recording.mp4");
   // The zoom on each click and fill, when the recording has its moments and zoom is on. Only
   // the MP4 zooms: the WebM below is a stream copy of the browser's own video.
-  const zoom = zoomFilterFor(dir, videoSeconds);
   onProgress?.("Encoding the MP4");
-  await run([
-    "-i", join(dir, video),
-    "-i", audio,
-    "-i", join(dir, "captions.vtt"),
-    "-filter_complex", `[0:v]${zoom ? `${zoom},` : ""}tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
-    "-map", "[v]", "-map", "1:a", "-map", "2:s",
-    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
-    "-c:a", "aac", "-b:a", "96k",
-    "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
-    "-movflags", "+faststart",
-    mp4,
-  ]);
+  await withZoomFallback(zoomFilterFor(dir, videoSeconds), (zoom) =>
+    run([
+      "-i", join(dir, video),
+      "-i", audio,
+      "-i", join(dir, "captions.vtt"),
+      "-filter_complex", `[0:v]${zoom ? `${zoom},` : ""}tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
+      "-map", "[v]", "-map", "1:a", "-map", "2:s",
+      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
+      "-c:a", "aac", "-b:a", "96k",
+      "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
+      "-movflags", "+faststart",
+      mp4,
+    ]),
+  );
   const webm = join(dir, "narrated.webm");
   onProgress?.("Packaging the WebM");
   // The MP4 is the recording; the WebM is a second copy for browsers without H.264. A build of
@@ -164,19 +165,33 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
 /** The visit with no narration: H.264 video plus the caption track, for when nothing speaks. */
 async function muxSilent(dir: string, video: string, onProgress?: (p: string) => void): Promise<Pick<MediaResult, "mp4">> {
   const mp4 = join(dir, "recording.mp4");
-  const zoom = zoomFilterFor(dir, await probeSeconds(join(dir, video)));
   onProgress?.("Encoding the MP4");
-  await run([
-    "-i", join(dir, video),
-    "-i", join(dir, "captions.vtt"),
-    "-map", "0:v", "-map", "1:s",
-    "-vf", `${zoom ? `${zoom},` : ""}format=yuv420p`,
-    "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
-    "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
-    "-movflags", "+faststart",
-    mp4,
-  ]);
+  await withZoomFallback(zoomFilterFor(dir, await probeSeconds(join(dir, video))), (zoom) =>
+    run([
+      "-i", join(dir, video),
+      "-i", join(dir, "captions.vtt"),
+      "-map", "0:v", "-map", "1:s",
+      "-vf", `${zoom ? `${zoom},` : ""}format=yuv420p`,
+      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
+      "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
+      "-movflags", "+faststart",
+      mp4,
+    ]),
+  );
   return { mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null };
+}
+
+/**
+ * Encode with the zoom, and once more without it when that fails. The zoom is a finish on the
+ * MP4; a plan this ffmpeg rejects must cost the zoom, never the MP4 itself.
+ */
+async function withZoomFallback(zoom: string | null, encode: (zoom: string | null) => Promise<unknown>): Promise<void> {
+  try {
+    await encode(zoom);
+  } catch (e) {
+    if (!zoom) throw e;
+    await encode(null);
+  }
 }
 
 /**

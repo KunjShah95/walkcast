@@ -29,6 +29,8 @@ export interface GuidePage {
   title?: string;
   status?: number | null;
   screenshot?: string;
+  /** Seconds into the video when this page was opened, when the caller knows it. */
+  at?: number;
 }
 
 export interface GuideStep {
@@ -75,6 +77,7 @@ export function guideSteps(pages: GuidePage[], actions: GuideAction[]): GuideSte
     add({
       title: i === 0 ? `Open ${title}` : `Go to ${title}`,
       detail: `${p.url}${p.status ? ` · ${p.status}` : ""}`,
+      ...(p.at !== undefined ? { at: p.at } : {}),
       ...(p.screenshot ? { image: p.screenshot } : {}),
     });
     for (const a of byPage.get(pathOf(p.url)) ?? []) {

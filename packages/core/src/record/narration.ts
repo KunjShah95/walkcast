@@ -112,7 +112,17 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
   }
 
   out.sort((a, b) => a.at - b.at);
-  return out.map((c, i) => ({ start: round(c.at), end: round(Math.max(c.at + 1.5, out[i + 1]?.at ?? c.at + 3)), text: c.text }));
+  // One line on screen at a time: each starts no earlier than the last one ended and stays at
+  // least 1.5 s. A narrated recording retimes these to the speech anyway; a silent one ships them
+  // as they are, and two clicks 0.3 s apart used to put two captions up at once.
+  const timed: Caption[] = [];
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i]!;
+    const start = Math.max(c.at, timed.at(-1)?.end ?? 0);
+    const end = Math.max(start + 1.5, out[i + 1]?.at ?? start + 3);
+    timed.push({ start: round(start), end: round(end), text: c.text });
+  }
+  return timed;
 }
 
 function signInSentence(s: Context["signIn"]): string {

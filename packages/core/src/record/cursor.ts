@@ -71,10 +71,16 @@ export const CURSOR_SCRIPT = `(() => {
       if (!mount()) return Promise.resolve();
       const fx = x, fy = y, t0 = performance.now();
       return new Promise((done) => {
+        // A hidden or throttled page may never run another animation frame: a timer finishes
+        // the glide regardless, so the pointer can never hold the recording up.
+        let finished = false;
+        const finish = () => { if (finished) return; finished = true; place(tx, ty); done(); };
+        const fallback = setTimeout(finish, ms + 150);
         const step = (now) => {
+          if (finished) return;
           const p = Math.min(1, (now - t0) / ms), k = ease(p);
           place(fx + (tx - fx) * k, fy + (ty - fy) * k);
-          if (p < 1) requestAnimationFrame(step); else done();
+          if (p < 1) requestAnimationFrame(step); else { clearTimeout(fallback); finish(); }
         };
         requestAnimationFrame(step);
       });
@@ -113,12 +119,18 @@ export async function pointAt(page: Page, selector: string): Promise<Box | null>
   if (!box || box.w <= 0 || box.h <= 0) return null;
   const tx = box.x + Math.min(box.w / 2, 24);
   const ty = box.y + box.h / 2;
-  await page
-    .evaluate(
-      ([cx, cy, ms]) => (window as unknown as { __wcCursor?: { glide: (x: number, y: number, ms: number) => Promise<void> } }).__wcCursor?.glide(cx!, cy!, ms!),
-      [tx, ty, GLIDE_MS],
-    )
-    .catch(() => undefined);
+  // Raced against a timer too: a page that stops answering must not stop the recording.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    page
+      .evaluate(
+        ([cx, cy, ms]) => (window as unknown as { __wcCursor?: { glide: (x: number, y: number, ms: number) => Promise<void> } }).__wcCursor?.glide(cx!, cy!, ms!),
+        [tx, ty, GLIDE_MS],
+      )
+      .catch(() => undefined),
+    new Promise<void>((resolve) => (timer = setTimeout(resolve, GLIDE_MS + 1000))),
+  ]);
+  clearTimeout(timer);
   await page
     .evaluate(
       ([bx, by, bw, bh]) => (window as unknown as { __wcCursor?: { ring: (...a: number[]) => void } }).__wcCursor?.ring(bx!, by!, bw!, bh!),
