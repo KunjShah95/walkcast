@@ -22,6 +22,7 @@ import { Record } from "./views/Record.tsx";
 import { Library } from "./views/Library.tsx";
 import { Settings } from "./views/Settings.tsx";
 import { Schedules } from "./views/Schedules.tsx";
+import { Webhooks } from "./views/Webhooks.tsx";
 import { Mobile } from "./views/Mobile.tsx";
 
 export type Route =
@@ -31,6 +32,7 @@ export type Route =
   | { view: "library"; dir?: string }
   | { view: "settings" }
   | { view: "schedules" }
+  | { view: "webhooks" }
   | { view: "runs" }
   | { view: "failures" }
   | { view: "fixtures" }
@@ -52,7 +54,7 @@ function parse(hash: string): Route {
   // `#simulator?scenario=…` picks a scenario; the query is read by the view itself.
   const bare = h.split("?")[0] ?? h;
   if (h === "mobile") return { view: "mobile" };
-  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "dashboard")
+  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "webhooks" || bare === "dashboard")
     return { view: bare } as Route;
   return { view: "dashboard" };
 }
@@ -76,6 +78,13 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
     ],
   },
   {
+    name: "Automations",
+    items: [
+      { view: "schedules", label: "Schedules" },
+      { view: "webhooks", label: "Webhooks" },
+    ],
+  },
+  {
     name: "Lab",
     items: [
       { view: "runs", label: "Runs", count: (i) => i.runs.length },
@@ -93,6 +102,7 @@ const TITLES: Record<Route["view"], string> = {
   library: "Library",
   settings: "Settings",
   schedules: "Schedules",
+  webhooks: "Webhooks",
   runs: "Runs",
   failures: "Failures",
   run: "Run",
@@ -298,6 +308,7 @@ export function App() {
                   fetches silently no-opped on 401. */}
                 {index && route.view === "settings" && <Settings me={me} />}
                 {index && route.view === "schedules" && <Schedules />}
+                {index && route.view === "webhooks" && <Webhooks />}
                 {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
                 {index && route.view === "mobile" && <Mobile index={index} go={go} refresh={refresh} />}
             </div>

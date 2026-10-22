@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, exportShape, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { guideSteps } from "../../../../../packages/core/src/record/guide.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
 import type { RecordingSummary } from "../lib/types.ts";
@@ -83,7 +84,7 @@ export function Studio({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(r.durationMs / 1000);
   const [prefs, setPrefs] = usePrefs();
-  const [tab, setTab] = useState<"transcript" | "notes" | "script" | "voice">("transcript");
+  const [tab, setTab] = useState<"transcript" | "steps" | "notes" | "script" | "voice">("transcript");
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
   const chapters = useMemo(() => chaptersOf(r), [r]);
@@ -366,9 +367,10 @@ export function Studio({
             {(
               [
                 ["transcript", "Transcript"],
+                ["steps", "Steps"],
                 ["notes", "Notes"],
-                ["script", "Edit script"],
-                ["voice", "Your voice"],
+                ["script", "Script"],
+                ["voice", "Voice"],
               ] as const
             ).map(([id, name]) => (
               <button
@@ -377,13 +379,15 @@ export function Studio({
                 role="tab"
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
-                className={cn("h-8 flex-1 rounded-full text-[12.5px] font-medium transition-colors", tab === id ? "bg-solid text-on-solid" : "text-ink-3 hover:text-ink")}
+                title={id === "script" ? "Edit the narration script" : id === "voice" ? "Record or upload your own voice" : undefined}
+                className={cn("h-8 flex-1 rounded-full text-[12px] font-medium transition-colors", tab === id ? "bg-solid text-on-solid" : "text-ink-3 hover:text-ink")}
               >
                 {name}
               </button>
             ))}
           </div>
         )}
+        {tab === "steps" && <Steps recording={r} chapters={chapters} seek={seek} />}
         {tab === "transcript" && (
           <ol ref={list} className={cn("min-h-0 flex-1 overflow-y-auto p-1.5", compact ? "max-h-[19rem]" : "max-h-[34rem]")}>
             {r.captions.map((c, i) => {
@@ -444,6 +448,102 @@ export function Studio({
           />
         )}
       </Panel>
+    </div>
+  );
+}
+
+/**
+ * The visit as the numbered guide, inside the app.
+ *
+ * The printable guide opens in a browser tab, which is the right shape for sending to someone.
+ * This tab is for the owner: every page and every click with the second it happened, so a step
+ * can be checked against the video without leaving the Studio. Page steps use the chapter
+ * timestamps already shown above the player, so they seek too.
+ */
+function Steps({
+  recording: r,
+  chapters,
+  seek,
+}: {
+  recording: RecordingSummary;
+  chapters: ReturnType<typeof chaptersOf>;
+  seek: (t: number, play?: boolean) => void;
+}) {
+  const steps = useMemo(
+    () =>
+      guideSteps(
+        r.pages.map((p, i) => ({ ...p, at: chapters[i]?.start })),
+        r.actions ?? [],
+      ),
+    [r.pages, r.actions, chapters],
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+        <span className="text-[12.5px] text-ink-2">
+          {steps.length} {steps.length === 1 ? "step" : "steps"}. Click one to jump to that moment.
+        </span>
+        <span className="flex items-center gap-1.5">
+          <a
+            href={guideUrl(r.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-[11.5px] text-ink-2 hover:border-line-strong hover:text-ink"
+          >
+            Open guide
+          </a>
+          <a
+            href={guideUrl(r.id, "md")}
+            download={`${r.id}-guide.md`}
+            className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-[11.5px] text-ink-2 hover:border-line-strong hover:text-ink"
+          >
+            Markdown
+          </a>
+        </span>
+      </div>
+      <ol className="min-h-0 max-h-[34rem] flex-1 overflow-y-auto p-1.5">
+        {steps.map((step) => {
+          const jumpable = step.at !== undefined;
+          return (
+            <li key={step.n}>
+              <button
+                type="button"
+                onClick={() => jumpable && seek(step.at!)}
+                disabled={!jumpable}
+                title={jumpable ? `Jump to ${clock(step.at!)}` : "No timestamp for this step"}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
+                  jumpable ? "hover:bg-panel-2" : "cursor-default",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-6 shrink-0 place-items-center rounded-full font-mono text-[10.5px] font-semibold",
+                    jumpable ? "bg-exhibit text-exhibit-ink" : "bg-panel-2 text-ink-3",
+                  )}
+                >
+                  {step.n}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium leading-snug text-ink">{step.title}</span>
+                  {step.detail && <span className="mt-0.5 block truncate text-[11.5px] text-ink-3">{step.detail}</span>}
+                </span>
+                {jumpable && <span className="shrink-0 font-mono text-[10.5px] text-ink-3">{clock(step.at!)}</span>}
+                {step.image && (
+                  <img
+                    src={mediaUrl(r.dir, step.image)}
+                    alt=""
+                    loading="lazy"
+                    className="h-10 w-16 shrink-0 rounded object-cover object-top"
+                  />
+                )}
+              </button>
+            </li>
+          );
+        })}
+        {steps.length === 0 && <li className="p-4 text-[13px] text-ink-3">This recording has no pages or actions to show.</li>}
+      </ol>
     </div>
   );
 }

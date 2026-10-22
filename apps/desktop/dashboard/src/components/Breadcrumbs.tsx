@@ -4,6 +4,7 @@ import type { Route } from "../App.tsx";
 type Crumb = { label: string; route?: Route; current?: boolean };
 
 const WALK: Crumb = { label: "Walkthroughs", route: { view: "dashboard" } };
+const AUTO: Crumb = { label: "Automations", route: { view: "schedules" } };
 const LAB: Crumb = { label: "Lab", route: { view: "runs" } };
 
 function crumbsFor(route: Route): Crumb[] {
@@ -18,6 +19,10 @@ function crumbsFor(route: Route): Crumb[] {
         : [WALK, { label: "Library", current: true }];
     case "settings":
       return [{ label: "Settings", current: true }];
+    case "schedules":
+      return [AUTO, { label: "Schedules", current: true }];
+    case "webhooks":
+      return [AUTO, { label: "Webhooks", current: true }];
     case "simulator":
       return [LAB, { label: "Fault replay", current: true }];
     case "runs":

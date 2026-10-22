@@ -37,6 +37,17 @@ test("a recording with no actions is a guide of its pages", () => {
   assert.equal(steps[0]!.title, "Open Dashboard");
 });
 
+test("page steps carry the moment the page opened when the caller knows it", () => {
+  const steps = guideSteps(
+    pages.map((p, i) => ({ ...p, at: i === 0 ? 0 : 12 })),
+    actions,
+  );
+  assert.equal(steps.find((s) => s.title === "Open Dashboard")?.at, 0);
+  assert.equal(steps.find((s) => s.title === "Go to Orders")?.at, 12);
+  // Action steps keep their own moment, not the page's.
+  assert.equal(steps.find((s) => s.title === "Click “Export”")?.at, 9);
+});
+
 test("Markdown links each picture from where it is served", () => {
   const md = guideMarkdown({ url: "https://shop.test/", steps: guideSteps(pages, actions), imageBase: "http://127.0.0.1:4317/files/recordings/x/" });
   assert.match(md, /^# How to: shop\.test/);

@@ -368,6 +368,14 @@ export const FAQ: [string, string][] = [
     "Does the narration make things up?",
     "No. Every line is written from what the browser actually did: which page it opened, which field it typed into, what it clicked and what the site answered.",
   ],
+  [
+    "Can Walkcast record my site on a schedule?",
+    "Yes. In Schedules, give it a URL and a cadence — every hour, every morning at nine, or a five-field cron expression. Each run is a normal recording in the Library, so the what-changed panel compares it with the last visit. The app, or the server it runs on, has to be open.",
+  ],
+  [
+    "Can it tell another tool when a recording finishes?",
+    "Yes. Add a webhook URL under Webhooks and the server posts a job.completed event when a walkthrough or Lab run reaches a final state. Deliveries are retried, the app keeps a log of every attempt, and setting LAB_WEBHOOK_SECRET adds an HMAC-SHA256 signature the receiver can check.",
+  ],
   ["Is Walkcast free?", "Yes. It is MIT licensed with no paid tier, and it runs on your own PC."],
 ];
 

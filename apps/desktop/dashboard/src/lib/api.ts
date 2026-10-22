@@ -465,3 +465,105 @@ export async function deleteAnnotation(id: string, noteId: string): Promise<void
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not delete the note (${res.status}).`);
 }
+
+/**
+ * A recurring recording. The server keeps the interval as it was written ("6h",
+ * "0 9 * * 1") and the shortest gap in milliseconds, which is what the shared-server
+ * minimum is checked against.
+ */
+export interface Schedule {
+  id: string;
+  url: string;
+  interval: string;
+  intervalMs: number;
+  authorized: boolean;
+  createdAt: string;
+  lastRunAt: string | null;
+}
+
+export async function loadSchedules(): Promise<Schedule[]> {
+  const res = await fetch("/api/schedules");
+  const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not load schedules (${res.status}).`);
+  return body.schedules ?? [];
+}
+
+export async function createSchedule(input: { url: string; interval: string; authorized: boolean }): Promise<Schedule[]> {
+  const res = await fetch("/api/schedules", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not add the schedule (${res.status}).`);
+  return body.schedules ?? [];
+}
+
+export async function deleteSchedule(id: string): Promise<Schedule[]> {
+  const res = await fetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not remove the schedule (${res.status}).`);
+  return body.schedules ?? [];
+}
+
+/** An endpoint that receives a `job.completed` POST when a walkthrough or lab run ends. */
+export interface Webhook {
+  id: string;
+  owner: string | null;
+  url: string;
+  createdAt: string;
+}
+
+/** One attempt at one event: the outbox row the dispatcher leases and retries. */
+export interface WebhookDelivery {
+  id: string;
+  webhookId: string | null;
+  owner: string | null;
+  url: string;
+  event: string;
+  payload: Record<string, unknown>;
+  status: "pending" | "done" | "failed";
+  attempts: number;
+  nextAt: string;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export async function loadWebhooks(): Promise<Webhook[]> {
+  const res = await fetch("/api/webhooks");
+  const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not load webhooks (${res.status}).`);
+  return body.items ?? [];
+}
+
+export async function createWebhook(url: string): Promise<Webhook[]> {
+  const res = await fetch("/api/webhooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not add the endpoint (${res.status}).`);
+  return body.items ?? [];
+}
+
+export async function deleteWebhook(id: string): Promise<Webhook[]> {
+  const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not remove the endpoint (${res.status}).`);
+  return body.items ?? [];
+}
+
+export async function loadWebhookDeliveries(limit = 50): Promise<WebhookDelivery[]> {
+  const res = await fetch(`/api/webhooks/deliveries?limit=${encodeURIComponent(String(limit))}`);
+  const body = (await res.json().catch(() => ({}))) as { deliveries?: WebhookDelivery[]; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok) throw new Error(body.error ?? `Could not load deliveries (${res.status}).`);
+  return body.deliveries ?? [];
+}

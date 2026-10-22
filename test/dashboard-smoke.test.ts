@@ -42,6 +42,8 @@ test("every dashboard view renders without page errors", { timeout: 120_000 }, a
     "/app#simulator",
     "/app#simulator?scenario=duplicate-lead-on-timeout",
     "/app#record",
+    "/app#schedules",
+    "/app#webhooks",
     "/app#runs",
     "/app#fixtures",
     "/app#experiments",

@@ -357,6 +357,15 @@ h1 .line { display: block; }
 .b-safe { grid-column: 10 / 13; }
 .b-mini { grid-column: 1 / 7; }
 .b-states { grid-column: 7 / 13; }
+.b-auto { grid-column: 1 / 7; }
+.b-hook { grid-column: 7 / 13; }
+.auto-days { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 24px; }
+.auto-days span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: var(--muted); font: 600 11px/1 var(--mono); box-shadow: inset 0 0 0 1px var(--line); }
+.auto-days span.on { background: var(--ink); color: #fff; box-shadow: none; }
+.auto-days b { margin-left: auto; font: 500 12px/1 var(--mono); color: var(--muted); background: #fff; border-radius: 999px; padding: 8px 11px; box-shadow: inset 0 0 0 1px var(--line); }
+.hook-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: #d8d7d2; font: 11.5px/1.2 var(--mono); }
+.hook-line b { color: #9fe3a8; font-weight: 600; }
+.b-hook code { font: 12px var(--mono); background: var(--panel-2); padding: 1px 4px; border-radius: 4px; }
 .b-private { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; gap: 16px; padding: 20px 26px; }
 .b-private > span:nth-child(2) { flex: 1; }
 .b-private b { display: block; font-size: 18px; letter-spacing: -0.02em; }

@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useAnimationFrame, useInView, useReducedMotion
 import {
   AppWindow,
   AudioLines,
+  CalendarClock,
   Captions,
   Clapperboard,
   FileText,
@@ -19,6 +20,7 @@ import {
   ScanEye,
   ShieldCheck,
   Sparkles,
+  Webhook,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
@@ -219,6 +221,26 @@ export function Bento() {
           <Card className="b-states" delay={0.05}>
             <h3>Always know where it is.</h3>
             <Statuses />
+          </Card>
+          <Card className="b-auto">
+            <span className="soft-ic"><CalendarClock size={18} /></span>
+            <h3>Put the walk on a schedule.</h3>
+            <p>Every morning, every Monday at nine, or any five-field cron. Each visit lands in the Library, where the what-changed panel compares it with the last one.</p>
+            <div className="auto-days" aria-hidden="true">
+              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                <span key={i} className={i === 4 ? "on" : ""}>{d}</span>
+              ))}
+              <b>09:00</b>
+            </div>
+          </Card>
+          <Card className="b-hook" delay={0.05}>
+            <span className="soft-ic"><Webhook size={18} /></span>
+            <h3>Send it into your stack.</h3>
+            <p>A <code>job.completed</code> webhook posts to Slack, Zapier or your own server when the video is ready. Deliveries retry, and the app logs every attempt.</p>
+            <div className="hook-line" aria-hidden="true">
+              <span>POST /hooks/walkcast</span>
+              <b>200 OK</b>
+            </div>
           </Card>
           <Card className="b-guide">
             <div className="guide-copy">
