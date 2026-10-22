@@ -285,7 +285,9 @@ export async function cloudVoicePreview(provider: string, voice: string = "", la
     const file = join(dir, "preview.wav");
     await engine.speak("Opening the dashboard. Scrolling through the pricing page, then signing in.", file, dir);
     const buf = readFileSync(file);
+    // A handful of recent samples, not one per voice ever asked for: the oldest goes first.
     cloudPreviews.set(cacheKey, buf);
+    if (cloudPreviews.size > 32) cloudPreviews.delete(cloudPreviews.keys().next().value!);
     return buf;
   } finally {
     rmSync(dir, { recursive: true, force: true });

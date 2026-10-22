@@ -206,6 +206,13 @@ export class Worker {
         delay = Math.min(this.maxPollMs, delay * 2);
         continue;
       }
+      // stop() ran while the claim was in flight: it saw no current job, so it will not wait on
+      // or abort this one. Hand it straight back instead of starting work nobody will stop.
+      if (this.stopping) {
+        await this.o.store.release(job.id, this.id).catch(() => undefined);
+        log.info("job.released", { job: job.id, reason: "stopping" });
+        break;
+      }
       delay = this.pollMs;
       const abort = new AbortController();
       const done = this.execute(job, abort);

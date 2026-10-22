@@ -274,3 +274,17 @@ test("a run turned away by an agent's ceiling does not use up the day's runs", a
   const dId = (await store.userByEmail("refund@example.com"))!.id;
   assert.equal(await store.hit(`quota:run:${dId}`, 86_400_000), 1, "the three refusals were refunded: this is the first charge");
 });
+
+test("a voice sample belongs to whoever uploaded it", async () => {
+  const a = await account("voice-a@example.com");
+  const b = await account("voice-b@example.com");
+  const up = await call(a, "/api/voices/custom", { method: "POST", headers: { "x-file-name": "me.wav" }, body: "RIFF....WAVE" });
+  assert.equal(up.status, 201);
+  const { id } = (await up.json()) as { id: string };
+  const list = (c: string) => call(c, "/api/voices/custom").then(async (r) => ((await r.json()) as { voices: { id: string }[] }).voices.map((v) => v.id));
+  assert.ok((await list(a)).includes(id));
+  assert.ok(!(await list(b)).includes(id), "another account does not see it");
+  assert.equal((await call(b, `/api/voices/custom/${id}`)).status, 404, "or play it");
+  assert.equal((await call(b, `/api/voices/custom/${id}`, { method: "DELETE" })).status, 404, "or delete it");
+  assert.equal((await call(a, `/api/voices/custom/${id}`, { method: "DELETE" })).status, 200);
+});

@@ -32,6 +32,7 @@ export class FileStore implements Store {
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private closed = false;
+  private releaseLock: () => void = () => undefined;
 
   constructor(readonly file: string) {
     // Runtime guard: refuse to share one FileStore across processes.
@@ -50,8 +51,18 @@ export class FileStore implements Store {
       }
     }
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(lock, String(process.pid));
+    // Taken with O_EXCL: two processes starting together cannot both pass the check above and
+    // both write the lock. A stale lock (checked above) is replaced; a live one is refused.
+    try {
+      writeFileSync(lock, String(process.pid), { flag: "wx" });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      const holder = Number(readFileSync(lock, "utf8").trim());
+      if (holder && holder !== process.pid && pidAlive(holder)) throw new Error(`FileStore is already in use by process ${holder} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`);
+      writeFileSync(lock, String(process.pid));
+    }
     const cleanup = () => { try { if (existsSync(lock) && readFileSync(lock, "utf8").trim() === String(process.pid)) unlinkSync(lock); } catch { /* best effort */ } };
+    this.releaseLock = cleanup;
     const flushOnExit = () => { try { this.flushSync(); } catch { /* best effort */ } cleanup(); };
     this.exitHandler = flushOnExit;
     // Flush on a signal, but only exit when nothing else is listening: the server registers its
@@ -214,10 +225,10 @@ export class FileStore implements Store {
     });
   }
 
-  enqueueLimited(job: NewJob, maxActive: number) {
+  async enqueueLimited(job: NewJob, maxActive: number) {
     // Count and insert inside one serialized mutation: the check and the write cannot interleave
     // with another submit, matching the atomic single-statement form PgStore uses.
-    return this.write(() => {
+    const queued = await this.write(() => {
       if (job.idempotencyKey) {
         const existing = this.data.jobs.find((j) => j.owner === job.owner && j.idempotencyKey === job.idempotencyKey);
         if (existing) return strip(existing);
@@ -228,6 +239,10 @@ export class FileStore implements Store {
       this.data.jobs.push(row);
       return strip(row);
     });
+    // The caller answers 202 with this job's id: it must be on disk first, or a crash in the
+    // debounce window loses a job the person was told exists (PgStore commits before returning).
+    if (queued) await this.flush();
+    return queued;
   }
   async claim(workerId: string, leaseMs: number, kind?: JobKind) {
     return this.write(() => {
@@ -542,6 +557,8 @@ export class FileStore implements Store {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     await this.chain;
     try { this.persistSync(); } catch { /* best effort */ }
+    // A store closed while the process lives on must not leave its lock behind.
+    this.releaseLock();
     if (this.exitHandler) process.off("exit", this.exitHandler);
     if (this.sigintHandler) process.off("SIGINT", this.sigintHandler);
     if (this.sigtermHandler) process.off("SIGTERM", this.sigtermHandler);
@@ -581,4 +598,14 @@ function newJobRow(job: NewJob): Data["jobs"][number] {
     lockedBy: null,
     leaseUntil: null,
   };
+}
+
+/** Whether a process with this id is running. */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
 }

@@ -1,4 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Credentials a recording job needs (the site password) never sit in the queue in plain text.
@@ -9,6 +11,24 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
  * worker itself (local use), but a separate worker could not open it, so `sealable()` says so.
  */
 let processKey: Buffer | undefined;
+let fileKey: Buffer | undefined;
+
+/**
+ * Keep the sealing key in a file beside a local store, so a password sealed for a queued job can
+ * still be opened after a restart. Without it the key was random per process: a sign-in job
+ * queued before a restart lost its password and failed as if the site had refused it.
+ * LAB_SECRET_KEY, when set, still wins.
+ */
+export function useLocalKeyFile(dir: string): void {
+  const file = join(dir, "secret.key");
+  let k = existsSync(file) ? Buffer.from(readFileSync(file, "utf8").trim(), "base64") : Buffer.alloc(0);
+  if (k.length !== 32) {
+    k = randomBytes(32);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, k.toString("base64"), { mode: 0o600 });
+  }
+  fileKey = k;
+}
 
 function key(): Buffer {
   const configured = process.env.LAB_SECRET_KEY;
@@ -17,7 +37,7 @@ function key(): Buffer {
     if (k.length !== 32) throw new Error("LAB_SECRET_KEY must be 32 bytes, base64-encoded (e.g. `openssl rand -base64 32`).");
     return k;
   }
-  return (processKey ??= randomBytes(32));
+  return fileKey ?? (processKey ??= randomBytes(32));
 }
 
 /** Whether a sealed secret can be opened by a different process (a separate worker). */

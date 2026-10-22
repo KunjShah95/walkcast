@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -122,4 +122,32 @@ test("the recording proxy refuses local targets, whether tunnelled or forwarded"
   } finally {
     await proxy.close();
   }
+});
+
+test("a local server's sealing key survives a restart, so a queued password still opens", async () => {
+  const { open, seal, useLocalKeyFile } = await import("../packages/core/src/jobs/secret-box.ts");
+  const saved = process.env.LAB_SECRET_KEY;
+  delete process.env.LAB_SECRET_KEY;
+  try {
+    const dir = mkroot();
+    useLocalKeyFile(dir);
+    const sealed = seal("demo-pass");
+    const key = readFileSync(join(dir, "secret.key"), "utf8");
+    useLocalKeyFile(dir); // the next start reads the same file
+    assert.equal(readFileSync(join(dir, "secret.key"), "utf8"), key);
+    assert.equal(open(sealed), "demo-pass");
+  } finally {
+    if (saved !== undefined) process.env.LAB_SECRET_KEY = saved;
+  }
+});
+
+test("a FileStore acknowledges an enqueue only once it is on disk, and leaves no lock when closed", async () => {
+  const dir = mkroot();
+  const file = join(dir, "store.json");
+  const store = new FileStore(file);
+  const job = await store.enqueueLimited({ kind: "record", owner: null, input: { url: "https://a.example" }, secret: null, idempotencyKey: null }, 5);
+  assert.ok(job);
+  assert.ok(readFileSync(file, "utf8").includes(job.id), "on disk before the caller hears 202");
+  await store.close();
+  assert.equal(existsSync(`${file}.lock`), false, "a closed store releases its lock");
 });

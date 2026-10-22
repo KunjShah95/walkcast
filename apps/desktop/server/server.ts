@@ -1,5 +1,5 @@
 import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
-import { chmodSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,7 @@ import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from ".
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
 import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
 import { budgetLimitsFor } from "../../../packages/core/src/llm/budget.ts";
-import { seal, sharedKeyConfigured } from "../../../packages/core/src/jobs/secret-box.ts";
+import { seal, sharedKeyConfigured, useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
 import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
 import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
@@ -396,6 +396,8 @@ export function createApp(o: ServeOptions = {}): App {
   // shared between accounts.
   const credentialsEditable = !requireAuth || Boolean(o.desktop) || process.env.LAB_CREDENTIALS_EDITABLE === "1";
   const store = o.store ?? createStore(root);
+  // A local store keeps its sealing key beside it, so a queued sign-in survives a restart.
+  if (store.kind === "file") useLocalKeyFile(dirname((store as { file?: string }).file ?? join(root, ".lab", "store.json")));
   const media = o.media ?? createMedia(root);
   const data = new LabData(root);
   // Supabase Auth when SUPABASE_URL + SUPABASE_ANON_KEY are set; otherwise built-in accounts.
@@ -851,12 +853,26 @@ export function createApp(o: ServeOptions = {}): App {
 
     // ---------------------------------------------------------------- custom voice upload/list
     const voicesDir = join(root, "data", "voices");
+    // A voice sample is a recording of somebody's voice: it belongs to whoever uploaded it. The
+    // uploader is kept beside the file (<id>.owner); samples from before that existed have none
+    // and stay visible on a local server, never on a shared one.
+    const voiceOwner = (id: string): string | null => {
+      try {
+        return readFileSync(join(voicesDir, `${id}.owner`), "utf8").trim() || null;
+      } catch {
+        return null;
+      }
+    };
+    const mayUseVoice = (id: string) => {
+      const o = voiceOwner(id);
+      return o === null ? !exposed : canSee(o);
+    };
+    const voiceFiles = (id?: string) =>
+      existsSync(voicesDir) ? readdirSync(voicesDir).filter((f) => /\.(wav|mp3|ogg|m4a)$/i.test(f) && (id === undefined || basename(f, extname(f)) === id)) : [];
     if (url.pathname === "/api/voices/custom" && req.method === "GET") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      if (!existsSync(voicesDir)) return json(200, { voices: [] });
-      const files = readdirSync(voicesDir);
-      const voices = files
-        .filter((f) => /\.(wav|mp3|ogg|m4a)$/i.test(f))
+      const voices = voiceFiles()
+        .filter((f) => mayUseVoice(basename(f, extname(f))))
         .map((f) => ({ id: basename(f, extname(f)), name: f, url: `/api/voices/custom/${basename(f, extname(f))}` }));
       return json(200, { voices });
     }
@@ -864,31 +880,32 @@ export function createApp(o: ServeOptions = {}): App {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
       const tmp = await readBodyToTemp(req, 40_000_000, "voice");
       const nameHeader = String(req.headers["x-file-name"] ?? "");
-      const ext = extname(nameHeader) || ".bin";
+      const ext = /^\.(wav|mp3|ogg|m4a)$/i.test(extname(nameHeader)) ? extname(nameHeader).toLowerCase() : ".wav";
       const id = randomUUID();
       mkdirSync(voicesDir, { recursive: true });
       const dest = join(voicesDir, `${id}${ext}`);
-      renameSync(tmp, dest);
+      moveFile(tmp, dest);
+      if (owner) writeFileSync(join(voicesDir, `${id}.owner`), owner);
       capabilitiesCache.clear();
       return json(201, { id, name: basename(dest), url: `/api/voices/custom/${id}` });
     }
     const customVoiceMatch = /^\/api\/voices\/custom\/([\w-]+)$/.exec(url.pathname);
     if (customVoiceMatch && (req.method === "GET" || req.method === "HEAD")) {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      if (!existsSync(voicesDir)) return json(404, { error: "Not found." });
       const id = customVoiceMatch[1]!;
-      const files = readdirSync(voicesDir).filter((f) => basename(f, extname(f)) === id);
-      if (files.length === 0) return json(404, { error: "Not found." });
+      const files = voiceFiles(id);
+      if (files.length === 0 || !mayUseVoice(id)) return json(404, { error: "Not found." });
       const abs = join(voicesDir, files[0]!);
       const ct = TYPES[extname(abs).toLowerCase()] ?? "application/octet-stream";
       return void streamFile(req, res, abs, ct, "private, max-age=3600");
     }
     if (customVoiceMatch && req.method === "DELETE") {
       if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      if (!existsSync(voicesDir)) return json(404, { error: "Not found." });
       const id = customVoiceMatch[1]!;
-      const files = readdirSync(voicesDir).filter((f) => basename(f, extname(f)) === id);
+      const files = voiceFiles(id);
+      if (files.length === 0 || !mayUseVoice(id)) return json(404, { error: "Not found." });
       for (const f of files) rmSync(join(voicesDir, f), { force: true });
+      rmSync(join(voicesDir, `${id}.owner`), { force: true });
       capabilitiesCache.clear();
       return json(200, { ok: true });
     }
@@ -923,6 +940,9 @@ export function createApp(o: ServeOptions = {}): App {
       const voice = (url.searchParams.get("voice") ?? "").trim();
       const language = (url.searchParams.get("language") ?? "").trim().slice(0, 20);
       if (!provider) return json(400, { error: "provider is required." });
+      if (!/^[\w:.-]{1,80}$/.test(voice || "x") || !/^[\w-]{0,20}$/.test(language)) return json(400, { error: "That voice or language is not one a provider names." });
+      // Every new preview is a paid synthesis on the operator's key: 30 an hour per account.
+      if ((await store.hit(`preview:${owner ?? clientIp(req)}`, 3_600_000)) > 30) return json(429, { error: "Too many voice previews this hour. Try again later." });
       try {
         const buf = await cloudVoicePreview(provider, voice, language || undefined);
         const ct = buf.length >= 4 && buf.toString("ascii", 0, 4) === "RIFF" ? "audio/wav"
@@ -2092,4 +2112,15 @@ export function exportDashboard(options: ExportOptions): { path: string; runs: n
   }
   writeFileSync(options.out, html);
   return { path: options.out, runs: Object.keys(details).length, bytes: Buffer.byteLength(html) };
+}
+
+/** Move a file, across filesystems too: a rename between two mounts or drives fails with EXDEV. */
+function moveFile(from: string, to: string): void {
+  try {
+    renameSync(from, to);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
+    copyFileSync(from, to);
+    rmSync(from, { force: true });
+  }
 }
