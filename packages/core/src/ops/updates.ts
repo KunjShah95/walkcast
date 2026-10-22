@@ -31,20 +31,57 @@ export function currentVersion(): string {
 
 /** Numeric semver compare on major.minor.patch; a pre-release suffix sorts before the release. */
 export function newerThan(a: string, b: string): boolean {
-  const parse = (v: string) => {
-    const [core, pre] = v.replace(/^v/, "").split("-", 2);
-    return { nums: (core ?? "").split(".").map((n) => Number.parseInt(n, 10) || 0), pre: pre ?? null };
-  };
-  const x = parse(a);
-  const y = parse(b);
+  return compareVersions(a, b) > 0;
+}
+
+/**
+ * semver precedence, including pre-release identifiers.
+ *
+ * A pre-release sorts before its release. Identifiers are compared one by one: numeric ones
+ * numerically (so `beta.10` is newer than `beta.9`), numeric before alphanumeric, and the rest
+ * lexically. Build metadata (`+sha`) is ignored, as semver says it should be.
+ */
+function compareVersions(a: string, b: string): number {
+  const x = parseVersion(a);
+  const y = parseVersion(b);
   for (let i = 0; i < 3; i++) {
     const d = (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
-    if (d !== 0) return d > 0;
+    if (d !== 0) return d > 0 ? 1 : -1;
   }
-  if (x.pre === y.pre) return false;
-  if (x.pre === null) return true;
-  if (y.pre === null) return false;
-  return x.pre > y.pre;
+  if (x.pre === y.pre) return 0;
+  if (x.pre === null) return 1; // a release is newer than any pre-release of it
+  if (y.pre === null) return -1;
+  return comparePrerelease(x.pre, y.pre);
+}
+
+function parseVersion(v: string): { nums: number[]; pre: string | null } {
+  const clean = v.trim().replace(/^v/i, "").split("+")[0] ?? "";
+  const dash = clean.indexOf("-");
+  const core = dash === -1 ? clean : clean.slice(0, dash);
+  return { nums: core.split(".").map((n) => Number.parseInt(n, 10) || 0), pre: dash === -1 ? null : clean.slice(dash + 1) };
+}
+
+function comparePrerelease(a: string, b: string): number {
+  const x = a.split(".");
+  const y = b.split(".");
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const left = x[i];
+    const right = y[i];
+    if (left === undefined) return -1; // fewer identifiers sorts first
+    if (right === undefined) return 1;
+    const nx = /^\d+$/.test(left) ? Number(left) : null;
+    const ny = /^\d+$/.test(right) ? Number(right) : null;
+    if (nx !== null && ny !== null) {
+      if (nx !== ny) return nx < ny ? -1 : 1;
+    } else if (nx !== null) {
+      return -1; // numeric identifiers sort before alphanumeric ones
+    } else if (ny !== null) {
+      return 1;
+    } else if (left !== right) {
+      return left < right ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 let cache: { at: number; value: UpdateCheck } | null = null;

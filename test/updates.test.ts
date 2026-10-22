@@ -12,6 +12,15 @@ test("version comparison is numeric, and a pre-release sorts before its release"
   assert.equal(newerThan("0.3.0-rc.1", "0.3.0"), false);
 });
 
+test("pre-release identifiers compare by semver, not as text", () => {
+  assert.equal(newerThan("1.0.0-beta.10", "1.0.0-beta.9"), true, "beta.10 is newer than beta.9");
+  assert.equal(newerThan("1.0.0-beta.9", "1.0.0-beta.10"), false);
+  assert.equal(newerThan("1.0.0-rc.1", "1.0.0-beta.11"), true);
+  assert.equal(newerThan("1.0.0-alpha", "1.0.0-alpha.1"), false, "fewer identifiers sorts first");
+  assert.equal(newerThan("1.0.0+build.5", "1.0.0"), false, "build metadata is ignored");
+  assert.equal(newerThan("1.0.0-beta+exp.sha.5114f85", "1.0.0-beta"), false);
+});
+
 test("release check reports an update, caches it, and turns failures into an error field", async () => {
   let calls = 0;
   const ok = (async () => {
