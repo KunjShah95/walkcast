@@ -1000,10 +1000,7 @@ try {
       if (captions) fresh.captions = captions;
       fresh.media = { ...fresh.media, ...result, video: fresh.media.video };
       writeFileSync(file, JSON.stringify(fresh, null, 2));
-      if (store.kind !== "file") {
-        const { dir: _dir, ...rest } = fresh;
-        await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
-      }
+      await saveRecordingSummary(id, row.owner, fresh);
       return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
     }
     // The walkthrough re-framed for a feed: 9:16 or 1:1, captions burned in. Made on request,
@@ -1030,10 +1027,7 @@ try {
       const fresh = rereadSummary(file, summary);
       fresh.media = { ...fresh.media, exports: { ...fresh.media.exports, [shape]: made.file } };
       writeFileSync(file, JSON.stringify(fresh, null, 2));
-      if (store.kind !== "file") {
-        const { dir: _dir, ...rest } = fresh;
-        await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
-      }
+      await saveRecordingSummary(id, row.owner, fresh);
       return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
     }
     // Share a walkthrough: a link that plays it for whoever has it, until it expires.
@@ -1276,10 +1270,7 @@ try {
         fresh.captions = captions;
         fresh.media = { ...fresh.media, captions: "captions.vtt" };
         writeFileSync(file, JSON.stringify(fresh, null, 2));
-        if (store.kind !== "file") {
-          const { dir: _dir, ...rest } = fresh;
-          await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
-        }
+        await saveRecordingSummary(id, row.owner, fresh);
         return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions });
       } catch (e) {
         return json(500, { error: e instanceof Error ? e.message : String(e) });
@@ -1315,6 +1306,11 @@ try {
         const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
         const env = credentialFor(input.ttsProvider);
         return refuse(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the basic offline voice.`);
+      }
+      // A custom voice sample is the uploader's. Naming somebody else's id in the form would
+      // narrate in a stranger's voice, so it is refused rather than quietly swapped for a default.
+      if (kind === "record" && input.ttsProvider === "custom-voice" && typeof input.ttsVoice === "string" && !mayUseVoice(input.ttsVoice)) {
+        return json(400, { error: "That voice sample belongs to another account. Upload your own in Settings." });
       }
       // A retried submit (double-click, network retry) gets the job it already created.
       const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;
@@ -1698,6 +1694,11 @@ try {
    *
    * A summary lives in two places on a shared server: the file on disk and the row in the
    * database. Both are written, or the next reader sees one of them and not the other.
+   *
+   * The row is also the record of whether the walkthrough still exists. A re-voice, an export or
+   * a transcript reads the summary, spends a minute on ffmpeg, then gets here. If the walkthrough
+   * was deleted in the meantime, an upsert would bring the index row back pointing at files that
+   * are gone, so a save after a delete is dropped instead.
    */
   async function saveRecordingSummary(id: string, owner: string | null, summary: RecordingSummary): Promise<void> {
     if (media.kind === "local") {
@@ -1705,6 +1706,7 @@ try {
       if (existsSync(file)) writeFileSync(file, JSON.stringify(summary, null, 2));
     }
     if (store.kind !== "file") {
+      if (!(await store.recording(id))) return;
       const { dir: _dir, ...rest } = summary;
       await store.saveRecording({ id, owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
     }
