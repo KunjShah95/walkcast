@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { TraceEvent } from "./capture/recorder.ts";
 import type { RecordingInsights } from "./record/insights.ts";
 import type { FixtureManifest } from "./lab/fixture.ts";
@@ -165,6 +165,19 @@ export interface LabIndex {
   failedRecordings?: number;
 }
 
+/**
+ * The account a lab output belongs to is written beside it, in this file, by the worker that
+ * made it for that account. Output without one (the CLI's, published results, anything made
+ * before the stamp existed) belongs to nobody in particular and stays visible as before.
+ */
+export const OWNER_FILE = ".owner";
+
+/** Mark `dir` (created if needed) and everything under it as `owner`'s. */
+export function stampOwner(dir: string, owner: string): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, OWNER_FILE), owner);
+}
+
 export class LabData {
   readonly root: string;
 
@@ -271,6 +284,26 @@ export class LabData {
   }
 
   /** Resolve a workspace-relative path, refusing anything outside the lab's output folders. */
+  /**
+   * Whose lab output `path` is: the stamp in its folder or the nearest folder above it, up to
+   * the data root. null when nothing on the way up is stamped.
+   */
+  ownerOf(path: string): string | null {
+    let dir = resolve(this.root, path);
+    while (dir.startsWith(this.root + sep)) {
+      const stamp = join(dir, OWNER_FILE);
+      if (existsSync(stamp)) {
+        try {
+          return readFileSync(stamp, "utf8").trim() || null;
+        } catch {
+          return null;
+        }
+      }
+      dir = dirname(dir);
+    }
+    return null;
+  }
+
   safe(path: string): string | null {
     const abs = resolve(this.root, path);
     const allowed = ["runs", "results", "fixtures", "baselines", "recordings"].map((d) => join(this.root, d) + sep);

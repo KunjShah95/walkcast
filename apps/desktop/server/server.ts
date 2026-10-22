@@ -1,4 +1,4 @@
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import { chmodSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
@@ -30,6 +30,8 @@ import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from 
 import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
 import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insights.ts";
 import { chaptersOf, toSrt, toVtt, transcriptMarkdown } from "../../../packages/core/src/record/transcript.ts";
+import { guideHtml, guideMarkdown, guideSteps } from "../../../packages/core/src/record/guide.ts";
+import { isShape, socialExport } from "../../../packages/core/src/record/social.ts";
 import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
@@ -378,6 +380,8 @@ export function createApp(o: ServeOptions = {}): App {
   applyCredentialsFile(root);
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
+  // Whether anyone said where this server lives; createApp alone falls back to a guess.
+  const siteUrlConfigured = Boolean(o.siteUrl ?? process.env.LAB_SITE_URL);
   const requireAuth = o.requireAuth ?? process.env.LAB_AUTH !== "off";
   // Credentials are a single process-global set (they land in process.env, so they are used by
   // every tenant). There is no admin/operator concept, so "is there a session" was the only gate:
@@ -461,6 +465,56 @@ export function createApp(o: ServeOptions = {}): App {
     const redirect = (location: string) => {
       res.writeHead(302, { Location: location, ...securityHeaders });
       res.end();
+    };
+    /**
+     * Send a recording's step-by-step guide.
+     *
+     * Built from the summary the store already holds, not from the media folder: on object
+     * storage that folder is a presigned redirect, and a guide is a document, not a download.
+     * Pictures are linked through `imageBase`; when the media store answers a picture with a
+     * redirect, the CSP has to name the storage origin or the browser blocks every image.
+     */
+    const sendGuide = async (id: string, summary: RecordingSummary, format: string, imageBase: string) => {
+      const steps = guideSteps(summary.pages ?? [], summary.actions ?? []);
+      const doc = { url: summary.url ?? "", steps, createdAt: summary.createdAt };
+      if (format === "md" || format === "markdown") {
+        // Pasted elsewhere, a relative picture link points nowhere: spell out this server. Its
+        // configured address when it has one, never the Host header of a request from outside.
+        // A loopback-only server with nothing configured is only reached by its own machine, and
+        // there the Host header is the one address that is sure to be right.
+        const origin = siteUrlConfigured || exposed ? siteUrl : `${secure ? "https" : "http"}://${req.headers.host ?? "127.0.0.1"}`;
+        const body = guideMarkdown({ ...doc, imageBase: `${origin}${imageBase}` });
+        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
+        return void res.end(body);
+      }
+      if (format === "html") {
+        // A picture request goes to imageBase, is redirected to the media store, and the final
+        // URL is what CSP checks. Ask the store where the first picture really lives.
+        let imgSrc = "'self'";
+        const first = steps.find((s) => s.image)?.image;
+        if (first) {
+          const where = await media.locate(id, first);
+          if (where && "redirect" in where) {
+            try {
+              imgSrc += ` ${new URL(where.redirect).origin}`;
+            } catch {
+              /* a malformed redirect is the store's problem; 'self' is the safe default */
+            }
+          }
+        }
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          // The page holds text from the recorded site. It is escaped, and even so it may run
+          // nothing and load nothing but its own pictures.
+          "Content-Security-Policy": `default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
+          "X-Robots-Tag": "noindex, nofollow",
+          ...securityHeaders,
+        });
+        return void res.end(guideHtml({ ...doc, imageBase }));
+      }
+      return json(400, { error: "unknown format" });
     };
 
     // Canonical host + scheme: one URL per page, https, no trailing-slash duplicates.
@@ -685,6 +739,12 @@ export function createApp(o: ServeOptions = {}): App {
     // on a server that isn't reachable from other machines.
     const canSee = (owner: string | null | undefined) => (owner ? !requireAuth || owner === user?.id : !exposed);
     const owner = user?.id ?? null;
+    // Lab output (runs, fixtures, experiments) made for an account is stamped as theirs and shown
+    // only to them. Unstamped output (the CLI's, published results) stays visible as it always was.
+    const canSeeLab = (path: string) => {
+      const stamped = data.ownerOf(path);
+      return stamped === null || canSee(stamped);
+    };
 
     // ---------------------------------------------------------------- dashboard API
     if (url.pathname === "/api/index") {
@@ -692,7 +752,14 @@ export function createApp(o: ServeOptions = {}): App {
       const index = data.index(limit);
       const scope = requireAuth ? (user?.id ?? "-") : null;
       const failed = await Promise.all([store.failedJobs(scope, "record", 200), store.failedJobs(scope, "run", 200)]).then((l) => l.flat(), () => []);
-      return json(200, { ...index, recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)), failedRecordings: failed.filter((j) => canSee(j.owner)).length });
+      return json(200, {
+        ...index,
+        runs: index.runs.filter((r) => canSeeLab(r.dir)),
+        fixtures: index.fixtures.filter((f) => canSeeLab(f.dir)),
+        experiments: index.experiments.filter((e) => canSeeLab(e.dir)),
+        recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)),
+        failedRecordings: failed.filter((j) => canSee(j.owner)).length,
+      });
     }
     // Recordings that failed, for the Lab: the job's error and last stage, plus the report and
     // evidence (screenshot, partial video, pages reached) the worker kept when it could.
@@ -887,9 +954,10 @@ export function createApp(o: ServeOptions = {}): App {
       if (!existsSync(file)) return json(404, { error: "Recording not found." });
       const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
       let result;
+      let captions: RecordingSummary["captions"] | undefined;
       if (what === "narration") {
         const b = await readJson(req, 500_000);
-        const captions = validateCaptions(b.captions);
+        captions = validateCaptions(b.captions);
         const voice = isVoice(b.voice) ? b.voice : "slt";
         // Re-speak with the voice the recording was made in ("elevenlabs:<voice id>"), so fixing
         // one line doesn't swap a natural voice for the offline one.
@@ -897,7 +965,6 @@ export function createApp(o: ServeOptions = {}): App {
         const [spokeProvider = "", ...spokeVoice] = spoke.split(":");
         const cloud = spokeProvider && isCloudProvider(spokeProvider) ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined) : null;
         result = await renarrate(dir, captions, voice, cloud);
-        summary.captions = captions;
       } else {
         const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");
 try {
@@ -906,13 +973,47 @@ try {
   rmSync(audioPath, { force: true });
 }
       }
-      summary.media = { ...summary.media, ...result, video: summary.media.video };
-      writeFileSync(file, JSON.stringify(summary, null, 2));
+      // Re-voicing takes a while. Read the summary again and change only what it made, so a share
+      // link or note created in the meantime is not written over by the copy read at the start.
+      const fresh = rereadSummary(file, summary);
+      if (captions) fresh.captions = captions;
+      fresh.media = { ...fresh.media, ...result, video: fresh.media.video };
+      writeFileSync(file, JSON.stringify(fresh, null, 2));
       if (store.kind !== "file") {
-        const { dir: _dir, ...rest } = summary;
-        await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
+        const { dir: _dir, ...rest } = fresh;
+        await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
       }
-      return json(200, { recording: { ...summary, id, dir: `recordings/${id}` } });
+      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
+    }
+    // The walkthrough re-framed for a feed: 9:16 or 1:1, captions burned in. Made on request,
+    // because most walkthroughs never need one and each takes an encode.
+    const exportMatch = /^\/api\/recordings\/([\w.-]+)\/export$/.exec(url.pathname);
+    if (exportMatch && req.method === "POST") {
+      const id = exportMatch[1]!;
+      const shape = url.searchParams.get("shape");
+      if (!isShape(shape)) return json(400, { error: "shape must be vertical or square" });
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "Exports need recordings kept on this server's disk." });
+      const dir = join(root, "recordings", id);
+      const file = join(dir, "recording.json");
+      if (!existsSync(file)) return json(404, { error: "Recording not found." });
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
+      let made: { file: string; captions: boolean };
+      try {
+        made = await socialExport(dir, shape);
+      } catch (e) {
+        return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
+      }
+      // The encode takes a while: change only what it made, on a fresh read of the summary.
+      const fresh = rereadSummary(file, summary);
+      fresh.media = { ...fresh.media, exports: { ...fresh.media.exports, [shape]: made.file } };
+      writeFileSync(file, JSON.stringify(fresh, null, 2));
+      if (store.kind !== "file") {
+        const { dir: _dir, ...rest } = fresh;
+        await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
+      }
+      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
     }
     // Share a walkthrough: a link that plays it for whoever has it, until it expires.
     //
@@ -947,13 +1048,24 @@ try {
     }
     // The public side of a share link: the page, and the media it plays.
     const shareView = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/?$/.exec(url.pathname);
+    const shareGuide = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/guide\/?$/.exec(url.pathname);
     const shareFile = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/([\w.-]+)$/.exec(url.pathname);
+    // A shared walkthrough can also be read as a step-by-step guide. The token is the permission,
+    // exactly as it is for the video: a reader who was sent the link needs no account for either.
+    if (shareGuide && (req.method === "GET" || req.method === "HEAD")) {
+      const [, id, token] = shareGuide as unknown as [string, string, string];
+      const found = await findRecording(id);
+      const summary = found?.summary;
+      const share = summary && (summary.shares ?? []).find((s) => sameToken(s.token, token));
+      if (!summary || !share || Date.parse(share.expiresAt) <= Date.now()) return json(404, { error: "This link has expired." });
+      return sendGuide(id, summary, (url.searchParams.get("format") ?? "html").toLowerCase(), `/share/${encodeURIComponent(id)}/${token}/`);
+    }
     if ((shareView || shareFile) && (req.method === "GET" || req.method === "HEAD")) {
       const [, id, token, file] = (shareFile ?? shareView) as unknown as [string, string, string, string | undefined];
       const found = await findRecording(id);
       const summary = found?.summary;
       if (!summary) return json(404, { error: "This link is not valid." });
-      const share = (summary.shares ?? []).find((s) => s.token === token);
+      const share = (summary.shares ?? []).find((s) => sameToken(s.token, token));
       if (!share || Date.parse(share.expiresAt) <= Date.now()) return json(404, { error: "This link has expired." });
       if (file) {
         // Only the files this walkthrough published can be fetched through the link.
@@ -965,6 +1077,7 @@ try {
             summary.media.captions,
             summary.media.audio,
             ...summary.pages.map((p) => p.screenshot),
+            ...(summary.actions ?? []).map((a) => a.shot),
           ].filter((f): f is string => Boolean(f)),
         );
         if (!allowed.has(file)) return json(404, { error: "not found" });
@@ -1001,6 +1114,7 @@ try {
         chapters,
         transcript: captions.map((c) => ({ start: c.start, text: c.text })),
         notes,
+        guideUrl: `${base}/guide`,
         expiresAt: share.expiresAt.slice(0, 10),
         ...(summary.media.note && /failed|instead|could not reach/i.test(summary.media.note) ? { note: summary.media.note } : {}),
       };
@@ -1129,16 +1243,18 @@ try {
       if (configuredSttProviders().length === 0) return json(400, { error: "Auto-captions need a speech-to-text key. Add an OpenAI, Groq, ElevenLabs or Sarvam key in Settings." });
       try {
         const captions = await generateCaptionsFromAudio(join(dir, audioFile), language, typeof (b as any)?.provider === "string" ? (b as any).provider : null);
-        summary.captions = captions;
         const { toWebVtt } = await import("../../../packages/core/src/record/narration.ts");
         writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions as any));
-        summary.media = { ...summary.media, captions: "captions.vtt" };
-        writeFileSync(file, JSON.stringify(summary, null, 2));
+        // Speech-to-text takes a while: change only the captions on a fresh read (see narration).
+        const fresh = rereadSummary(file, summary);
+        fresh.captions = captions;
+        fresh.media = { ...fresh.media, captions: "captions.vtt" };
+        writeFileSync(file, JSON.stringify(fresh, null, 2));
         if (store.kind !== "file") {
-          const { dir: _dir, ...rest } = summary;
-          await store.saveRecording({ id, owner: row.owner, url: summary.url, createdAt: summary.createdAt, summary: rest });
+          const { dir: _dir, ...rest } = fresh;
+          await store.saveRecording({ id, owner: row.owner, url: fresh.url, createdAt: fresh.createdAt, summary: rest });
         }
-        return json(200, { recording: { ...summary, id, dir: `recordings/${id}` }, captions });
+        return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions });
       } catch (e) {
         return json(500, { error: e instanceof Error ? e.message : String(e) });
       }
@@ -1165,6 +1281,8 @@ try {
         if (e instanceof AuthError && e.status === 400) return /^(Confirm that you own|Paste the site's URL)/.test(e.message) ? json(400, { error: e.message }) : refuse(400, e.message);
         throw e;
       }
+      // Another account's fixture is as good as absent: replaying it would read their run.
+      if (kind === "run" && typeof input.fixture === "string" && !canSeeLab(input.fixture)) return json(400, { error: "That fixture doesn't exist here." });
       // A cloud voice this process can't reach would quietly ship with no voice, which reads as "I picked ElevenLabs and got something else". When we hold the worker we can say so up front,
       // instead of returning a video in the wrong voice minutes later.
       if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
@@ -1185,25 +1303,46 @@ try {
       // still enforces the ceiling atomically; this only keeps the common case from costing quota.
       if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
       const perDay = kind === "record" ? LIMITS.recordingsPerDay : LIMITS.runsPerDay;
-      if ((await store.hit(`quota:${kind}:${owner ?? "local"}`, 86_400_000)) > perDay) {
-        throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
+      // Every quota this request was charged, so a request turned away below gets them back:
+      // a refusal must not cost one of the day's runs.
+      const charged: string[] = [];
+      const refund = () => Promise.all(charged.map((k) => store.unhit(k).catch((e) => log.warn("quota.refund_failed", { key: k, error: String(e) }))));
+      let job: Awaited<ReturnType<typeof store.enqueueLimited>>;
+      try {
+        job = await (async () => {
+          const dayKey = `quota:${kind}:${owner ?? "local"}`;
+          const usedToday = await store.hit(dayKey, 86_400_000);
+          charged.push(dayKey);
+          if (usedToday > perDay) {
+            throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
+          }
+          if (kind === "run") {
+            // Model-backed agents spend provider tokens on a live run: they get their own ceiling.
+            const spec = resolveAgent(String(input.agent));
+            const perAgent = agentDailyLimit(spec);
+            const free = input.modelMode === "replay" || input.modelMode === "scripted";
+            if (perAgent !== null && !free) {
+              const agentKey = `quota:agent:${spec.id}:${owner ?? "local"}`;
+              const usedByAgent = await store.hit(agentKey, 86_400_000);
+              charged.push(agentKey);
+              if (usedByAgent > perAgent) {
+                throw new AuthError(429, `Daily limit reached for agent ${spec.id} (${perAgent} runs). Try again tomorrow, or replay a fixture instead (no model cost).`);
+              }
+            }
+          }
+          let secret: string | null = null;
+          if (kind === "record" && typeof b.password === "string" && b.password) {
+            if (!worker && !sharedKeyConfigured()) throw new AuthError(503, "This server is missing LAB_SECRET_KEY, which separate workers need to receive sign-in details. Ask the operator to set it.");
+            secret = seal(b.password);
+          }
+          const queued = await store.enqueueLimited({ kind, owner, input, secret, idempotencyKey }, LIMITS.activeJobsPerUser);
+          if (!queued) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
+          return queued;
+        })();
+      } catch (e) {
+        await refund();
+        throw e;
       }
-      if (kind === "run") {
-        // Model-backed agents spend provider tokens on a live run: they get their own ceiling.
-        const spec = resolveAgent(String(input.agent));
-        const perAgent = agentDailyLimit(spec);
-        const free = input.modelMode === "replay" || input.modelMode === "scripted";
-        if (perAgent !== null && !free && (await store.hit(`quota:agent:${spec.id}:${owner ?? "local"}`, 86_400_000)) > perAgent) {
-          throw new AuthError(429, `Daily limit reached for agent ${spec.id} (${perAgent} runs). Try again tomorrow, or replay a fixture instead (no model cost).`);
-        }
-      }
-      let secret: string | null = null;
-      if (kind === "record" && typeof b.password === "string" && b.password) {
-        if (!worker && !sharedKeyConfigured()) throw new AuthError(503, "This server is missing LAB_SECRET_KEY, which separate workers need to receive sign-in details. Ask the operator to set it.");
-        secret = seal(b.password);
-      }
-      const job = await store.enqueueLimited({ kind, owner, input, secret, idempotencyKey }, LIMITS.activeJobsPerUser);
-      if (!job) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
       worker?.poke();
       log.info("job.enqueued", { job: job.id, kind, owner });
       return json(202, { job: await withQueue(store, job) });
@@ -1351,33 +1490,30 @@ try {
       return json(removed ? 200 : 404, { schedules: await store.schedules(owner), ...(removed ? {} : { error: "schedule not found" }) });
     }
     if (url.pathname === "/api/run") {
-      const detail = data.run(url.searchParams.get("dir") ?? "");
+      const dir = url.searchParams.get("dir") ?? "";
+      const detail = canSeeLab(dir) ? data.run(dir) : null;
       return detail ? json(200, detail) : json(404, { error: "run not found" });
     }
     const transcriptMatch = /^\/api\/recordings\/([\w.-]+)\/transcript$/.exec(url.pathname);
     if (transcriptMatch && req.method === "GET") {
       const id = transcriptMatch[1]!;
       const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "not found" });
-      const located = await media.locate(id, "recording.json");
-      if (!located || "redirect" in located) {
-        // For s3, fetch via redirect not handled; fall back to 404 for now.
-        if (located && "redirect" in located) return redirect(located.redirect);
-        return json(404, { error: "not found" });
-      }
-      let summary: RecordingSummary = {} as RecordingSummary;
-      try { summary = JSON.parse(readFileSync(located.path, "utf8")) as RecordingSummary; } catch { return json(500, { error: "bad recording" }); }
+      if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "not found" });
+      // The summary is the recording's own document wherever the media lives. Reading it from
+      // the store keeps transcripts working when recording.json is in object storage, where a
+      // locate() is a redirect to a file the browser would download instead of the server read.
+      const summary: RecordingSummary = row.summary;
       const caps = summary.captions ?? [];
       const format = (url.searchParams.get("format") ?? "json").toLowerCase();
       if (format === "json") return json(200, { captions: caps });
       if (format === "srt") {
         const body = toSrt(caps);
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
         return void res.end(body);
       }
       if (format === "vtt") {
         const body = toVtt(caps);
-        res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" });
+        res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
         return void res.end(body);
       }
       if (format === "md" || format === "markdown") {
@@ -1393,10 +1529,20 @@ try {
           notes: notes.map((n) => ({ at: n.at, text: n.text })),
           findings: summary.insights?.findings ?? [],
         });
-        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store" });
+        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
         return void res.end(body);
       }
       return json(400, { error: "unknown format" });
+    }
+    // The same visit as a step-by-step guide: every page it opened and every click and fill,
+    // each with a picture of the screen at that moment. HTML to read or print, Markdown to paste.
+    const guideMatch = /^\/api\/recordings\/([\w.-]+)\/guide$/.exec(url.pathname);
+    if (guideMatch && req.method === "GET") {
+      const id = guideMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "not found" });
+      if (!row.summary) return json(404, { error: "not found" });
+      return sendGuide(id, row.summary, (url.searchParams.get("format") ?? "html").toLowerCase(), `/files/recordings/${encodeURIComponent(id)}/`);
     }
 
     if (url.pathname.startsWith("/files/")) {
@@ -1421,7 +1567,7 @@ try {
       const abs = data.safe(rel);
       const type = abs ? TYPES[extname(abs).toLowerCase()] : undefined;
       const inRecordings = !!abs && (abs === join(data.root, "recordings") || abs.startsWith(join(data.root, "recordings") + sep));
-      if (!abs || !type || !existsSync(abs) || inRecordings) return json(404, { error: "not found" });
+      if (!abs || !type || !existsSync(abs) || inRecordings || !canSeeLab(abs)) return json(404, { error: "not found" });
       return streamFile(req, res, abs, type, "private, max-age=3600");
     }
     if (url.pathname === "/app" || url.pathname === "/app/") {
@@ -1591,6 +1737,40 @@ async function withQueue(store: Store, job: Job) {
   }
 }
 
+/** Compare a share token in constant time, so response timing says nothing about how close a guess was. */
+function sameToken(stored: string, given: string): boolean {
+  const a = Buffer.from(stored);
+  const b = Buffer.from(given);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** A recording's summary as it is on disk now, or `fallback` when it can no longer be read. */
+function rereadSummary<T extends RecordingSummary>(file: string, fallback: T): T {
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+const LIVE_RUNS_OFF = "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.";
+
+/** An agent whose turns are model calls, so a live run of it spends provider credits. */
+function isModelBacked(agentId: string): boolean {
+  return allAgents().some((a) => a.id === agentId && a.kind === "stagehand");
+}
+
+/** Whether replaying `fixture` with `agent` would play recorded calls rather than call the model. */
+function replaysRecordedCalls(root: string, fixture: string, agent: string): boolean {
+  try {
+    const manifest = JSON.parse(readFileSync(join(root, fixture, "manifest.json"), "utf8")) as { original?: { agent?: { id?: string }; model?: { cassette?: string } } };
+    const cassette = manifest.original?.model?.cassette;
+    return manifest.original?.agent?.id === agent && typeof cassette === "string" && existsSync(join(root, fixture, cassette));
+  } catch {
+    return false;
+  }
+}
+
 export function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = process.cwd()): Record<string, unknown> {
   const op = b.op === undefined ? "run" : String(b.op);
   if (!["run", "replay", "experiment"].includes(op)) throw new AuthError(400, `Unknown lab operation "${op}".`);
@@ -1610,7 +1790,14 @@ export function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, 
     // and the replay could not be tried at all without one.
     const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
     if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
-    if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.");
+    if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, LIVE_RUNS_OFF);
+    // No mode given: a model-backed agent replays the fixture's recorded calls when it is the
+    // agent that made them, and otherwise goes live (lab/fixture.ts). Decide that here, where the
+    // live-run switch is checked, so leaving the field out is never a way past it.
+    if (modelMode === undefined && isModelBacked(agent) && !allowLiveRuns) {
+      if (!replaysRecordedCalls(root, fixture, agent)) throw new AuthError(403, `${LIVE_RUNS_OFF} This fixture has no recorded model calls for agent ${agent}, so replaying it would call the model live.`);
+      return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead", modelMode: "replay" };
+    }
     return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead", ...(modelMode ? { modelMode } : {}) };
   }
   if (op === "experiment") {
@@ -1629,7 +1816,11 @@ export function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, 
   if (!allAgents().some((a) => a.id === agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
   const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
   if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
-  if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.");
+  if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, LIVE_RUNS_OFF);
+  // A model-backed agent with no mode runs live (lab/runner.ts): the same switch applies.
+  if (modelMode === undefined && isModelBacked(agent) && !allowLiveRuns) {
+    throw new AuthError(403, `${LIVE_RUNS_OFF} Pick the scripted or replay model mode for agent ${agent}.`);
+  }
   let fault: string;
   try {
     fault = normalizeScenario(String(b.fault ?? "none"));
@@ -1660,6 +1851,8 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
       // The sample site narrates with the voice the person picked, like any other recording.
       ...voiceBlock(b),
       ...lengthBlock(b),
+      ...(b.zoom === false ? { zoom: false } : {}),
+      ...(b.narration === "plain" ? { narration: "plain" } : {}),
       blockPrivate: false,
     };
   }
@@ -1680,6 +1873,8 @@ function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<st
     ...(isVoice(b.voice) ? { voice: b.voice } : {}),
     ...voiceBlock(b),
     ...journeyBlock(b),
+    ...(b.zoom === false ? { zoom: false } : {}),
+    ...(b.narration === "plain" ? { narration: "plain" } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
   };
 }

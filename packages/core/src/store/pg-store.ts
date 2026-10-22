@@ -101,6 +101,10 @@ export class PgStore implements Store {
     return Number(r!.count);
   }
 
+  async unhit(key: string) {
+    await this.sql`update rate_limits set count = greatest(count - 1, 0) where key = ${key}`;
+  }
+
   // ---------------------------------------------------------------- jobs
 
   async insertFailed(job: Pick<NewJob, "kind" | "owner" | "input">, error: string) {

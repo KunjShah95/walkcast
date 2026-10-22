@@ -1,5 +1,8 @@
+import { lookup as dnsLookup } from "node:dns";
 import { lookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { createServer, request as httpRequest, type IncomingMessage } from "node:http";
+import { BlockList, connect, isIP, type LookupFunction } from "node:net";
+import type { Duplex } from "node:stream";
 import type { BrowserContext } from "playwright";
 
 /**
@@ -106,4 +109,104 @@ export async function guardContext(context: BrowserContext): Promise<string[]> {
     return route.continue();
   });
   return blocked;
+}
+
+/**
+ * A DNS lookup for sockets that refuses private and local answers.
+ *
+ * Checking a hostname and then letting the client resolve it again leaves a gap: a hostile DNS
+ * server can answer the check with a public address and the connection with 127.0.0.1 (DNS
+ * rebinding). Handing this to `http.request` / `net.connect` as their `lookup` closes the gap,
+ * because the address that was checked is the address the socket connects to.
+ */
+export const guardedLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, "", 0);
+    const list = addresses as unknown as { address: string; family: number }[];
+    const bad = list.find((a) => isPrivateAddress(a.address));
+    if (list.length === 0 || bad) {
+      const e = Object.assign(new Error(`${hostname} resolves to a private or local address${bad ? ` (${bad.address})` : ""}.`), { code: "EBLOCKED" });
+      return callback(e, "", 0);
+    }
+    if (options.all) return (callback as unknown as (e: null, a: typeof list) => void)(null, list);
+    callback(null, list[0]!.address, list[0]!.family);
+  });
+};
+
+/** A literal address is checked as it is; a name goes through guardedLookup at connect time. */
+function literalBlocked(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "");
+  return isIP(h) !== 0 && isPrivateAddress(h);
+}
+
+/**
+ * A local forward proxy for the recording browser that connects only to public addresses.
+ *
+ * `guardContext` stops requests whose host looks private when Chromium asks for them, but
+ * Chromium then resolves the name again on its own, so a rebinding DNS server could still steer
+ * the page at a local service. Sending the browser through this proxy moves the resolution into
+ * Node, where `guardedLookup` checks the very address the connection uses. Plain HTTP is
+ * forwarded; HTTPS and WebSockets are tunnelled with CONNECT and never decrypted.
+ */
+export async function startGuardProxy(): Promise<{ server: string; blocked: string[]; close(): Promise<void> }> {
+  const blocked: string[] = [];
+  const refuse = (where: string) => blocked.push(where);
+  const server = createServer((req: IncomingMessage, res) => {
+    let target: URL;
+    try {
+      target = new URL(req.url ?? "");
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
+    if (target.protocol !== "http:" || literalBlocked(target.hostname)) {
+      refuse(target.toString());
+      res.writeHead(403).end();
+      return;
+    }
+    const upstream = httpRequest(
+      { host: target.hostname, port: target.port || 80, path: `${target.pathname}${target.search}`, method: req.method, headers: req.headers, lookup: guardedLookup },
+      (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      },
+    );
+    upstream.on("error", (e) => {
+      if ((e as NodeJS.ErrnoException).code === "EBLOCKED") refuse(target.toString());
+      if (!res.headersSent) res.writeHead((e as NodeJS.ErrnoException).code === "EBLOCKED" ? 403 : 502);
+      res.end();
+    });
+    req.pipe(upstream);
+  });
+  server.on("connect", (req: IncomingMessage, client: Duplex, head: Buffer) => {
+    const [host = "", portText = "443"] = (req.url ?? "").replace(/^\[(.*)\](?=:)/, "$1").split(/:(?=\d+$)/);
+    const port = Number(portText);
+    if (!host || !Number.isInteger(port) || literalBlocked(host)) {
+      refuse(req.url ?? "");
+      client.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      return;
+    }
+    const upstream = connect({ host, port, lookup: guardedLookup }, () => {
+      client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head.length) upstream.write(head);
+      upstream.pipe(client);
+      client.pipe(upstream);
+    });
+    upstream.on("error", (e) => {
+      if ((e as NodeJS.ErrnoException).code === "EBLOCKED") refuse(req.url ?? "");
+      client.end(`HTTP/1.1 ${(e as NodeJS.ErrnoException).code === "EBLOCKED" ? "403 Forbidden" : "502 Bad Gateway"}\r\n\r\n`);
+    });
+    client.on("error", () => upstream.destroy());
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+  return {
+    server: `http://127.0.0.1:${port}`,
+    blocked,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  };
 }

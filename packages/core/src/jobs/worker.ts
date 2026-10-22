@@ -279,7 +279,7 @@ export class Worker {
       await this.o.store.flush().catch((e) => log.warn("job.store_flush_failed", { job: job.id, error: String(e) }));
     };
     try {
-      const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await this.labRun(job, onProgress);
+      const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await untilAborted(this.labRun(job, abort.signal, onProgress), abort.signal);
       await finish({ status: "succeeded", result });
       // An earlier attempt's evidence is moot once a retry made the recording.
       if (job.kind === "record") rmSync(failureDir(this.o.root, job.id), { recursive: true, force: true });
@@ -321,7 +321,7 @@ export class Worker {
   }
 
   private async record(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
-    const input = job.input as { url: string; demo?: boolean; username?: string; maxPages?: number; maxSeconds?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string };
+    const input = job.input as { url: string; demo?: boolean; username?: string; maxPages?: number; maxSeconds?: number; blockPrivate?: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: string };
     // Sample-site job: this worker runs its own MiniCRM on loopback and records it, so the demo
     // works wherever the worker runs (desktop in-process, or a separate fleet machine).
     const sample = input.demo ? await startApp({ fault: "none", seed: 1, task: "create-lead", seedLeads: SEED_LEADS }) : null;
@@ -341,6 +341,8 @@ export class Worker {
         ...(input.ttsVoice ? { ttsVoice: input.ttsVoice } : {}),
         ...(input.ttsLanguage ? { ttsLanguage: input.ttsLanguage } : {}),
         ...(input.journey ? { journey: String(input.journey) } : {}),
+        ...(input.zoom === false ? { zoom: false } : {}),
+        ...(input.narration === "plain" ? { narration: "plain" as const } : {}),
         authorized: true,
         outDir,
         blockPrivate: Boolean(input.blockPrivate),
@@ -350,9 +352,21 @@ export class Worker {
       });
       onProgress("Saving");
       // The page pictures travel with the recording: a walkthrough in object storage without
-      // them can only be watched, never skimmed.
+      // them can only be watched, never skimmed. The step pictures are what the written guide
+      // links to, and focus.json is the zoom plan a re-encode needs: upload them all.
       const pictures = r.pages.map((p) => p.screenshot).filter((f): f is string => Boolean(f));
-      const files = [r.media.mp4, r.media.webm, r.media.captions, r.media.audio, r.media.mp4 || r.media.webm ? null : r.media.video, ...pictures, "recording.json"].filter((f): f is string => Boolean(f));
+      const steps = (r.actions ?? []).map((a) => a.shot).filter((f): f is string => Boolean(f));
+      const files = [
+        r.media.mp4,
+        r.media.webm,
+        r.media.captions,
+        r.media.audio,
+        r.media.mp4 || r.media.webm ? null : r.media.video,
+        ...pictures,
+        ...steps,
+        "focus.json",
+        "recording.json",
+      ].filter((f): f is string => Boolean(f));
       await this.o.media.publish(r.id, r.dir, files);
       // The scrubbed copy written by the recorder is what gets indexed.
       const summary = JSON.parse(readFileSync(join(r.dir, "recording.json"), "utf8")) as Record<string, unknown>;
@@ -374,7 +388,7 @@ export class Worker {
     }
   }
 
-  private async labRun(job: Job, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
+  private async labRun(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
     const input = job.input as {
       op?: "run" | "replay" | "experiment";
       agent: string;
@@ -400,12 +414,14 @@ export class Worker {
         }
       } catch { /* best effort */ }
     }
+    // Output made for an account is stamped as that account's (data.ts, OWNER_FILE).
+    const owner = job.owner ? { owner: job.owner } : {};
     return withCredentials(credentials, async () => {
       // Replay a fixture k times with one agent: the pass^k check `lab replay` runs, from the app.
       if (input.op === "replay" && input.fixture) {
         const trials = input.trials ?? 3;
         onProgress(`Replaying ${trials} time${trials === 1 ? "" : "s"}`);
-        const summary = await replayFixture(loadFixture(join(this.o.root, input.fixture)), input.agent, trials, join(this.o.root, "runs"), input.modelMode ? { modelMode: input.modelMode } : {});
+        const summary = await replayFixture(loadFixture(join(this.o.root, input.fixture)), input.agent, trials, join(this.o.root, "runs"), { ...(input.modelMode ? { modelMode: input.modelMode } : {}), signal, ...owner });
         const rel = (d: string) => `runs/${d.split(/[\\/]/).pop()}`;
         return { replay: { ...summary, fixture: input.fixture, trials: summary.trials.map((t) => ({ ...t, runDir: rel(t.runDir) })) } };
       }
@@ -422,6 +438,8 @@ export class Worker {
           candidates: input.candidates ?? ["v1", "v2"],
           task: isTaskId(input.task) ? (input.task as TaskId) : "create-lead",
           outDir: join(this.o.root, "results", id),
+          signal,
+          ...owner,
         });
         return { experiment: id };
       }
@@ -434,6 +452,8 @@ export class Worker {
         outDir: join(this.o.root, "runs"),
         screenshots: true,
         ...(input.modelMode ? { modelMode: input.modelMode } : {}),
+        signal,
+        ...owner,
       });
       // A failure the agent caused becomes a regression fixture, as `lab run` does. Runs started
       // from the app never saved one, so the Fixtures page stayed empty in the desktop app. A
@@ -443,7 +463,7 @@ export class Worker {
         const fixturesDir = join(this.o.root, "runs", "_fixtures");
         try {
           mkdirSync(fixturesDir, { recursive: true });
-          fixture = `runs/_fixtures/${(await writeFixture(r, task, fixturesDir)).dir.split(/[\\/]/).pop()}`;
+          fixture = `runs/_fixtures/${(await writeFixture(r, task, fixturesDir, job.owner ?? undefined)).dir.split(/[\\/]/).pop()}`;
         } catch (e) {
           if (!/already exists/.test(String(e))) log.warn("fixture.save_failed", { job: job.id, error: String(e) });
         }
@@ -454,6 +474,29 @@ export class Worker {
 }
 
 const CANCELLED = "cancelled by its owner";
+
+/**
+ * Settle with `work`, or reject the moment `signal` fires. A lab run closes its own browser when
+ * the signal fires, but the worker must not wait on that: a run that hangs in a step that never
+ * returns would otherwise hold the worker past its deadline and keep every other job waiting.
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
 
 /** Where a failed recording job's report and evidence live: <root>/failures/<job id>/. */
 export function failureDir(root: string, jobId: string): string {

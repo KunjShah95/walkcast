@@ -244,3 +244,33 @@ describe("anonymous access, with accounts required", () => {
     assert.equal(app.status, 200);
   });
 });
+
+test("lab output made for one account is not served to another", async () => {
+  // Runs, fixtures and experiments made by the worker for an account are stamped as theirs.
+  // They used to land in shared folders that every signed-in account could list and read.
+  const a = await account("lab-a@example.com");
+  const b = await account("lab-b@example.com");
+  const aId = (await store.userByEmail("lab-a@example.com"))!.id;
+  const dir = join(root, "runs", "owned-run");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".owner"), aId);
+  writeFileSync(join(dir, "notes.json"), "{}");
+  assert.equal((await call(a, "/files/runs/owned-run/notes.json")).status, 200, "the owner reads their run");
+  assert.equal((await call(b, "/files/runs/owned-run/notes.json")).status, 404, "another account does not");
+  assert.equal((await call(b, `/api/run?dir=${encodeURIComponent("runs/owned-run")}`)).status, 404);
+  // Unstamped output (the CLI's, published results) stays visible as before.
+  mkdirSync(join(root, "runs", "cli-run"), { recursive: true });
+  writeFileSync(join(root, "runs", "cli-run", "notes.json"), "{}");
+  assert.equal((await call(b, "/files/runs/cli-run/notes.json")).status, 200);
+});
+
+test("a run turned away by an agent's ceiling does not use up the day's runs", async () => {
+  const d = await account("refund@example.com");
+  for (let i = 0; i < 3; i++) {
+    const r = await call(d, "/api/run", { method: "POST", body: JSON.stringify({ agent: "sh-p0", fault: "none", modelMode: "live" }) });
+    assert.equal(r.status, 429);
+    assert.match(((await r.json()) as { error: string }).error, /agent sh-p0/, "refused by the agent ceiling, never by the daily run quota");
+  }
+  const dId = (await store.userByEmail("refund@example.com"))!.id;
+  assert.equal(await store.hit(`quota:run:${dId}`, 86_400_000), 1, "the three refusals were refunded: this is the first charge");
+});

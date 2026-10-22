@@ -8,12 +8,16 @@ import { BrowserTools, type Observation, type ObservedElement } from "../capture
 import { buildMedia, localVoice, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
 import { engineFor, type VoiceEngine } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
-import { getBrowser } from "./browser.ts";
-import { captionsFor, type Caption } from "./narration.ts";
-import { blockedHost, guardContext } from "./ssrf.ts";
+import { getBrowser, warmBrowserEnabled } from "./browser.ts";
+import { captionsFor, type Caption, type NarrationStyle } from "./narration.ts";
+import { briefInPage, type Brief } from "./brief.ts";
+import { blockedHost, guardContext, startGuardProxy } from "./ssrf.ts";
 import { attachEvidence } from "./failure.ts";
 import { analyzeRecording, type RecordingInsights } from "./insights.ts";
 import { parseJourney, type JourneyStep } from "./journey.ts";
+import { CURSOR_SCRIPT, clearRing, pointAt, press } from "./cursor.ts";
+import { writeFocus, type Focus } from "./zoom.ts";
+import type { GuideAction } from "./guide.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -60,6 +64,13 @@ export interface RecordOptions {
    * steps are read by `parseJourney`; a line that cannot be read is reported, not skipped.
    */
   journey?: string;
+  /**
+   * Zoom the MP4 in on each click and fill (default on). The moments are kept in focus.json
+   * either way, so zoom can be turned on or off later without recording again.
+   */
+  zoom?: boolean;
+  /** How the narration talks: "presenter" (default) reads what each page says; "plain" only what the browser did. */
+  narration?: NarrationStyle;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -98,6 +109,8 @@ export interface RecordingResult {
   journey?: { steps: number; problems: { line: number; text: string; why: string }[] };
   /** Requests the SSRF guard refused. */
   blockedRequests?: string[];
+  /** Every click and fill, with a picture of the screen just before it: the step-by-step guide. */
+  actions?: GuideAction[];
 }
 
 /** A problem with the request (bad URL, not authorized, blocked target): the caller's to fix. */
@@ -159,6 +172,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   // A failure keeps what it knew (pages, sign-in, a screenshot, the partial video) on the error,
   // so the Lab can show why it failed instead of a one-line message.
   let screenshot: string | null = null;
+  let tools: NarratedTools | null = null;
   try {
     options.signal?.throwIfAborted();
     // Reuse a warm Chromium instance for the worker/process lifetime; this is the 1–2 s launch
@@ -168,19 +182,26 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     let contextRef: Awaited<ReturnType<typeof browser.newContext>> | null = null;
     const abort = () => void contextRef?.close().catch(() => undefined);
     options.signal?.addEventListener("abort", abort, { once: true });
+    // On a shared server the browser reaches the web only through a local proxy that checks the
+    // address each connection really uses (ssrf.ts): Chromium's own DNS lookup can be rebound.
+    const proxy = options.blockPrivate ? await startGuardProxy() : null;
     try {
       const context = await browser.newContext({
         viewport: { width: 1920, height: 1080 },
         recordVideo: { dir, size: { width: 1920, height: 1080 } },
         serviceWorkers: "block",
+        // "<-loopback>" sends even localhost through the proxy, which refuses it.
+        ...(proxy ? { proxy: { server: proxy.server, bypass: "<-loopback>" } } : {}),
       });
       contextRef = context;
       if (options.blockPrivate) blockedRequests = await guardContext(context);
       await context.addInitScript("window.__name = (fn) => fn;");
+      // The pointer the viewer follows: Playwright's video has no mouse of its own.
+      await context.addInitScript(CURSOR_SCRIPT);
       const page = await context.newPage();
       videoStart = recorder.now();
       recorder.attach(context, page);
-      const tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin }), engine);
+      tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin, style: options.narration ?? "presenter" }), engine, dir);
 
       // The budget covers the walk itself, starting the moment recording begins — browser launch and
       // sign-in still happen, but the cap is about the video the person watches, not our overhead.
@@ -205,14 +226,23 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     } finally {
       if (contextRef) await contextRef.close().catch(() => undefined);
       options.signal?.removeEventListener("abort", abort);
+      if (proxy) {
+        // What the proxy refused belongs in the same report as what the route guard refused.
+        for (const u of proxy.blocked) if (!blockedRequests.includes(u)) blockedRequests.push(u);
+        await proxy.close();
+      }
       // Only in disabled mode does this process own a browser; warm mode keeps it ready for
-      // the next recording (docs/SCALING.md §4.3).
-      if (process.env.LAB_WARM_BROWSER === "0") await browser.close().catch(() => undefined);
+      // the next recording (docs/SCALING.md §4.3). "Disabled" is whatever getBrowser decided,
+      // not one variable: LAB_WORKER=off turns warm mode off too, and checking only
+      // LAB_WARM_BROWSER left a Chromium running after every recording in that mode.
+      if (!warmBrowserEnabled()) await browser.close().catch(() => undefined);
     }
     options.signal?.throwIfAborted();
 
     recorder.flush();
-    const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin });
+    // Where the pointer went and when: the zoom plan for the MP4, kept beside the video.
+    writeFocus(dir, { zoom: options.zoom !== false, width: 1920, height: 1080, moments: tools?.moments ?? [] });
+    const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin, style: options.narration ?? "presenter" });
     // What the recorder saw on the site, measured while it was there: the console errors, the
     // requests that failed, how long each page took to load, the links each page offered and
     // the controls it saw. The trace holds all of it; without this step the dashboard threw
@@ -258,6 +288,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       media,
       dir,
       insights,
+      ...(tools?.actions.length ? { actions: tools.actions } : {}),
       ...(options.journey ? { journey: { steps: parsedJourney.steps.length, problems: parsedJourney.problems } } : {}),
       ...(options.ttsProvider
         ? {
@@ -290,6 +321,16 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
  */
 class NarratedTools extends BrowserTools {
   private narrated = 0;
+  /** What the current page says about itself, for the presenter narration. */
+  private brief: Brief | undefined;
+  /** Each click and fill, for the zoom plan. Seconds are video time. */
+  readonly moments: Focus[] = [];
+  /** Each click and fill, for the step-by-step guide. */
+  readonly actions: GuideAction[] = [];
+  /** Forget the page brief: a page that could not be read must not borrow the last one. */
+  clearBrief(): void {
+    this.brief = undefined;
+  }
   constructor(
     page: ConstructorParameters<typeof BrowserTools>[0],
     recorder: Recorder,
@@ -297,8 +338,66 @@ class NarratedTools extends BrowserTools {
     private context: () => Parameters<typeof captionsFor>[1],
     /** The voice that will speak this recording: it decides how long each action is held. */
     private readonly voice: VoiceEngine | null,
+    /** The recording folder, where the pictures of each step are written. */
+    private readonly dir: string,
   ) {
     super(page, recorder, baseUrl);
+  }
+
+  override async click(index: number, from?: Observation): Promise<void> {
+    const element = this.element(index, from);
+    const done = await this.point(element, "click");
+    await press(this.page);
+    try {
+      await super.click(index, from);
+    } finally {
+      done();
+      await clearRing(this.page);
+    }
+  }
+
+  override async fill(index: number, value: string, from?: Observation): Promise<void> {
+    const element = this.element(index, from);
+    const done = await this.point(element, "fill");
+    try {
+      await super.fill(index, value, from);
+    } finally {
+      done();
+      await clearRing(this.page);
+    }
+  }
+
+  /**
+   * Glide the pointer to a control and ring it, then picture the screen: the guide's image for
+   * this step, taken before anything is typed, so it never shows a value. Returns a function
+   * that marks the action finished, which closes the moment the zoom holds on.
+   */
+  private async point(element: ObservedElement, kind: "click" | "fill"): Promise<() => void> {
+    const seconds = () => Math.max(0, (this.recorder.now() - this.context().videoStart) / 1000);
+    const start = seconds();
+    const url = this.page.url();
+    const box = await pointAt(this.page, element.selector);
+    if (!box) return () => undefined;
+    const shot = `step-${String(this.actions.length + 1).padStart(2, "0")}.jpg`;
+    // A window around the control, not the whole screen: a guide's picture is read at a
+    // glance, and a 1920-wide page shrunk to a column turns the control into a speck.
+    const clip = {
+      x: Math.round(Math.min(Math.max(0, box.x + box.w / 2 - 480), 1920 - 960)),
+      y: Math.round(Math.min(Math.max(0, box.y + box.h / 2 - 270), 1080 - 540)),
+      width: 960,
+      height: 540,
+    };
+    const shotOk = await this.page.screenshot({ path: join(this.dir, shot), type: "jpeg", quality: 80, clip }).then(
+      () => true,
+      () => false,
+    );
+    const at = seconds();
+    this.actions.push({ at: round2(at), kind, name: element.name, url, ...(shotOk ? { shot } : {}), ...(element.type === "password" ? { secret: true } : {}) });
+    const moment: Focus = { start: round2(start), end: round2(at), box, kind };
+    this.moments.push(moment);
+    return () => {
+      moment.end = round2(seconds());
+    };
   }
 
   override async record<T>(
@@ -313,15 +412,22 @@ class NarratedTools extends BrowserTools {
     this.narrated = this.recorder.currentStep;
     const last = steps.at(-1);
     if (!last) return value;
-    const lines = captionsFor(steps, { ...this.context(), signIn: { attempted: false, outcome: "not-attempted", detail: "" }, pages: [] })
+    // A scroll is narrated from the page's own words, read in an earlier step: hand them over,
+    // or the hold is timed for a shorter line than the one that will be spoken.
+    const lines = captionsFor(steps, { ...this.context(), signIn: { attempted: false, outcome: "not-attempted", detail: "" }, pages: [], ...(this.brief ? { brief: this.brief } : {}) })
       .map((c) => c.text)
-      .filter((t) => !t.startsWith("Recording finished"));
+      .filter((t) => !t.startsWith("Recording finished") && !t.startsWith("That's the tour"));
+    if (tool === "brief") this.brief = value as Brief;
     let speech = 0;
     for (const t of lines) speech += await speechMs(t, this.voice);
     const owed = speech - (this.recorder.now() - last.startedAt);
     if (owed > 0) await this.page.waitForTimeout(owed);
     return value;
   }
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /**
@@ -412,6 +518,7 @@ async function recordPage(
     () => true,
     () => false,
   );
+  await readBrief(tools);
   if (scroll) await scrollThrough(tools);
   const obs = await tools.observe();
   pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length, ...(shotOk ? { screenshot: shotName } : {}) });
@@ -491,6 +598,7 @@ async function browse(
       () => true,
       () => false,
     );
+    await readBrief(tools);
     await scrollThrough(tools);
     const obs = await tools.observe();
     pages.push({ url: page.url(), title: obs.title, status, controls: obs.elements.length, ...(shotOk ? { screenshot: shot } : {}) });
@@ -629,6 +737,20 @@ async function collectLinks(tools: BrowserTools): Promise<{ href: string; text: 
       ),
     (links) => ({ links: links.length }),
   );
+}
+
+/**
+ * Read what the page says about itself (headline, tagline, main button, sections, prices) as
+ * one recorded step, so the presenter narration can speak it while the page is on screen. A
+ * page that will not answer is narrated plainly instead.
+ */
+async function readBrief(tools: NarratedTools): Promise<void> {
+  // The brief belongs to the page on screen. Clearing it first means a failed read leaves the
+  // scroll narration plain instead of repeating the page before this one.
+  tools.clearBrief();
+  await tools
+    .record("brief", {}, () => tools.page.evaluate(briefInPage), (b) => b)
+    .catch(() => undefined);
 }
 
 /** Scroll the page top to bottom in viewport steps so the video shows all of it. */

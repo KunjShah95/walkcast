@@ -1,9 +1,11 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { log } from "./ops/log.ts";
-import { blockedHost } from "./record/ssrf.ts";
+import { blockedHost, guardedLookup } from "./record/ssrf.ts";
 import type { Store, WebhookDelivery } from "./store/index.ts";
 
 /**
@@ -50,23 +52,52 @@ export async function deliver(d: WebhookDelivery, opts: DispatcherOptions = {}):
   const body = JSON.stringify({ event: d.event, delivery: d.id, ...d.payload });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const sig = signature(body, timestamp);
-  const res = await (opts.fetch ?? fetch)(d.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "Walkcast-Webhook/1",
-      "X-Walkcast-Event": d.event,
-      "X-Walkcast-Delivery": d.id,
-      "X-Walkcast-Timestamp": timestamp,
-      ...(sig ? { "X-Walkcast-Signature": sig } : {}),
-    },
-    body,
-    // A redirect could point the server at an internal address after the check above.
-    redirect: "manual",
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "User-Agent": "Walkcast-Webhook/1",
+    "X-Walkcast-Event": d.event,
+    "X-Walkcast-Delivery": d.id,
+    "X-Walkcast-Timestamp": timestamp,
+    ...(sig ? { "X-Walkcast-Signature": sig } : {}),
+  };
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  // Private targets refused: send over a socket whose address is checked as it connects, so a
+  // name that passed the check above cannot be rebound to a local address for the send itself.
+  const status =
+    opts.blockPrivate && !opts.fetch
+      ? await guardedPost(d.url, headers, body, timeoutMs)
+      : await (opts.fetch ?? fetch)(d.url, {
+          method: "POST",
+          headers,
+          body,
+          // A redirect could point the server at an internal address after the check above.
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+        }).then(async (res) => {
+          await res.arrayBuffer().catch(() => undefined);
+          return res.status;
+        });
+  if (status < 200 || status >= 300) throw new Error(`HTTP ${status}`);
+}
+
+/** POST `body` and resolve with the status, connecting only to a public address. Redirects are not followed. */
+function guardedPost(url: string, headers: Record<string, string>, body: string, timeoutMs: number): Promise<number> {
+  const u = new URL(url);
+  const send = u.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise<number>((resolve, reject) => {
+    const req = send(
+      u,
+      { method: "POST", headers: { ...headers, "Content-Length": String(Buffer.byteLength(body)) }, lookup: guardedLookup, timeout: timeoutMs },
+      (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode ?? 0));
+        res.on("error", reject);
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error(`timed out after ${timeoutMs} ms`)));
+    req.on("error", reject);
+    req.end(body);
   });
-  await res.arrayBuffer().catch(() => undefined);
-  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
 }
 
 /** Lease and send one batch of due deliveries. Returns how many were attempted. */

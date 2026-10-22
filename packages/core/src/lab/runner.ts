@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Stagehand, localBrowser } from "@browserbasehq/stagehand";
+import { stampOwner } from "../data.ts";
 import { type Scenario, assertApplicable, normalizeScenario, scenarioTaskPossible } from "../app/faults.ts";
 import { CREDENTIALS, startApp } from "../app/server.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
@@ -48,6 +49,14 @@ export interface RunOptions {
    * charged against it.
    */
   budget?: RunBudget;
+  /**
+   * Stops the run: cancelled by its owner, past its deadline, or its worker lost the job. The
+   * browser is closed at once, no further model call is made, and the run throws instead of
+   * returning a result.
+   */
+  signal?: AbortSignal;
+  /** The account the run is for. Stamped into the run's folder before anything else is written. */
+  owner?: string;
 }
 
 export interface RunResult {
@@ -136,6 +145,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   const spec = resolveAgent(options.agent);
   const task = options.task ?? createLeadTask();
   const mode = options.modelMode ?? "live";
+  options.signal?.throwIfAborted();
   const runId = `${task.id === "create-lead" ? "" : `${task.id}.`}${normalizeScenario(options.fault)}-s${options.seed}-${spec.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
   const runDir = join(options.outDir, runId);
   // A live run may spend money, so it carries a ceiling. Replay and scripted runs cost
@@ -151,6 +161,8 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     mode,
     ...(budget ? { token_budget: budget.limits.tokens, cost_budget_usd: budget.limits.usd } : {}),
   });
+  // Stamp first: the run is listed once result.json exists, and must never be listed unowned.
+  if (options.owner) stampOwner(runDir, options.owner);
   const recorder = new Recorder(runDir, { screenshots: options.screenshots ?? false });
   assertApplicable(normalizeScenario(options.fault), task.id);
   const app = await startApp({ fault: options.fault, seed: options.seed, task: task.id, seedLeads: seedFor(task) });
@@ -171,7 +183,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     selection = mode === "live" ? (options.models ?? defaultSelection()) : null;
     const backend = mode === "live" ? backendForSelection(selection!) : mode === "scripted" ? new ScriptedModel() : null;
     const cassette = mode === "replay" ? readCassette(options.cassette ?? "") : undefined;
-    gateway = new ModelGateway(mode, backend, recorder, cassette, budget);
+    gateway = new ModelGateway(mode, backend, recorder, cassette, budget, options.signal);
     return stagehandSession(spec, gateway);
   }
   }
@@ -186,6 +198,10 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
   }
   const started = Date.now();
   let agentError: string | null = null;
+  // Closing the session ends whatever the agent is doing: its next browser call fails, so a
+  // cancelled or overdue run stops now instead of finishing its turns (and spending on them).
+  const stop = () => void session.close().catch(() => undefined);
+  options.signal?.addEventListener("abort", stop, { once: true });
   try {
     await session.context.addInitScript("window.__name = (fn) => fn;");
     recorder.attach(session.context, session.page);
@@ -200,6 +216,7 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     // still says nothing about the agent: treat it like a crash (no fixture, agent-error cause).
     agentError ??= browserLost(recorder.events);
   } finally {
+    options.signal?.removeEventListener("abort", stop);
     // Always release the browser and the test app, whatever happened above.
     await session.close().catch(() => undefined);
     // Scripted runs share one browser process per worker. If that process died mid-run (killed
@@ -212,6 +229,8 @@ export async function runOnce(options: RunOptions): Promise<RunResult> {
     }
     await app.close();
   }
+  // A stopped run is not a result: its diagnosis would describe the stop, not the agent.
+  options.signal?.throwIfAborted();
   const durationMs = Date.now() - started;
   const cost = gateway
     ? { mode: gateway.status.mode, calls: gateway.status.calls, inputTokens: gateway.status.inputTokens, outputTokens: gateway.status.outputTokens }

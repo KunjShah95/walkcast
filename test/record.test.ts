@@ -35,16 +35,19 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
   process.env.LAB_ROBOT_VOICE = "1";
   t.after(() => delete process.env.LAB_ROBOT_VOICE);
   const r = await recordSite({ url: app.url, username: "demo", password: "demo-pass", maxPages: 3, authorized: true, outDir: out, paceMs: 50 });
-  assert.equal(r.signIn.outcome, "signed-in");
-  assert.equal(r.pages.length, 3);
+  // This test has failed once in a full parallel suite run and never alone. Under load the walk,
+  // the voice or the encode can fall short, so a failure says which one instead of only "3 !== 2".
+  const what = JSON.stringify({ signIn: r.signIn, pages: r.pages.map((p) => p.url), skipped: r.skipped, stopped: r.stopped, media: r.media });
+  assert.equal(r.signIn.outcome, "signed-in", what);
+  assert.equal(r.pages.length, 3, what);
   assert.ok(r.pages.every((p) => p.url.startsWith(app.url)));
   assert.ok(r.captions.some((c) => /password\. It is hidden/.test(c.text)));
   assert.ok(r.captions.every((c) => !c.text.includes("demo-pass")));
   assert.ok(existsSync(join(r.dir, "captions.vtt")));
   assert.ok(existsSync(join(r.dir, "video.webm")));
   if (canNarrate()) {
-    assert.equal(r.media.mp4, "recording.mp4");
-    assert.equal(r.media.voice, "flite");
+    assert.equal(r.media.mp4, "recording.mp4", what);
+    assert.equal(r.media.voice, "flite", what);
     // Spoken lines never overlap.
     for (let i = 1; i < r.captions.length; i++) assert.ok(r.captions[i]!.start >= r.captions[i - 1]!.end - 0.01);
   }

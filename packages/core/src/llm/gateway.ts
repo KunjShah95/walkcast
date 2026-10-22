@@ -79,6 +79,8 @@ export class ModelGateway {
      * was reached.
      */
     readonly budget?: RunBudget,
+    /** The run's stop signal: once it fires, no further call is made, in any mode. */
+    private readonly signal?: AbortSignal,
   ) {
     this.status = { mode, calls: 0, drifted: [], exhausted: false, inputTokens: 0, outputTokens: 0 };
     if (mode === "replay") {
@@ -114,6 +116,8 @@ export class ModelGateway {
   }
 
   private async call(channel: Channel, request: unknown, live: (backend: ModelBackend) => Promise<unknown>): Promise<unknown> {
+    // A stopped run makes no further call, recorded or live.
+    this.signal?.throwIfAborted();
     const seq = this.seq[channel]++;
     let requestHash: string;
     const started = performance.now();

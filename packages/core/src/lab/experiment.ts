@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stampOwner } from "../data.ts";
 import { type BuiltinFaultId, type Scenario, type TaskId, allScenarios, parseScenario } from "../app/faults.ts";
 import { resolveAgent } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
@@ -56,11 +57,17 @@ export interface ExperimentOptions {
   models?: ModelSelection;
   /** Run the live-LLM arm: replay fixtures against real providers instead of recorded model calls. */
   live?: boolean;
+  /** Stops every run the experiment starts (see RunOptions.signal). */
+  signal?: AbortSignal;
+  /** The account the experiment runs for: its whole folder is stamped before the first run. */
+  owner?: string;
 }
 
 export async function runExperiment(options: ExperimentOptions): Promise<string> {
   const { seeds, trials, concurrency, baseline, candidates, outDir } = options;
-  const mode = { ...(options.modelMode ? { modelMode: options.modelMode } : {}), ...(options.models ? { models: options.models } : {}) };
+  const stop = options.signal ? { signal: options.signal } : {};
+  const mode = { ...(options.modelMode ? { modelMode: options.modelMode } : {}), ...(options.models ? { models: options.models } : {}), ...stop };
+  if (options.owner) stampOwner(outDir, options.owner);
   const runsDir = join(outDir, "runs");
   const fixturesDir = join(outDir, "fixtures");
   mkdirSync(fixturesDir, { recursive: true });
@@ -97,13 +104,13 @@ export async function runExperiment(options: ExperimentOptions): Promise<string>
   for (const r of baselineRuns.filter((r) => r.diagnosis.verdict === "fail" && !r.agentError)) fixtures.push(await writeFixture(r, task, fixturesDir));
   log(`phase 2: replaying ${fixtures.length} fixtures × ${trials} trials with ${baseline}`);
   const replayMode = options.live ? "live" : options.modelMode === "scripted" ? "scripted" : undefined;
-  const reproduction = await pool(fixtures, concurrency, (f) => replayFixture(f, baseline, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}) }));
+  const reproduction = await pool(fixtures, concurrency, (f) => replayFixture(f, baseline, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}), ...stop }));
 
   // ---- Phase 3: regression comparison across agent versions
   const comparisons: ReplaySummary[] = [...reproduction];
   for (const agent of candidates) {
     log(`phase 3: replaying ${fixtures.length} fixtures × ${trials} trials with ${agent}`);
-    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}) }))));
+    comparisons.push(...(await pool(fixtures, concurrency, (f) => replayFixture(f, agent, trials, runsDir, { ...(replayMode ? { modelMode: replayMode as GatewayMode } : {}), ...(options.models ? { models: options.models } : {}), ...stop }))));
   }
   log(`phase 3: control runs (fault=none) for ${candidates.join(", ")}`);
   const controlJobs = candidates.flatMap((agent) => Array.from({ length: seeds }, (_, i) => ({ agent, seed: i + 1 })));

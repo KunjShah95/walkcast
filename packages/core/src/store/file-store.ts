@@ -188,6 +188,11 @@ export class FileStore implements Store {
     return this.data.limits[key]!.count;
   }
 
+  async unhit(key: string) {
+    const cur = this.data.limits[key];
+    if (cur && cur.count > 0) cur.count--;
+  }
+
   insertFailed(job: Pick<NewJob, "kind" | "owner" | "input">, error: string) {
     return this.write(() => {
       const now = new Date().toISOString();

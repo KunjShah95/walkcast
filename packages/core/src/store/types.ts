@@ -167,6 +167,8 @@ export interface Store {
 
   /** Fixed-window counter shared by every instance: returns the count including this hit. */
   hit(key: string, windowMs: number): Promise<number>;
+  /** Take one hit back: a request was charged, then turned away before it did anything. */
+  unhit(key: string): Promise<void>;
 
   // job queue
   /** Returns the existing job when (owner, idempotencyKey) was already submitted. */

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stampOwner } from "../data.ts";
 import { type Scenario, describeScenario } from "../app/faults.ts";
 import { resolveAgent, type AgentSpec } from "../agents/registry.ts";
 import type { GatewayMode } from "../llm/gateway.ts";
@@ -69,12 +70,16 @@ export function appVersion(): string {
   return hash.digest("hex").slice(0, 12);
 }
 
-export async function writeFixture(result: RunResult, task: Task, fixturesDir: string): Promise<Fixture> {
+export async function writeFixture(result: RunResult, task: Task, fixturesDir: string, owner?: string): Promise<Fixture> {
   const diagnosisCauses = causes(result.diagnosis);
-  const id = `${task.id === "create-lead" ? "" : `${task.id}.`}${result.fault}-s${result.seed}-${diagnosisCauses[0] ?? "unexplained"}`;
+  // Fixtures made for an account live in a folder other accounts share: the id carries a short
+  // tag of the owner, so one account's fixture never stands in for, or blocks, another's.
+  const tag = owner ? `-${createHash("sha256").update(owner).digest("hex").slice(0, 8)}` : "";
+  const id = `${task.id === "create-lead" ? "" : `${task.id}.`}${result.fault}-s${result.seed}-${diagnosisCauses[0] ?? "unexplained"}${tag}`;
   const dir = join(fixturesDir, id);
   if (existsSync(dir)) throw new Error(`Fixture ${dir} already exists; refusing to overwrite.`);
   mkdirSync(dir, { recursive: true });
+  if (owner) stampOwner(dir, owner);
   const manifest: FixtureManifest = {
     schemaVersion: 1,
     id,
@@ -160,6 +165,10 @@ export interface ReplayOptions {
   modelMode?: GatewayMode;
   /** Live mode: models to use (e.g. to test whether another model fixes the failure). */
   models?: ModelSelection;
+  /** Stops the replay between and during trials (see RunOptions.signal). */
+  signal?: AbortSignal;
+  /** The account the replay runs for (see RunOptions.owner). */
+  owner?: string;
 }
 
 export async function replayFixture(
@@ -195,6 +204,8 @@ export async function replayFixture(
         ...(modelMode === "replay" ? { cassette } : {}),
         ...(options.models ? { models: options.models } : {}),
         ...(har && existsSync(har) ? { har } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.owner ? { owner: options.owner } : {}),
       }),
     );
   }
