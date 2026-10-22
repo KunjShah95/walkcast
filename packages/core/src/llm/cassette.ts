@@ -44,30 +44,52 @@ export class ReplayExhaustedError extends Error {
   }
 }
 
-/** Hands out recorded responses per channel, in order, flagging requests that drifted. */
+/**
+ * Hands out recorded responses per channel, flagging requests that drifted.
+ *
+ * Entries are matched by their recorded `seq`, not by their position in the file: the recorder
+ * reserves a sequence number before awaiting the model, so a concurrent or slow call can finish
+ * (and be appended) after a later one. Matching by request hash as well means two calls that
+ * complete in a different order still each receive their own recorded response instead of each
+ * other's.
+ */
 export class CassettePlayer<C extends string = string> {
   private readonly byChannel = new Map<C, CassetteEntry<C>[]>();
-  private readonly seq = new Map<C, number>();
+  /** Sequence numbers already handed out, per channel. */
+  private readonly taken = new Map<C, Set<number>>();
 
   constructor(entries: CassetteEntry<C>[], private readonly hooks: CassetteHooks = {}) {
     for (const e of entries) this.byChannel.set(e.channel, [...(this.byChannel.get(e.channel) ?? []), e]);
+    for (const list of this.byChannel.values()) list.sort((a, b) => a.seq - b.seq);
   }
 
   /**
-   * The next recorded response on `channel` for `request`. Stagehand-style element ids in the
-   * response are remapped onto the new prompt when `remapIds` is set. Throws ReplayExhaustedError
-   * when the run asks for more calls than were recorded.
+   * The recorded response on `channel` for `request`. An entry whose request hash matches wins;
+   * otherwise the next unplayed entry is returned and flagged as drift. Stagehand-style element
+   * ids in the response are remapped onto the new prompt when `remapIds` is set. Throws
+   * ReplayExhaustedError when the run asks for more calls than were recorded.
    */
   next(channel: C, request: unknown, opts: { remapIds?: boolean } = {}): { entry: CassetteEntry<C>; seq: number; drift: boolean; requestHash: string; response: unknown } {
-    const seq = this.seq.get(channel) ?? 0;
-    this.seq.set(channel, seq + 1);
     const requestHash = hashRequest(channel, request, this.hooks);
-    const entry = this.byChannel.get(channel)?.[seq];
-    if (!entry) throw new ReplayExhaustedError(channel, seq);
+    const list = this.byChannel.get(channel) ?? [];
+    let taken = this.taken.get(channel);
+    if (!taken) {
+      taken = new Set<number>();
+      this.taken.set(channel, taken);
+    }
+    // Prefer the call that asked the same question, even when a concurrent call finished earlier.
+    let entry = list.find((e) => !taken.has(e.seq) && e.requestHash === requestHash);
+    let drift = false;
+    if (!entry) {
+      entry = list.find((e) => !taken.has(e.seq));
+      drift = entry !== undefined;
+    }
+    if (!entry) throw new ReplayExhaustedError(channel, taken.size);
+    taken.add(entry.seq);
     const restore = this.hooks.restore ?? ((v: unknown) => v);
     const recorded = restore(entry.response);
     const response = opts.remapIds ? remapElementIds(restore(entry.request), request, recorded) : recorded;
-    return { entry, seq, drift: entry.requestHash !== requestHash, requestHash, response };
+    return { entry, seq: entry.seq, drift, requestHash, response };
   }
 }
 

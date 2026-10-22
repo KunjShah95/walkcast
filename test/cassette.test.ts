@@ -32,3 +32,32 @@ test("a changed prompt is reported as drift", () => {
   const player = new CassettePlayer([entry]);
   assert.equal(player.next("agent", { messages: [{ content: "delete lead" }] }).drift, true);
 });
+
+test("a call that finished late is matched by its sequence number, not its position in the file", () => {
+  const first = { channel: "agent" as const, seq: 0, request: { messages: [{ content: "first" }] }, response: "first-response", model: "m", latencyMs: 1 };
+  const second = { channel: "agent" as const, seq: 1, request: { messages: [{ content: "second" }] }, response: "second-response", model: "m", latencyMs: 1 };
+  const entries = [
+    { ...first, requestHash: hashRequest("agent", first.request) },
+    { ...second, requestHash: hashRequest("agent", second.request) },
+  ];
+  // The recorder reserves seq before awaiting: seq 1 can reach the file before seq 0.
+  const player = new CassettePlayer([entries[1]!, entries[0]!]);
+  assert.equal(player.next("agent", first.request).response, "first-response");
+  assert.equal(player.next("agent", second.request).response, "second-response");
+});
+
+test("two calls that complete out of order each get their own recorded response", () => {
+  const first = { channel: "agent" as const, seq: 0, request: { messages: [{ content: "first" }] }, response: "first-response", model: "m", latencyMs: 1 };
+  const second = { channel: "agent" as const, seq: 1, request: { messages: [{ content: "second" }] }, response: "second-response", model: "m", latencyMs: 1 };
+  const entries = [
+    { ...second, requestHash: hashRequest("agent", second.request) },
+    { ...first, requestHash: hashRequest("agent", first.request) },
+  ];
+  // The replay asks second first; it must not be handed the first call's answer.
+  const player = new CassettePlayer(entries);
+  const played = player.next("agent", second.request);
+  assert.equal(played.response, "second-response");
+  assert.equal(played.drift, false);
+  assert.equal(player.next("agent", first.request).drift, false);
+  assert.throws(() => player.next("agent", first.request), ReplayExhaustedError);
+});

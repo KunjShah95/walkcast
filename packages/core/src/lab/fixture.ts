@@ -148,6 +148,9 @@ export interface ReplaySummary {
     modelCalls: number;
     replayDrift: number;
     replayExhausted: boolean;
+    /** Live input/output tokens spent by this trial; 0 when the cassette answered every call. */
+    liveInputTokens?: number;
+    liveOutputTokens?: number;
   }[];
   passes: number;
   /** pass^k: the agent met the fixture's expectation in every trial. */
@@ -225,6 +228,8 @@ export async function replayFixture(
     modelCalls: r.modelCalls,
     replayDrift: r.model?.drifted.length ?? 0,
     replayExhausted: r.model?.exhausted ?? false,
+    liveInputTokens: r.model?.mode === "live" ? r.model.inputTokens : 0,
+    liveOutputTokens: r.model?.mode === "live" ? r.model.outputTokens : 0,
   }));
   for (const s of summaries) {
     if (s.replayExhausted) drift.push("model replay ran past the recording (the run diverged)");

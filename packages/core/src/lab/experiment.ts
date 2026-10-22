@@ -174,13 +174,22 @@ function caveat(agents: string[], mode: GatewayMode | undefined): string {
   return "Stagehand agents ran against a live model for new runs; fixture replays of the same agent used recorded model calls. Model behaviour varies between runs: read pass^k over trials, not single runs.";
 }
 
-function costSummary(runs: RunResult[], replays: ReplaySummary[]) {
-  const durations = [...runs.map((r) => r.durationMs), ...replays.flatMap((r) => r.trials.map((t) => t.durationMs))].sort((a, b) => a - b);
+/** Sums what an experiment spent, including replay trials that had to go live. */
+export function costSummary(runs: RunResult[], replays: ReplaySummary[]) {
+  const replayTrials = replays.flatMap((r) => r.trials);
+  const durations = [...runs.map((r) => r.durationMs), ...replayTrials.map((t) => t.durationMs)].sort((a, b) => a - b);
+  const liveTokens = (run: RunResult) => (run.model?.mode === "live" ? run.model : null);
   return {
     agentRuns: durations.length,
-    modelCalls: runs.reduce((n, r) => n + r.modelCalls, 0) + replays.reduce((n, r) => n + r.trials.reduce((m, t) => m + t.modelCalls, 0), 0),
-    liveInputTokens: runs.reduce((n, r) => n + (r.model?.mode === "live" ? r.model.inputTokens : 0), 0),
-    liveOutputTokens: runs.reduce((n, r) => n + (r.model?.mode === "live" ? r.model.outputTokens : 0), 0),
+    modelCalls: runs.reduce((n, r) => n + r.modelCalls, 0) + replayTrials.reduce((n, t) => n + t.modelCalls, 0),
+    // A replay trial that had to go live (no cassette, a changed prompt, or an explicit live
+    // run) spends real tokens too. Count them, or the experiment under-reports what it cost.
+    liveInputTokens:
+      runs.reduce((n, r) => n + (liveTokens(r)?.inputTokens ?? 0), 0) +
+      replayTrials.reduce((n, t) => n + (t.liveInputTokens ?? 0), 0),
+    liveOutputTokens:
+      runs.reduce((n, r) => n + (liveTokens(r)?.outputTokens ?? 0), 0) +
+      replayTrials.reduce((n, t) => n + (t.liveOutputTokens ?? 0), 0),
     medianRunMs: durations[Math.floor(durations.length / 2)] ?? 0,
     p95RunMs: durations[Math.floor(durations.length * 0.95)] ?? 0,
   };
