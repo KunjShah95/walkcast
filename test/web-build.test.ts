@@ -1,22 +1,39 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 
 /**
  * The landing page build: what search engines and answer engines read has to be in the files,
  * not produced by JavaScript at runtime.
  */
 const REPO = resolve(import.meta.dirname, "..");
-const OUT = join(REPO, "dist", "web");
 const SITE = "https://walkcast.example";
 
-test("web:build prerenders the page and writes the crawler files", { timeout: 180_000 }, () => {
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+// Every build writes to its own folder. Test files run in parallel, and Vite empties the output
+// directory before it writes: a shared dist/web made one test read another test's half-built site.
+const dirs: string[] = [];
+const build = (): string => {
+  const out = mkdtempSync(join(tmpdir(), "walkcast-web-"));
+  dirs.push(out);
+  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], {
+    cwd: REPO,
+    env: { ...process.env, SITE_URL: SITE, WEB_OUT: out },
+    stdio: "pipe",
+  });
+  return out;
+};
+const read = (out: string, f: string) => readFileSync(join(out, f), "utf8");
+after(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+});
 
-  const html = read("index.html");
+test("web:build prerenders the page and writes the crawler files", { timeout: 180_000 }, () => {
+  const out = build();
+
+  const html = read(out, "index.html");
   assert.match(html, /<div id="root"><header/, "the page is prerendered, not an empty root");
   assert.match(html, /Paste a/);
   assert.match(html, new RegExp(`<link rel="canonical" href="${SITE}/">`));
@@ -28,33 +45,32 @@ test("web:build prerenders the page and writes the crawler files", { timeout: 18
   const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage")!.mainEntity as { name: string }[];
   for (const q of faq) assert.ok(html.includes(q.name.replace(/'/g, "&#x27;")) || html.includes(q.name), `FAQ "${q.name}" is visible on the page`);
 
-  const robots = read("robots.txt");
+  const robots = read(out, "robots.txt");
   assert.match(robots, /User-agent: GPTBot/);
   assert.match(robots, /User-agent: ClaudeBot/);
   assert.ok(!/Disallow: \/\s*$/m.test(robots), "nothing is disallowed site-wide");
   assert.match(robots, new RegExp(`Sitemap: ${SITE}/sitemap.xml`));
 
-  const sitemap = read("sitemap.xml");
+  const sitemap = read(out, "sitemap.xml");
   assert.match(sitemap, new RegExp(`<loc>${SITE}/</loc>`));
   assert.match(sitemap, /<video:content_loc>/);
   assert.ok(!sitemap.includes("localhost"));
 
-  assert.match(read("llms.txt"), /^# Walkcast\n\n> /);
-  assert.match(read("llms-full.txt"), /### Is my password stored\?/);
-  assert.match(read("404.html"), /noindex/);
+  assert.match(read(out, "llms.txt"), /^# Walkcast\n\n> /);
+  assert.match(read(out, "llms-full.txt"), /### Is my password stored\?/);
+  assert.match(read(out, "404.html"), /noindex/);
 });
 
 test("every route is its own prerendered, canonical, crawlable page", { timeout: 180_000 }, async () => {
   const { ROUTES } = await import("../apps/web/src/content.ts");
   const { INDEXNOW_KEY } = await import("../apps/web/src/seo.ts");
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
-  const sitemap = read("sitemap.xml");
-  const llms = read("llms.txt");
+  const out = build();
+  const sitemap = read(out, "sitemap.xml");
+  const llms = read(out, "llms.txt");
   const titles = new Set<string>();
   for (const r of ROUTES) {
     const loc = r.path === "/" ? `${SITE}/` : `${SITE}${r.path}`;
-    const html = read(r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
+    const html = read(out, r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
     assert.match(html, /<div id="root"><header/, `${r.path} is prerendered`);
     assert.ok(html.includes(`<link rel="canonical" href="${loc}">`), `${r.path} has its own canonical`);
     const title = /<title>(.*?)<\/title>/.exec(html)![1]!;
@@ -67,7 +83,7 @@ test("every route is its own prerendered, canonical, crawlable page", { timeout:
     assert.ok(sitemap.includes(`<loc>${loc}</loc>`), `${r.path} is in the sitemap`);
     assert.ok(llms.includes(loc), `${r.path} is linked from llms.txt`);
   }
-  assert.equal(read(`${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
+  assert.equal(read(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
 });
 
 test("titles and descriptions fit the snippets they are shown in", async () => {
@@ -84,22 +100,21 @@ test("titles and descriptions fit the snippets they are shown in", async () => {
 
 test("the machine-readable files an agent needs are published and linked", { timeout: 180_000 }, async () => {
   const { ROUTES } = await import("../apps/web/src/content.ts");
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+  const out = build();
 
   // An agent comparing tools cannot read a price out of a rendered page.
-  const pricing = read("pricing.md");
+  const pricing = read(out, "pricing.md");
   assert.match(pricing, /^# Pricing . Walkcast/m);
   assert.match(pricing, /Price: \$0/, "pricing.md states the price in a parsable form");
   assert.match(pricing, /Seats: unlimited/);
   assert.match(pricing, /No paid tier|no paid tier/i);
 
-  const robots = read("robots.txt");
+  const robots = read(out, "robots.txt");
   assert.match(robots, new RegExp(`Sitemap: ${SITE}/sitemap-agents\\.xml`), "the agent sitemap is advertised");
-  const agents = read("sitemap-agents.xml");
+  const agents = read(out, "sitemap-agents.xml");
   assert.match(agents, new RegExp(`<loc>${SITE}/pricing\\.md</loc>`));
 
-  const llms = read("llms.txt");
+  const llms = read(out, "llms.txt");
   assert.match(llms, /pricing\.md/, "llms.txt points at the plain-text price");
   for (const r of ROUTES) {
     const loc = r.path === "/" ? `${SITE}/` : `${SITE}${r.path}`;
@@ -109,12 +124,11 @@ test("the machine-readable files an agent needs are published and linked", { tim
 
 test("answer engines are told where the answer is", { timeout: 180_000 }, async () => {
   const { ROUTES, ANSWER_PAGES } = await import("../apps/web/src/content.ts");
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+  const out = build();
 
   for (const path of ANSWER_PAGES) {
     const r = ROUTES.find((x) => x.path === path)!;
-    const html = read(r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
+    const html = read(out, r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`);
     const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
       "@graph": { "@type": string; speakable?: { cssSelector?: string[] } }[];
     };
@@ -126,11 +140,10 @@ test("answer engines are told where the answer is", { timeout: 180_000 }, async 
 
 test("the comparison pages are structured for citation", { timeout: 180_000 }, async () => {
   const { COMPARES, COMPARE_FAQ } = await import("../apps/web/src/content.ts");
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const read = (f: string) => readFileSync(join(OUT, f), "utf8");
+  const out = build();
 
   for (const c of COMPARES) {
-    const html = read(`${c.path.slice(1)}/index.html`);
+    const html = read(out, `${c.path.slice(1)}/index.html`);
     const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
       "@graph": { "@type": string; name?: string; url?: string }[];
     };
@@ -155,8 +168,8 @@ test("the comparison pages are structured for citation", { timeout: 180_000 }, a
 
 test("the guides index lists every guide as a structured list", { timeout: 180_000 }, async () => {
   const { GUIDES } = await import("../apps/web/src/content.ts");
-  execFileSync(process.execPath, ["--import", "tsx", "apps/web/build.ts"], { cwd: REPO, env: { ...process.env, SITE_URL: SITE }, stdio: "pipe" });
-  const html = readFileSync(join(OUT, "guides", "index.html"), "utf8");
+  const out = build();
+  const html = read(out, join("guides", "index.html"));
   const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as {
     "@graph": { "@type": string; mainEntity?: { itemListElement?: { name: string; url: string }[] } }[];
   };

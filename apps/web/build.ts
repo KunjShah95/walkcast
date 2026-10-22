@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "vite";
 import {
@@ -53,13 +53,19 @@ try {
   /* no .env */
 }
 const config = join(here, "vite.config.ts");
-const out = resolve(here, "../../dist/web");
-const ssrOut = resolve(here, "../../dist/web-ssr");
+// WEB_OUT keeps a second build (the test suite runs several) from emptying this one's folder.
+const out = resolve(process.env.WEB_OUT ?? join(here, "../../dist/web"));
+// The server bundle imports React at runtime, so it has to sit inside the repo where node_modules
+// is reachable. Naming it after the output folder keeps parallel builds out of each other's way.
+const ssrOut = resolve(process.env.WEB_SSR_OUT ?? join(here, "../../dist", `.web-ssr-${basename(out)}`));
 
 const SITE = (process.env.SITE_URL || SITE_ORIGIN).replace(/\/$/, "");
 const url = (path: string) => (path === "/" ? `${SITE}/` : `${SITE}${path}`);
 
-await build({ configFile: config, logLevel: "warn" });
+// Start from an empty folder: a previous run's prerendered index.html must never be mistaken
+// for this run's template.
+rmSync(out, { recursive: true, force: true });
+await build({ configFile: config, logLevel: "warn", build: { outDir: out, emptyOutDir: true } });
 await build({ configFile: config, logLevel: "warn", build: { ssr: join(here, "src/entry-server.tsx"), outDir: ssrOut, emptyOutDir: true } });
 const { render } = (await import(pathToFileURL(join(ssrOut, "entry-server.js")).href)) as { render: (path: string) => string };
 
@@ -224,9 +230,13 @@ function graphFor(route: Route) {
 
 // ------------------------------------------------------------------ pages
 
-const template = readFileSync(join(out, "index.html"), "utf8");
+const templateFile = join(out, "index.html");
+if (!existsSync(templateFile)) {
+  throw new Error(`the client build left no ${templateFile} to fill; WEB_OUT may point at the wrong folder.`);
+}
+const template = readFileSync(templateFile, "utf8");
 for (const marker of ['<div id="root"></div>', "<!--seo-->", "<title>"]) {
-  if (!template.includes(marker)) throw new Error(`dist/web/index.html has no ${marker} to fill`);
+  if (!template.includes(marker)) throw new Error(`${templateFile} has no ${marker} to fill: it is not the client build's index.html.`);
 }
 const setMeta = (html: string, attr: "name" | "property", key: string, value: string) =>
   html.replace(new RegExp(`(<meta ${attr}="${key}" content=")[^"]*(")`), `$1${esc(value)}$2`);
