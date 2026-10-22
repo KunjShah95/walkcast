@@ -146,6 +146,58 @@ const DEFAULT_WORDS_PER_SECOND = 2.8;
 
 export type FliteVoice = "slt" | "awb" | "kal" | "rms";
 
+let kokoroPython: boolean | undefined;
+
+/** Whether Python can import kokoro on this machine. */
+export function kokoroAvailable(): boolean {
+  if (kokoroPython !== undefined) return kokoroPython;
+  const out = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import kokoro; print('ok')"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+  kokoroPython = out.status === 0 && out.stdout.trim() === "ok";
+  if (!kokoroPython) {
+    // Fall back to `python` on non-Windows too, in case python3 isn't on PATH.
+    const out2 = spawnSync("python", ["-c", "import kokoro; print('ok')"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+    kokoroPython = out2.status === 0 && out2.stdout.trim() === "ok";
+  }
+  return kokoroPython;
+}
+
+/** Kokoro open-source TTS (hexgrad/Kokoro), run through Python. Free and offline. */
+export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
+  if (!kokoroAvailable()) return null;
+  const voice = cloudVoice?.trim() || process.env.KOKORO_VOICE?.trim() || "af_heart";
+  const py = process.platform === "win32" ? "python" : (spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true }).status === 0 ? "python3" : "python");
+  return {
+    id: `kokoro:${voice}`,
+    kind: "local",
+    available: (): boolean => true,
+    wordsPerSecond: 2.9,
+    async speak(text, outFile, cwd) {
+      const txt = join(cwd, ".tts-tmp.txt");
+      writeFileSync(txt, text, "utf8");
+      const script = [
+        "import sys, numpy as np",
+        "from kokoro import KPipeline",
+        "import soundfile as sf",
+        "text=open(sys.argv[1],encoding='utf-8').read()",
+        "voice=sys.argv[2]; out=sys.argv[3]",
+        "lang_code=voice[0] if voice else 'a'",
+        "pipe=KPipeline(lang_code=lang_code)",
+        "chunks=[]",
+        "for gs,ps,audio in pipe(text,voice=voice): chunks.append(audio)",
+        "audio=np.concatenate(chunks) if chunks else np.zeros(0,dtype='float32')",
+        "sf.write(out,audio,24000)",
+      ].join(";");
+      try {
+        await execFileAsync(py, ["-c", script, txt, voice, outFile], { cwd, timeout: 5 * 60_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+      } finally {
+        rmSync(txt, { force: true });
+      }
+      if (!existsSync(outFile)) throw new Error("kokoro produced no audio");
+      await ensureWav(outFile, cwd);
+    },
+  };
+}
+
 export function fliteEngine(voice: FliteVoice): VoiceEngine {
   return {
     id: `flite:${voice}`,
@@ -658,6 +710,7 @@ export function engineFor(provider: string | undefined, voice: FliteVoice = "slt
   if (p === "reverie") return reverieEngine(cloudVoice, cloudLanguage);
   if (p === "custom" || p === "maya") return customTtsEngine(cloudVoice, cloudLanguage);
   if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine(cloudVoice);
+  if (p === "kokoro") return kokoroEngine(cloudVoice);
   // "flite" is what the dashboard sends for its local default: return null so the caller uses the
   // machine's built-in voice (media.localVoice: flite where ffmpeg has it, Windows speech otherwise).
   // Forcing flite here would fail on every Windows PC, whose ffmpeg builds have no flite.
@@ -667,7 +720,7 @@ export function engineFor(provider: string | undefined, voice: FliteVoice = "slt
 
 /** The cloud providers that have credentials in this server's environment, for the TTS picker. */
 export function configuredCloudProviders(): string[] {
-  const candidates = ["sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom"];
+  const candidates = ["sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "kokoro"];
   return candidates.filter((p) => engineFor(p) !== null);
 }
 
@@ -690,6 +743,7 @@ export function chooseVoiceEngine(): VoiceEngine {
   else if (choice === "reverie") { const e = tryEngine("reverie", reverieEngine); if (e) return e; }
   else if (choice === "custom" || choice === "maya") { const e = tryEngine("custom", customTtsEngine); if (e) return e; }
   else if (choice === "custom-voice" || choice === "custom_voice") { const e = tryEngine("custom-voice", customVoiceEngine); if (e) return e; }
+  else if (choice === "kokoro") { const e = tryEngine("kokoro", kokoroEngine); if (e) return e; }
   return fliteEngine(process.env.LAB_TTS_VOICE ? (process.env.LAB_TTS_VOICE as any) : "slt");
 }
 

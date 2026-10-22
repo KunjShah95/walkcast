@@ -88,6 +88,11 @@ const CATALOG: Record<string, CloudVoice[]> = {
     { id: "Liam", name: "Liam", note: "Canadian French, male", lang: "fr-CA" },
     { id: "Zhiyu", name: "Zhiyu", note: "Mandarin, female", lang: "cmn-CN" },
   ],
+  kokoro: [
+    { id: "af_heart", name: "Heart", note: "US English, female, warm (open source)" },
+    { id: "af_bella", name: "Bella", note: "US English, female, bright" },
+    { id: "af_nicole", name: "Nicole", note: "US English, female, calm" },
+  ],
 };
 
 /** `polly` is the alias AWS Polly is also selected by. */
@@ -127,6 +132,7 @@ const LABEL: Record<string, string> = {
   reverie: "Reverie",
   custom: "Custom TTS",
   "custom-voice": "Custom voice",
+  kokoro: "Kokoro (offline)",
 };
 
 export function providerLabel(provider: string): string {
@@ -149,7 +155,7 @@ export function hasVoiceList(provider: string): boolean {
 
 /** Local (offline) providers speak from ffmpeg's flite names or an uploaded sample, not a list. */
 export function isCloudProvider(provider: string): boolean {
-  return !["", "flite", "none", "local", "custom-voice", "custom_voice"].includes(provider.trim().toLowerCase());
+  return !["", "flite", "none", "local", "custom-voice", "custom_voice", "kokoro"].includes(provider.trim().toLowerCase());
 }
 
 /**

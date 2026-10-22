@@ -1,7 +1,7 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { ArrowRight, Captions, Check, FileText, Film, Globe, Pause, Play } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { LINUX_APPIMAGE_URL, MACOS_DMG_URL, RELEASES_URL, WINDOWS_EXE_URL } from "../site.ts";
+import { LINUX_APPIMAGE_URL, RELEASES_URL, WINDOWS_EXE_URL } from "../site.ts";
 import { BrandMark, DownloadButton } from "../ui.tsx";
 
 interface Cue {
@@ -309,8 +309,7 @@ export function Hero() {
               ))}
             </ul>
             <p className="fineprint">
-              Installers for <a href={WINDOWS_EXE_URL}>Windows</a>, <a href={MACOS_DMG_URL}>macOS</a> and{" "}
-              <a href={LINUX_APPIMAGE_URL}>Linux</a> · <a href="/download">All downloads</a>
+              Installers for <a href={WINDOWS_EXE_URL}>Windows</a> and{" "}              <a href={LINUX_APPIMAGE_URL}>Linux</a> · <a href="/download">All downloads</a>
             </p>
           </motion.div>
         </div>

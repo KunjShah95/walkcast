@@ -23,7 +23,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { AppleIcon, BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
 import { AUTHOR, FAQ } from "../content.ts";
 
@@ -632,7 +632,6 @@ export function Footer() {
             <ul>
               <li><a href={WINDOWS_EXE_URL}><WindowsIcon width={14} height={14} />Windows .exe</a></li>
               <li><a href={WINDOWS_MSI_URL}><WindowsIcon width={14} height={14} />Windows .msi</a></li>
-              <li><a href={MACOS_DMG_URL}><AppleIcon width={14} height={14} />macOS .dmg</a></li>
               <li><a href={LINUX_APPIMAGE_URL}><LinuxIcon width={14} height={14} />Linux .AppImage</a></li>
               <li><a href={LINUX_DEB_URL}><LinuxIcon width={14} height={14} />Linux .deb</a></li>
               <li><a href={RELEASES_URL}><Rocket size={14} />All releases</a></li>

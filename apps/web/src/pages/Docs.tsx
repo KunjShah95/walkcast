@@ -1,7 +1,7 @@
 import { Check, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { FAQ, GUIDE_STEPS, MORE_FAQ } from "../content.ts";
-import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, MACOS_DMG_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "../ui.tsx";
 import { Doc } from "./Doc.tsx";
 import { GuidesIndexPage, ProductDemoPage, WebsiteTutorialPage } from "./Guides.tsx";
@@ -238,13 +238,6 @@ export function DownloadPage() {
           <span>
             <b>Windows package (.msi)</b>
             <small>For IT: installs for every user · about 87 MB</small>
-          </span>
-        </a>
-        <a className="dl-tile" href={MACOS_DMG_URL}>
-          <AppleIcon width={22} height={22} />
-          <span>
-            <b>macOS disk image (.dmg)</b>
-            <small>Apple Silicon, macOS 12 or later · about 78 MB</small>
           </span>
         </a>
         <a className="dl-tile" href={LINUX_APPIMAGE_URL}>

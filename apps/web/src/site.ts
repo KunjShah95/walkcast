@@ -9,7 +9,7 @@ export const REPO_URL = "https://github.com/KunjShah95/walkcast";
 export const RELEASES_URL = `${REPO_URL}/releases`;
 export const WINDOWS_EXE_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_x64-setup.exe`;
 export const WINDOWS_MSI_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_x64_en-US.msi`;
-export const MACOS_DMG_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_aarch64.dmg`;
+// macOS is no longer supported.
 export const LINUX_APPIMAGE_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_amd64.AppImage`;
 export const LINUX_DEB_URL = `${RELEASES_URL}/latest/download/walkcast_${VERSION}_amd64.deb`;
 export const ISSUES_URL = `${REPO_URL}/issues`;

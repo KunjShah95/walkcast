@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, Download, type LucideIcon } from "lucide-react";
 import { type ComponentProps, type ComponentType, type ReactNode, useEffect, useState } from "react";
-import { LINUX_APPIMAGE_URL, MACOS_DMG_URL, WINDOWS_EXE_URL } from "./site.ts";
+import { LINUX_APPIMAGE_URL, WINDOWS_EXE_URL } from "./site.ts";
 
 export type Tone = "ink" | "ochre" | "rec" | "yellow" | "blue" | "violet" | "pink" | "green" | "orange";
 
@@ -56,18 +56,16 @@ export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-export type Platform = "windows" | "mac" | "linux";
+export type Platform = "windows" | "linux";
 
 /** The three places Walkcast installs, and the file each one lands as. */
 const PLATFORMS: Record<Platform, { name: string; url: string }> = {
   windows: { name: "Windows", url: WINDOWS_EXE_URL },
-  mac: { name: "macOS", url: MACOS_DMG_URL },
   linux: { name: "Linux", url: LINUX_APPIMAGE_URL },
 };
 
 const PLATFORM_ICON: Record<Platform, ComponentType<ComponentProps<"svg">>> = {
   windows: WindowsIcon,
-  mac: AppleIcon,
   linux: LinuxIcon,
 };
 
@@ -80,8 +78,7 @@ function usePlatform(): Platform {
   useEffect(() => {
     const ua = `${navigator.userAgent} ${(navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? ""}`;
     if (/Android|iPhone|iPad/i.test(ua)) return; // a phone can't install it; keep the default link
-    if (/Mac/i.test(ua)) setP("mac");
-    else if (/Linux|X11/i.test(ua)) setP("linux");
+    if (/Linux|X11/i.test(ua)) setP("linux");
   }, []);
   return p;
 }
