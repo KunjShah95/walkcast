@@ -140,6 +140,8 @@ export function sharePage(o: {
   transcript: { start: number; text: string }[];
   /** The owner's notes, when the link was made to carry them. */
   notes?: { at: number; text: string }[];
+  /** The same walkthrough as numbered steps, when the recording has any. */
+  guideUrl?: string;
   expiresAt: string;
   note?: string;
 }): string {
@@ -152,6 +154,7 @@ export function sharePage(o: {
   <p class="dh">Walkthrough</p>
   <h1>${esc(o.title)}</h1>
   <p class="lede">${esc(o.host)} · ${o.pages} page${o.pages === 1 ? "" : "s"} · ${clock(o.durationMs / 1000)} · recorded ${esc(o.recorded)}</p>
+  ${o.guideUrl ? `<p class="share-guide"><a href="${esc(o.guideUrl)}">Read it as a step-by-step guide</a></p>` : ""}
 </div></section>
 <section class="share"><div class="wrap narrow">
   <div class="frame"><div class="win">
@@ -183,6 +186,9 @@ export function sharePage(o: {
 .share-head .dh{color:var(--signal);font-weight:700;font-size:clamp(13px,1.4vw,15px);letter-spacing:.14em;text-transform:uppercase;margin:0}
 .share-head h1{font-size:clamp(28px,4.4vw,46px);letter-spacing:-.03em;margin:10px 0 0}
 .share-head .lede{margin-inline:auto}
+.share-guide{margin:16px 0 0}
+.share-guide a{display:inline-flex;align-items:center;padding:9px 17px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-weight:600;font-size:14px;text-decoration:none;transition:border-color .16s,color .16s}
+.share-guide a:hover{border-color:var(--signal);color:var(--signal)}
 .share .frame{margin-top:clamp(20px,3vw,34px)}
 .share-video{display:block;width:100%;background:#000;aspect-ratio:16/10}
 .share-pages{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}

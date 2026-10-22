@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { CommandBar } from "./components/CommandBar.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
-import { DotGrid } from "./components/aceternity.tsx";
 import { type Me, isAuthError, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { watchDeepLinks } from "./lib/deep-link.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
@@ -217,10 +216,10 @@ export function App() {
   const sidebar = <Sidebar active={active} index={index} me={me} meReady={meReady} go={go} onClose={() => setDrawer(false)} closable={drawer} />;
 
   return (
+    <MotionConfig reducedMotion="user">
     <I18nProvider>
     <ExhibitProvider>
       <div className="relative min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-        <DotGrid className="opacity-40" />
         <div className="hidden lg:block">
           <div className="sticky top-0 h-dvh">{sidebar}</div>
         </div>
@@ -308,6 +307,7 @@ export function App() {
       <AnalyticsTracker route={route.view} path={location.pathname + location.hash} />
     </ExhibitProvider>
     </I18nProvider>
+    </MotionConfig>
   );
 }
 

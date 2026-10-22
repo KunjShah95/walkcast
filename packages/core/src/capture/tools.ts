@@ -213,7 +213,7 @@ export class BrowserTools {
 
   // ------------------------------------------------------------ internals
 
-  private element(index: number, from?: Observation): ObservedElement {
+  protected element(index: number, from?: Observation): ObservedElement {
     const observation = from ?? this.lastObservation;
     const element = observation?.elements.find((e) => e.index === index);
     if (!element) throw new Error(`No element ${index} in observation ${observation?.stepId ?? "(none)"}`);

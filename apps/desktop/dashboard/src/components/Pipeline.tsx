@@ -154,7 +154,7 @@ export function Pipeline({
             <foreignObject x={n.x - W / 2} y={n.y - H / 2} width={W} height={H}>
               <div
                 className={cn(
-                  "flex h-full items-center rounded-lg border-[1.5px] bg-panel px-2.5 transition-[border-color] duration-200",
+                  "flex h-full items-center rounded-lg border-[1.5px] bg-panel px-2.5 transition-[border-color,box-shadow] duration-200",
                   highlight === n.id && "shadow-[0_0_0_4px_var(--highlight)]",
                 )}
                 style={{ borderColor: ring, boxShadow: st === "fail" ? "0 0 0 4px var(--fail-soft)" : st === "warn" ? "0 0 0 4px var(--warn-soft)" : undefined }}

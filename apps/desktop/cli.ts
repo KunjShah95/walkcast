@@ -17,6 +17,7 @@ import { loadPlugins } from "../../packages/core/src/plugins.ts";
 import { loadFixture, replayFixture, writeFixture } from "../../packages/core/src/lab/fixture.ts";
 import { baselineFrom, gate, summariseGate, type GateBaseline } from "../../packages/core/src/lab/gate.ts";
 import { closeBrowser, runOnce } from "../../packages/core/src/lab/runner.ts";
+import { closeWarmBrowser } from "../../packages/core/src/record/browser.ts";
 import { findChrome } from "../../packages/core/src/lab/chrome.ts";
 import { applyCredentialsFile, exportDashboard, serveDashboard } from "./server/server.ts";
 import { LabData } from "../../packages/core/src/data.ts";
@@ -693,13 +694,19 @@ function printReplay(s: Awaited<ReturnType<typeof replayFixture>>): void {
   );
 }
 
+// Both browsers close when a command is done: the Lab's and the recorder's warm one. The warm
+// Chromium is a child process, so while it lives the event loop never empties, "beforeExit"
+// never fires, and a finished `record` sat in the terminal forever. A command that keeps
+// serving (app, ui) still runs; only the browser goes.
 main()
   .then(async (code) => {
     await closeBrowser();
+    await closeWarmBrowser();
     process.exitCode = code;
   })
   .catch(async (error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     await closeBrowser();
+    await closeWarmBrowser();
     process.exitCode = 2;
   });

@@ -251,7 +251,7 @@ input[type="radio"] {
 }
 
 .press:active {
-  transform: translateY(1px);
+  transform: scale(0.98);
 }
 
 /* The record light blinks only while something is actually recording. */
@@ -282,7 +282,7 @@ input[type="radio"] {
   }
 }
 .exhibit-lit {
-  animation: exhibit-mark 1800ms ease-out both;
+  animation: exhibit-mark 1800ms var(--ease-out) both;
   scroll-margin: 96px;
 }
 

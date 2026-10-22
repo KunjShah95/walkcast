@@ -97,7 +97,7 @@ export function Button({ tone = "secondary", size = "md", className, ...props }:
       type="button"
       {...props}
       className={cn(
-        "press inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        "press inline-flex items-center justify-center gap-2 rounded-full font-medium transition-[color,background-color,border-color,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-45",
         size === "sm" ? "h-8 px-3.5 text-[12.5px]" : "h-9 px-4 text-[13.5px]",
         TONE[tone],
         className,
@@ -206,7 +206,7 @@ export function CopyButton({ text, label: buttonLabel = "Copy" }: { text: string
           }
           setTimeout(() => setState("idle"), 1600);
         }}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs text-ink-2 hover:border-signal hover:text-ink"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs text-ink-2 transition-colors hover:border-signal hover:text-ink"
       >
         {state === "copied" ? "Copied" : state === "select" ? "Selected" : buttonLabel}
       </button>

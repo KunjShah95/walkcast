@@ -73,7 +73,7 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3">
         <div>
           <h3 className="text-[14.5px] font-semibold">Share this walkthrough</h3>
-          <p className="text-[12.5px] text-ink-3">Anyone with the link can watch. No account, no sign-in. The link stops working on the day it names.</p>
+          <p className="text-[12.5px] text-ink-3">Anyone with the link can watch, read the transcript and open the step-by-step guide. No account, no sign-in. The link stops working on the day it names.</p>
         </div>
         <div className="flex items-center gap-1.5">
           <select

@@ -36,6 +36,8 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   // A journey: the path through the site to record, instead of the whole site.
   const [journeyOn, setJourneyOn] = useState(false);
   const [journey, setJourney] = useState("");
+  const [zoom, setZoom] = useState(prefs.zoom);
+  const [presenter, setPresenter] = useState(prefs.presenter);
   const [copiedScript, setCopiedScript] = useState(false);
   const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
@@ -89,9 +91,11 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
       // A journey, when there is one, replaces the crawl: the recorder follows the path
       // instead of the site's links.
       const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
+      // Off is said out loud; on is the recorder's default.
+      const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }) };
       // The sample site records with the same voice as a real one, so what you hear in the demo is
       // the voice you picked.
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path }, (s) => setJob(s));
+      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...motion } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path, ...motion }, (s) => setJob(s));
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -165,6 +169,39 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                   </button>
                 </p>
               )}
+            </div>
+
+            <div className="grid gap-3 rounded-xl border border-line p-4">
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Zoom in on clicks</span>
+                  <span className="block text-[12.5px] text-ink-3">The video pushes in on each control as it is used, then pulls back out.</span>
+                </span>
+                <Toggle
+                  on={zoom}
+                  onChange={(on) => {
+                    setZoom(on);
+                    setPrefs({ zoom: on });
+                  }}
+                  disabled={busy}
+                  label="Zoom in on clicks"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Narrate like a presenter</span>
+                  <span className="block text-[12.5px] text-ink-3">Reads each page's headline, main button and sections aloud, in the page's own words. Off says only what the browser did.</span>
+                </span>
+                <Toggle
+                  on={presenter}
+                  onChange={(on) => {
+                    setPresenter(on);
+                    setPrefs({ presenter: on });
+                  }}
+                  disabled={busy}
+                  label="Narrate like a presenter"
+                />
+              </label>
             </div>
 
             <div className="grid gap-3 rounded-xl border border-line p-4">

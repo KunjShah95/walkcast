@@ -5,7 +5,7 @@ import { Insights } from "../components/Insights.tsx";
 import { SharePanel } from "../components/Share.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
 import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, deleteRecording, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
+import { type Capabilities, deleteRecording, guideUrl, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
 
@@ -98,6 +98,17 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
                 >
                   Transcript
                 </a>
+                {!isSnapshot && (
+                  <a
+                    href={guideUrl(current.id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Every page and every click as numbered steps with pictures"
+                    className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
+                  >
+                    Step guide
+                  </a>
+                )}
                 {!isSnapshot && caps?.live && (
                   <button
                     type="button"

@@ -32,7 +32,7 @@ const THEIRS: [string, Mark[]][] = [
   ["Films your face and your own commentary", ["no", "yes", "yes", "no"]],
   ["Automatic zoom and cursor smoothing", ["some", "no", "yes", "no"]],
   ["Annotated screenshot guides", ["some", "no", "no", "yes"]],
-  ["Hosted share links with comments", ["no", "yes", "no", "yes"]],
+  ["Hosted share links with comments", ["some", "yes", "no", "yes"]],
 ];
 
 function MarkIcon({ m }: { m: Mark }) {

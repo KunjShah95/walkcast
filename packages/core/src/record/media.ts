@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
 import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, sapiAvailable, sapiEngine } from "./voice.ts";
 import { transcribe } from "./stt.ts";
+import { zoomFilterFor } from "./zoom.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -125,12 +126,15 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
   const videoSeconds = await probeSeconds(join(dir, video));
   const extra = Math.max(0, audioSeconds - videoSeconds + 0.5);
   const mp4 = join(dir, "recording.mp4");
+  // The zoom on each click and fill, when the recording has its moments and zoom is on. Only
+  // the MP4 zooms: the WebM below is a stream copy of the browser's own video.
+  const zoom = zoomFilterFor(dir, videoSeconds);
   onProgress?.("Encoding the MP4");
   await run([
     "-i", join(dir, video),
     "-i", audio,
     "-i", join(dir, "captions.vtt"),
-    "-filter_complex", `[0:v]tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
+    "-filter_complex", `[0:v]${zoom ? `${zoom},` : ""}tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
     "-map", "[v]", "-map", "1:a", "-map", "2:s",
     "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
     "-c:a", "aac", "-b:a", "96k",
@@ -160,12 +164,13 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
 /** The visit with no narration: H.264 video plus the caption track, for when nothing speaks. */
 async function muxSilent(dir: string, video: string, onProgress?: (p: string) => void): Promise<Pick<MediaResult, "mp4">> {
   const mp4 = join(dir, "recording.mp4");
+  const zoom = zoomFilterFor(dir, await probeSeconds(join(dir, video)));
   onProgress?.("Encoding the MP4");
   await run([
     "-i", join(dir, video),
     "-i", join(dir, "captions.vtt"),
     "-map", "0:v", "-map", "1:s",
-    "-vf", "format=yuv420p",
+    "-vf", `${zoom ? `${zoom},` : ""}format=yuv420p`,
     "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
     "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
     "-movflags", "+faststart",

@@ -38,11 +38,13 @@ function aRecording(root: string): string {
         { start: 0, end: 2, text: "Opening the shop." },
         { start: 2, end: 4, text: "Here are the products." },
       ],
+      actions: [{ at: 1.2, kind: "click", name: "Products", url: "https://shop.example/", shot: "step-01.jpg" }],
       media: { video: "video.webm", mp4: "recording.mp4", webm: "narrated.webm", audio: "narration.wav", captions: "captions.vtt", voice: "flite", note: "" },
     }),
   );
   writeFileSync(join(dir, "recording.mp4"), "not really a video");
   writeFileSync(join(dir, "captions.vtt"), "WEBVTT\n");
+  writeFileSync(join(dir, "step-01.jpg"), "not really a picture");
   writeFileSync(join(dir, "recording.json.bak"), "{}");
   return id;
 }
@@ -81,6 +83,28 @@ test("a share link plays the walkthrough for anyone who has it, and only for the
     const captions = await fetch(`${body.url}/captions.vtt`);
     assert.equal(captions.status, 200);
     assert.match(await captions.text(), /WEBVTT/);
+
+    // The same link reads as a step-by-step guide: numbered steps, the action named, the
+    // picture it took of the control, and no account needed for any of it.
+    assert.match(html, /Read it as a step-by-step guide/);
+    const guide = await fetch(`${body.url}/guide`);
+    assert.equal(guide.status, 200);
+    const guideHtml = await guide.text();
+    assert.match(guideHtml, /Click “Products”/);
+    assert.match(guideHtml, /step-01\.jpg/);
+    const markdown = await fetch(`${body.url}/guide?format=md`);
+    assert.equal(markdown.status, 200);
+    assert.match(await markdown.text(), /## 1\. Open Shop[\s\S]*## 2\. Click “Products”/);
+    const stepPicture = await fetch(`${body.url}/step-01.jpg`);
+    assert.equal(stepPicture.status, 200, "the guide's pictures travel with the link");
+
+    // The owner gets the same guide from the stored summary, without a share token.
+    const ownerGuide = await fetch(`${srv.url}/api/recordings/${id}/guide`);
+    assert.equal(ownerGuide.status, 200);
+    assert.match(await ownerGuide.text(), /Click “Products”/);
+    const ownerMarkdown = await fetch(`${srv.url}/api/recordings/${id}/guide?format=md`);
+    assert.equal(ownerMarkdown.status, 200);
+    assert.match(await ownerMarkdown.text(), /## 1\. Open Shop[\s\S]*## 2\. Click “Products”/);
 
     // Only the files this walkthrough published. The rest of its folder is not a doorway.
     const other = await fetch(`${body.url}/recording.json.bak`);

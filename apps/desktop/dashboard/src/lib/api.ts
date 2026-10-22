@@ -238,7 +238,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 /** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain" },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
@@ -324,12 +324,26 @@ export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSumma
   return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
 }
 
+/** Re-frame the walkthrough for a feed: 9:16 or 1:1, with the captions burned in. */
+export async function exportShape(id: string, shape: "vertical" | "square"): Promise<RecordingSummary> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/export?shape=${shape}`, { method: "POST" });
+  const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.recording) throw new Error(body.error ?? `Export failed (${res.status}).`);
+  return body.recording;
+}
+
 /** Delete a recording and its files. */
 export async function deleteRecording(id: string): Promise<void> {
   const res = await fetch(`/api/recordings/${encodeURIComponent(id)}`, { method: "DELETE" });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not delete the recording (${res.status}).`);
+}
+
+/** URL for a recording's step-by-step guide: an HTML page with a picture per step, or Markdown. */
+export function guideUrl(id: string, format: "html" | "md" = "html"): string {
+  return `/api/recordings/${encodeURIComponent(id)}/guide?format=${format}`;
 }
 
 /** URL for a recording's transcript export in the requested format. */

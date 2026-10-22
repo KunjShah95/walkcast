@@ -5,6 +5,7 @@ import type { RecordingInsights } from "./record/insights.ts";
 import type { FixtureManifest } from "./lab/fixture.ts";
 import type { RunResult } from "./lab/runner.ts";
 import type { ExperimentSummary as ExperimentSummaryData } from "./lab/summary.ts";
+import type { GuideAction } from "./record/guide.ts";
 
 /**
  * Read-only index over what the lab writes to disk: runs (runs/, results/<exp>/runs/),
@@ -131,11 +132,23 @@ export interface RecordingSummary {
   pages: { url: string; title: string; status: number | null; controls: number; screenshot?: string }[];
   skipped: { url: string; reason: string }[];
   captions: { start: number; end: number; text: string }[];
-  media: { video: string | null; mp4: string | null; webm?: string | null; audio: string | null; captions: string; voice: string; note: string };
+  media: {
+    video: string | null;
+    mp4: string | null;
+    webm?: string | null;
+    audio: string | null;
+    captions: string;
+    voice: string;
+    note: string;
+    /** The same MP4 re-framed for a feed (9:16, 1:1), once someone has asked for it. */
+    exports?: Partial<Record<"vertical" | "square", string>>;
+  };
   /** Why the walk ended, when a length cap was set. */
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
   /** What the recorder found on the site: console errors, failed requests, page timings. */
   insights?: RecordingInsights;
+  /** Every click and fill, with the picture taken before it, for the step-by-step guide. */
+  actions?: GuideAction[];
   /** Share links: the token is the permission, and every link expires. */
   shares?: ShareLink[];
   /** What the person asked the narration to be, and what spoke instead. */

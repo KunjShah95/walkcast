@@ -1,4 +1,4 @@
-import { motion, useScroll, useSpring } from "motion/react";
+import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "../App.tsx";
 import { FAMILY_COLOR, FlightStrip, pathOnly, toolFamily } from "../components/FlightStrip.tsx";
@@ -15,6 +15,7 @@ type Node =
   | { kind: "claim"; at: number; claim: ClaimEvent };
 
 export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIndex; go: (r: Route) => void; refresh?: () => Promise<LabIndex> }) {
+  const still = useReducedMotion();
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
@@ -41,7 +42,7 @@ export function RunView({ dir, index, go, refresh }: { dir: string; index: LabIn
   }, [dir, known]);
 
   const jump = (stepId: number) => {
-    document.getElementById(`step-${stepId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(`step-${stepId}`)?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
     setFlash(stepId);
     setTimeout(() => setFlash(null), 1600);
   };
@@ -322,6 +323,7 @@ function SaidRecorded({ detail }: { detail: RunDetail }) {
 }
 
 function Timeline({ detail, evidence, flash }: { detail: RunDetail; evidence: Map<number, Finding[]>; flash: number | null }) {
+  const still = useReducedMotion();
   const { events, summary } = detail;
   const nodes = useMemo<Node[]>(() => {
     const out: Node[] = [];
@@ -358,7 +360,7 @@ function Timeline({ detail, evidence, flash }: { detail: RunDetail; evidence: Ma
           aria-hidden
           className="absolute left-[15px] top-2 w-[2px] origin-top rounded-full sm:left-[134.5px]"
           style={{
-            scaleY: beam,
+            scaleY: still ? scrollYProgress : beam,
             bottom: 8,
             background: `linear-gradient(to bottom, var(--signal), ${summary.verdict === "fail" ? "var(--fail)" : "var(--pass)"})`,
           }}

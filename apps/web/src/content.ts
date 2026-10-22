@@ -268,7 +268,7 @@ export const COMPARE_FAQ: Record<string, [string, string][]> = {
 export const MORE_FAQ: [string, string][] = [
   [
     "What files does a recording produce?",
-    "An MP4 (H.264 video with an embedded caption track), the raw WebM, WebVTT captions, a transcript, and a list of every page visited with its HTTP status. The same visit also reads as a step-by-step guide (HTML or Markdown) with a picture of each page and each click. With a voice key you also get the narration in the MP4, a narrated WebM and the narration as a WAV file.",
+    "An MP4 (H.264 video with an embedded caption track), the raw WebM, WebVTT captions, a transcript, and a list of every page visited with its HTTP status. The same visit also reads as a step-by-step guide (HTML or Markdown) with a picture of each page and each click. With a voice key you also get the narration in the MP4, a narrated WebM and the narration as a WAV file. The same visit also opens as a step-by-step guide, with a picture of each page and each click, and Studio can re-frame the MP4 as a 9:16 or 1:1 video with the captions burned in.",
   ],
   [
     "How long does a recording take?",
@@ -432,7 +432,8 @@ export const COMPARES: Compare[] = [
       ["Captions and a transcript", "yes", "yes", "Loom transcribes on the cloud; Walkcast writes WebVTT captions timed to the voice."],
       ["Runs on Windows and Linux", "yes", "yes", "Loom works in the browser and on desktop; Walkcast is a desktop app for all three."],
       ["Files stay on your machine", "yes", "no", "Loom hosts your videos. Walkcast writes them to your own folder, and the app uploads nothing."],
-      ["Hosting and sharing links", "no", "yes", "Walkcast gives you files. Loom gives you a link."],
+      ["Hosting and sharing links", "some", "yes", "Walkcast makes a share link that plays in a browser and expires on the day you name, served by the server you run. Loom hosts the video for you and adds comments and reactions."],
+      ["A written step-by-step guide", "yes", "no", "Walkcast turns the same visit into numbered steps with a picture per click. Loom gives you the video and its transcript."],
     ],
     facts: [
       ["Loom Starter is free with 25 videos of up to five minutes each, up to 720p, and no downloads.", "https://support.atlassian.com/loom/docs/available-loom-plans"],
@@ -460,6 +461,7 @@ export const COMPARES: Compare[] = [
       "You are on Windows or Linux. Screen Studio ships for macOS only.",
       "You want to show a flow inside your website, including pages behind a login, without screen-sharing your whole desktop.",
       "You want the clicks to land without hand-editing: Walkcast zooms in on each control as it is used.",
+      "You want a 9:16 or 1:1 cut for a feed from the same take, with the captions already burned in.",
       "You want the same tour after every release without re-performing it on camera.",
       "You would rather not pay a subscription for a recording tool.",
     ],
@@ -473,6 +475,7 @@ export const COMPARES: Compare[] = [
       ["Records pages behind a login", "yes", "no", "Walkcast signs in with a test account you provide."],
       ["Narration written for you", "yes", "no", "Walkcast writes the narration from the browser's own trace and reads it aloud."],
       ["A written step-by-step guide", "yes", "no", "Walkcast turns the same visit into numbered steps with a picture per action. Screen Studio exports video only."],
+      ["Vertical and square exports (9:16, 1:1)", "yes", "yes", "Walkcast re-frames the finished MP4 for a feed with the captions burned in. Screen Studio exports all three shapes at up to 4K and 60 fps."],
       ["Timeline editor", "no", "yes", "Walkcast records one continuous visit and does not cut or splice."],
       ["Files stay on your machine", "yes", "no", "Walkcast writes a recording to your folder. The app uploads nothing."],
     ],

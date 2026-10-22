@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { useReducedMotion } from "motion/react";
+import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, exportShape, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
 import type { RecordingSummary } from "../lib/types.ts";
@@ -76,6 +77,7 @@ export function Studio({
   onChange?: (next: RecordingSummary) => void;
   compact?: boolean;
 }) {
+  const still = useReducedMotion();
   const video = useRef<HTMLVideoElement>(null);
   const list = useRef<HTMLOListElement>(null);
   const [time, setTime] = useState(0);
@@ -98,6 +100,8 @@ export function Studio({
   const [version, setVersion] = useState(0);
   const [sttBusy, setSttBusy] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
+  // Which feed shape is encoding, if any: one at a time, each is a full re-encode.
+  const [shaping, setShaping] = useState<"vertical" | "square" | null>(null);
   // Known only on a live server; elsewhere let the server answer.
   const sttMissing = caps?.live && caps.sttProviders?.length === 0;
 
@@ -112,8 +116,8 @@ export function Studio({
     if (!el) return;
     const box = list.current;
     const top = el.offsetTop - box.offsetTop;
-    if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - el.offsetHeight) box.scrollTo({ top: top - box.clientHeight / 3, behavior: "smooth" });
-  }, [active]);
+    if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - el.offsetHeight) box.scrollTo({ top: top - box.clientHeight / 3, behavior: still ? "auto" : "smooth" });
+  }, [active, still]);
 
   const seek = (t: number, play = true) => {
     const v = video.current;
@@ -302,6 +306,53 @@ export function Studio({
               // the recorder found — to paste into a ticket, a README or a chat.
               <a href={transcriptUrl(r.id, "md")} download={`${r.id}.md`} className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
                 Markdown
+              </a>
+            )}
+            {!compact &&
+              (
+                [
+                  ["vertical", "9:16"],
+                  ["square", "1:1"],
+                ] as const
+              ).map(([shape, label]) => {
+                const made = r.media.exports?.[shape];
+                const cls = "inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40";
+                // Made once, then it is a download like the MP4.
+                if (made) {
+                  return (
+                    <a key={shape} href={mediaUrl(r.dir, made)} download={`${r.id}-${made}`} title={`The walkthrough in ${label}, captions burned in`} className={cls}>
+                      {label}
+                    </a>
+                  );
+                }
+                return (
+                  <button
+                    key={shape}
+                    type="button"
+                    disabled={shaping !== null || !r.media.mp4}
+                    title={`Re-frame for a feed in ${label}, with the captions burned in`}
+                    onClick={async () => {
+                      setShaping(shape);
+                      setSttError(null);
+                      try {
+                        onChange?.(await exportShape(r.id, shape));
+                      } catch (e) {
+                        setSttError(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setShaping(null);
+                      }
+                    }}
+                    className={cls}
+                  >
+                    {shaping === shape ? `Making ${label}…` : `Make ${label}`}
+                  </button>
+                );
+              })}
+            {!compact && (
+              // The visit as numbered steps, each with a picture of the screen: for a help
+              // article or an onboarding doc, where people skim instead of watching.
+              <a href={guideUrl(r.id)} target="_blank" rel="noreferrer" title="Every page and every click as numbered steps with pictures" className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
+                Step guide
               </a>
             )}
           </span>
