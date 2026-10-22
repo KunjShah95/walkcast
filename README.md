@@ -238,7 +238,7 @@ Runs, Fixtures, Experiments, Compare.
 
 | | What | Where | Runs on |
 | --- | --- | --- | --- |
-| **Website** | React landing page (Vite), prerendered at build time. No accounts, no API, no server. | `apps/web/` | Any static host (Vercel) |
+| **Website** | React landing page (Vite), prerendered at build time. Static files, no backend. | `apps/web/` | Any static host (Vercel) |
 | **Desktop app** | The product: recorder, dashboard, lab runs, sign-in, API. Tauri shell around the local Node server. | `apps/desktop/` | Windows, macOS, Linux |
 
 ```sh

@@ -27,7 +27,7 @@ export function GuidesIndexPage() {
         </h1>
         <p className="answer">
           <strong>Short answer:</strong> every guide ends the same way. Install Walkcast, paste the link of a site you
-          own or may test, press Record, and get an MP4 with a spoken voice-over, WebVTT captions and a transcript. The
+          own or may test and press Record. You get an MP4 with a spoken voice-over, WebVTT captions and a transcript. The
           guide tells you which of the three jobs you are doing and what to press.
         </p>
 
@@ -106,10 +106,10 @@ export function ProductDemoPage() {
         How to make a product demo video. <span className="dim">From your live app, in about five minutes.</span>
       </h1>
       <p className="answer">
-        <strong>Short answer:</strong> install Walkcast, paste the URL of your app, add the sign-in details if your
-        product needs one, confirm you may test it, and press Record. A real browser signs in, walks up to 30 pages the
-        way a new user would, and hands back the whole visit as an MP4 with a spoken voice-over, WebVTT captions and a
-        transcript. You never open a camera, never record your screen and never edit anything.
+        <strong>Short answer:</strong> install Walkcast, paste the URL of your app and add the sign-in details if your
+        product needs one. Confirm you may test it, then press Record. A real browser signs in, walks up to 30 pages the
+        way a new user would and hands back the whole visit as an MP4 with a spoken voice-over, WebVTT captions and a
+        transcript. Your part is the link and the Record button; the browser does the walking and the talking.
       </p>
 
       <h2>What a product demo video needs to be</h2>
@@ -167,7 +167,7 @@ export function ProductDemoPage() {
         Long enough to show the value and short enough to be finished. For most products, four to eight pages is the
         sweet spot: long enough to prove the thing works, short enough that a prospect on a sales call will watch it
         through. The maximum is 30 pages. If your product needs more than that, record the flow twice rather than making
-        one long video — two focused videos are easier to share and easier to re-record than one.
+        one long video: two focused videos are easier to share and easier to re-record than one.
       </p>
 
       <h2>Make it look like your product, not a template</h2>
@@ -204,9 +204,9 @@ export function ProductDemoPage() {
 
       <h2>Compare the alternatives</h2>
       <ul>
-        <li><a href="/compare/loom">Loom alternative</a> — if you have been recording your screen instead of your site.</li>
-        <li><a href="/compare/screen-studio">Screen Studio alternative</a> — if you want the polished screencast look, and you are on a Mac.</li>
-        <li><a href="/compare/scribe">Scribe alternative</a> — if you want screenshots and steps rather than a video.</li>
+        <li><a href="/compare/loom">Loom alternative</a>: if you have been recording your screen instead of your site.</li>
+        <li><a href="/compare/screen-studio">Screen Studio alternative</a>: if you want the polished screencast look, and you are on a Mac.</li>
+        <li><a href="/compare/scribe">Scribe alternative</a>: if you want screenshots and steps rather than a video.</li>
       </ul>
     </Doc>
   );
@@ -222,10 +222,10 @@ export function WebsiteTutorialPage() {
         How to make a website tutorial video. <span className="dim">Without a screen recorder.</span>
       </h1>
       <p className="answer">
-        <strong>Short answer:</strong> install Walkcast, paste the link of the page the tutorial starts on, add the
-        sign-in if the flow is behind a login, and press Record. You get an MP4 of the real pages with a spoken
-        voice-over, WebVTT captions and a transcript — a tutorial that keeps itself current, because you can re-record
-        it in a minute after every change.
+        <strong>Short answer:</strong> install Walkcast, paste the link of the page the tutorial starts on and add the
+        sign-in if the flow is behind a login. Press Record. You get an MP4 of the real pages with a spoken voice-over,
+        WebVTT captions and a transcript. It keeps itself current, because you can re-record it in a minute after every
+        change.
       </p>
 
       <h2>Why record the site and not the screen</h2>
@@ -293,9 +293,9 @@ export function WebsiteTutorialPage() {
 
       <h2>Related</h2>
       <ul>
-        <li><a href="/guides/narrated-website-walkthrough">The full narrated walkthrough guide</a> — the files, the embed, and why the narration is accurate.</li>
-        <li><a href="/compare/screen-recording">Walkcast vs screen recording</a> — when a screen recorder is still the right call.</li>
-        <li><a href="/faq">The FAQ</a> — platforms, logins, CAPTCHAs and output files.</li>
+        <li><a href="/guides/narrated-website-walkthrough">The full narrated walkthrough guide</a>: the files, the embed, and why the narration is accurate.</li>
+        <li><a href="/compare/screen-recording">Walkcast vs screen recording</a>: when a screen recorder is still the right call.</li>
+        <li><a href="/faq">The FAQ</a>: platforms, logins, CAPTCHAs and output files.</li>
       </ul>
     </Doc>
   );

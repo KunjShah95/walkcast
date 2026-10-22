@@ -23,10 +23,10 @@ function CompareArticle({ compare }: { compare: Compare }) {
       </h1>
       <p className="answer">
         <strong>Short answer:</strong> Walkcast is a free, open-source alternative to {compare.them} that records your
-        website rather than your screen. It signs in, walks the pages, and hands back an MP4 with narration, captions and
-        a transcript that you can regenerate after every change. But {compare.them} is the better tool for{" "}
-        {compare.theyAreGoodAt[0]?.replace(/^./, (c) => c.toLowerCase())} — and the table below says plainly where each
-        one wins.
+        website rather than your screen. It signs in, walks the pages and hands back an MP4 with narration, captions and
+        a transcript. Regenerate it after every change. But {compare.them} is the better tool for{" "}
+        {compare.theyAreGoodAt[0]?.replace(/^./, (c) => c.toLowerCase()).replace(/:\s*/, ", ")} We are not trying to say{" "}
+        {compare.them} is bad.
       </p>
 
       <h2>What {compare.them} costs</h2>
@@ -35,7 +35,7 @@ function CompareArticle({ compare }: { compare: Compare }) {
         <a href={compare.themUrl} rel="nofollow noopener" target="_blank">
           {compare.them}'s own pricing page
         </a>
-        . Walkcast costs nothing: MIT licensed, no seats, no watermark, no upload of your recordings.
+        . Walkcast is free and MIT licensed, with unlimited seats. The video carries no watermark.
       </p>
 
       <h2>Where {compare.them} is better</h2>
@@ -112,7 +112,7 @@ function CompareArticle({ compare }: { compare: Compare }) {
       <p>
         The fastest way to settle this is to record the same page with both tools and watch them side by side. Walkcast is
         a{" "}
-        <a href="/download">free download for Windows, Mac and Linux</a>, and it makes no account, so the only thing it
+        <a href="/download">free download for Windows, Mac and Linux</a>. It requires no account, so the only thing it
         costs you is the time to try it.
       </p>
     </Doc>

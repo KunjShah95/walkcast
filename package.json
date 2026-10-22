@@ -22,6 +22,8 @@
     "web:indexnow": "node --import tsx apps/web/indexnow.ts",
     "seo:pull": "node scripts/seo-trends.mjs",
     "seo:report": "node scripts/seo-report.mjs",
+    "copy:check": "node scripts/copy-check.mjs",
+    "copy:read": "node scripts/read-page.mjs",
     "experiment": "tsx apps/desktop/cli.ts experiment",
     "ui:build": "vite build --config apps/desktop/dashboard/vite.config.ts",
     "ui:dev": "vite --config apps/desktop/dashboard/vite.config.ts",

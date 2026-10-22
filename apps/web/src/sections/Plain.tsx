@@ -34,9 +34,17 @@ export function Plain() {
         <Reveal className="sec-head center">
           <Eyebrow n={1}>How it works</Eyebrow>
           <h2>
-            You paste a link. <span className="dim">It does the walking.</span>
+            You paste a link and <span className="dim">it does the walking.</span>
           </h2>
           <p className="lede">{PLAIN}</p>
+        </Reveal>
+
+        <Reveal className="oldway" delay={0.06}>
+          <span className="oldway-label mono">The old way</span>
+          <p>
+            Write the script, record the screen, retake it, record the voice, sync the captions. Then you ship one
+            update, and it is already out of date.
+          </p>
         </Reveal>
 
         <ol className="steps">
@@ -97,8 +105,8 @@ export function Agents() {
           </h2>
           <p className="lede">
             Most people only need the video recorder above. If you build AI agents that use a browser, the same app has a
-            Lab: when an agent fails a task, it shows the cause and the evidence, and turns the failure into a test you can
-            rerun on the next version. It is in the sidebar under Lab.
+            Lab. When an agent fails a task, it shows the cause and the evidence, and turns the failure into a test you
+            can rerun on the next version. It is in the sidebar under Lab.
           </p>
         </Reveal>
 
@@ -110,11 +118,11 @@ export function Agents() {
             <h3>A video tour of your site, without a script</h3>
             <p>
               Founders, marketers and PMs paste one link and get the whole visit as an MP4 with captions, a transcript
-              and a voice-over — including the pages only a signed-in user can see.
+              and a voice-over. Pages behind a login are included.
             </p>
             <ul>
               {[
-                "One link in, one video out. No camera, no microphone, no editing.",
+                "One link in, one video out. The browser signs in, walks the site and records the visit.",
                 "Records behind a login, so demos and onboarding work.",
                 "The narration is written from what the browser did, so it cannot invent a feature.",
               ].map((p) => (
@@ -134,7 +142,7 @@ export function Agents() {
             <h3>A failed agent run, turned into a test</h3>
             <p>
               Teams building browser AI agents use the same recorder to turn a failed run into a classified,
-              reproducible regression test — a cause, the evidence behind it, and a fixture that holds.
+              reproducible regression test. You get a cause, the evidence behind it, and a fixture that holds.
             </p>
             <ul>
               {[
@@ -157,8 +165,8 @@ export function Agents() {
         <Reveal className="agent-note">
           <ShieldCheck size={16} />
           <p>
-            Both halves read the same evidence: what the browser actually did, not what an agent claimed. Nothing is
-            scored by an LLM judge, and nothing is invented.
+            Both halves read the same evidence: what the browser actually did, not what an agent claimed. No LLM judge
+            scores either, and every cause is traceable to the trace.
           </p>
         </Reveal>
       </div>

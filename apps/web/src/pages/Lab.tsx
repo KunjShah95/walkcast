@@ -23,8 +23,8 @@ export function LabPage() {
 
       <h2>The problem with testing a browser agent</h2>
       <p>
-        A browser agent is a program that cannot be unit tested. It reads a page, decides what to click, and the result
-        depends on what the site returned, what the model decided, and what the page looked like three steps ago. When a
+        A browser agent is a program that cannot be unit tested. It reads a page and decides what to click. The result
+        depends on what the site returned, what the model decided and what the page looked like three steps ago. When a
         run fails, the agent usually cannot explain itself, and the log is a wall of DOM snapshots with no clear cause.
       </p>
       <p>
@@ -48,14 +48,14 @@ export function LabPage() {
       <h2>Browser agent evals, in one page</h2>
       <p>
         If you are building a browser agent, you already know the shape of the problem. You write an eval for a
-        task, you run it, and one day it goes red. The hard part is never the red — it is working out why, proving
+        task, you run it, and one day it goes red. The hard part is working out why it went red, proving
         the fix, and noticing that the fix broke a different task last week.
       </p>
       <p>
         That is what Walkcast Lab is: the evals half of browser agent testing, built on the recorder rather than on
         an agent's own logs. A run that fails becomes a cause, the evidence behind it, and a fixture you can replay.
-        When you compare two versions of the agent, you get the same task run repeatedly against both, with 95% Wilson
-        score intervals, so a real improvement is distinguishable from a lucky run.
+        When you compare two versions of the agent, the same task is run repeatedly against both. The 95% Wilson score
+        intervals separate a real improvement from a lucky run.
       </p>
 
       <h2>How a failure becomes a regression test</h2>
@@ -85,7 +85,7 @@ export function LabPage() {
           <h3>4. Compare base and candidate</h3>
           <p>
             An experiment runs the task repeatedly against both agents and reports 95% Wilson score intervals, so a real
-            improvement is distinguishable from a lucky run — and a fix that broke something else shows up as a
+            improvement is distinguishable from a lucky run. A fix that broke something else shows up as a
             regression rather than hiding in the average.
           </p>
         </li>
@@ -108,7 +108,7 @@ export function LabPage() {
       <p>
         Walkcast Lab sits one step downstream. It works with any agent that drives a real browser, because it reads the
         recorder's own output rather than an agent's logs. If you build on Stagehand, Playwright or browser-use, Lab is
-        the part that tells you whether your change fixed anything — it is the Stagehand alternative for the testing
+        the part that tells you whether your change fixed anything. It is the Stagehand alternative for the testing
         half of the job, not for the driving half.
       </p>
 

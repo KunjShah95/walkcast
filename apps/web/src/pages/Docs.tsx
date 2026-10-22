@@ -25,9 +25,9 @@ export function GuidePage() {
         How to make a narrated video walkthrough of a website. <span className="dim">Free, in about five minutes.</span>
       </h1>
       <p className="answer">
-        <strong>Short answer:</strong> install Walkcast, paste the site's link (and a sign-in if pages are behind a login), confirm you may test the site, and
-        press Record. A real browser walks up to 30 pages and returns an MP4 with a spoken voice-over, WebVTT captions and a transcript. You do not record your
-        screen, speak, or edit anything.
+        <strong>Short answer:</strong> install Walkcast, paste the site's link (and a sign-in if pages are behind a login) and confirm you may test the site.
+        Press Record. A real browser walks up to 30 pages and returns an MP4 with a spoken voice-over, WebVTT captions and a transcript. You never record your
+        screen and you never edit anything.
       </p>
 
       <h2>What you need</h2>
@@ -64,14 +64,18 @@ export function GuidePage() {
           <tr><td><code>narration.wav</code></td><td>The voice-over on its own.</td></tr>
           <tr><td>Page list</td><td>Every page visited, with its title and HTTP status.</td></tr>
           <tr><td>Notes</td><td>Your own notes, pinned to the second of the video they are about.</td></tr>
-          <tr><td>Share link</td><td>A link that plays the walkthrough for whoever has it, until the day it names.</td></tr>
+          <tr><td>Share link</td><td>A link that plays the walkthrough for whoever has it, until the day it names. Served by the server you run.</td></tr>
         </tbody>
       </table>
 
       <h2>Share it, or put it on your own site</h2>
       <p>
-        A share link plays the walkthrough for whoever has it: no account, no sign-in, nothing to install. It stops working on the day you name, and you can stop it
+        A share link plays the walkthrough for whoever has it. There is no sign-in: whoever has the link can watch it in a browser. It stops working on the day you name, and you can stop it
         before then. Each link answers for itself, so one link can carry your notes and another can leave them private.
+      </p>
+      <p>
+        A link needs somewhere to be served from: the server that ships with the desktop app, or your own. Point it at a host you control and the link is only as
+        public as that host is.
       </p>
       <p>
         To put the walkthrough on your own site, copy the embed code from the Share panel. It is one line of HTML — an iframe with the video, its captions and a link
@@ -106,7 +110,7 @@ export function GuidePage() {
       <h2>Why the narration is accurate</h2>
       <p>
         Every line is written from the browser's own trace: the page it opened, the field it typed into, what the site answered. Nothing is guessed about intent,
-        so the voice never describes something that is not on screen. Passwords are typed but never spoken or saved; files show a placeholder.
+        so the voice only describes what is on screen. Passwords are typed but never spoken or saved; files show a placeholder.
       </p>
     </Doc>
   );
@@ -122,8 +126,8 @@ const ROWS: [string, Mark, Mark, string][] = [
   ["Captions and transcript included", "yes", "some", "Walkcast writes WebVTT captions timed to the voice."],
   ["Records pages behind a login", "yes", "yes", "Walkcast signs in with a test account you provide."],
   ["Shows your desktop, other tabs or notifications", "no", "yes", "Walkcast records its own browser only."],
-  ["Explains why, not just what", "no", "yes", "A human narrator can give reasons and opinions."],
-  ["Records desktop apps, not just websites", "no", "yes", "Walkcast is for websites and web apps."],
+  ["Explains why something happened", "no", "yes", "A human narrator can give reasons and opinions."],
+  ["Records desktop apps", "no", "yes", "Walkcast is for websites and web apps."],
 ];
 
 function MarkCell({ m }: { m: Mark }) {
@@ -297,15 +301,22 @@ export function PrivacyPage() {
       </h1>
       <p className="answer">
         <strong>Short answer:</strong> Walkcast runs on your own computer. Recordings, the recording browser and the passwords you type stay there. The app has no
-        analytics and no telemetry, and it does not upload recordings.
+        analytics and no telemetry. The desktop app never uploads a recording.
       </p>
 
       <h2>What never leaves your PC</h2>
       <ul>
         <li>Your recordings: video, narration, captions and traces are files in the app's folder.</li>
         <li>Passwords: held in memory for the run, then dropped. Files on disk show a placeholder; the narration never reads them out.</li>
-        <li>The narration voice: spoken by the voices built into Windows, offline.</li>
+        <li>The narration voice: spoken offline by ffmpeg's built-in voices, or by Windows SAPI on Windows.</li>
       </ul>
+
+      <h2>The one thing that does leave your PC</h2>
+      <p>
+        A share link. If you publish one, the recording is served by the server you run — the desktop app bundles one, and a
+        hosted install keeps its media in S3 — and it stays reachable at that link until you stop it. Nothing else about a
+        recording leaves the machine, and the app never sends it anywhere on its own.
+      </p>
 
       <h2>The network requests it does make</h2>
       <table>

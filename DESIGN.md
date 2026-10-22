@@ -267,6 +267,12 @@ Soft, confident pills.
 - **Big:** 16px label, 15px 24px padding.
 - **Hover / Focus:** 0.18s colour transitions, press scales to 0.98; focus is a 2px ochre outline offset 3px.
 
+### The Download Button
+One family for the whole site: signal fill, white text, the platform's glyph, the platform's name, the download arrow. Every download on every page is this button — the nav pill, the hero's three platform pills, the installer cards, the footer, the closing panel. No second treatment, no icon-only variant, and never the record light (the red dot means recording, not installing).
+- **Single:** the visitor's own platform, labelled "Download for Windows / macOS / Linux".
+- **Row:** the three platforms, fixed order so nothing moves when the page hydrates and learns the visitor's machine.
+- **Installer card:** the same button, labelled for the file it fetches (.exe, .msi, .dmg, .AppImage, .deb).
+
 ### Chips
 - **Citation chip:** exhibit cream, exhibit ink, mono 600 11px, 6px radius, a half-opacity dot before the EX-n label; click seeks and spotlights the cited transcript line.
 - **Tag:** mono 11.5px on Shelf Grey, turning exhibit cream when its line is active.
@@ -290,6 +296,9 @@ Soft, confident pills.
 
 ### Recorder Window (signature)
 A white window inside a Shelf Grey ring: a 46px title bar, the video (16:10, 10px radius) over a chapter strip of 5px rounded segments (ochre for the current, mixed ochre for done), a transcript list of timecoded lines on the right whose active line takes the exhibit wash, and a footer row of page chips that fades out at its scrolling edge. A cited line flashes a 2px ochre ring for 1.8s.
+
+### The Stage (landing product shot)
+On the landing page the recorder window becomes the hero: a dark theatre card (stage `#0d0c0b`, transcript `#161513`, chrome line `rgb(255 255 255 / 0.06)`) holding the real recording, its caption bar carrying the live narration line and the visit log beneath it, the spoken line lit in exhibit wash. It is the one product shot on the page and the only large shadow on it. The card sits on the warm paper ground beside the headline, not below it, and the recording's own caption file drives the caption bar and the lit line.
 
 ### Feature Columns
 Hairline-topped columns: a 1px top border, 24px above, an ink icon, an 18px title and a muted 15px description. No card fill.

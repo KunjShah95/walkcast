@@ -1,6 +1,6 @@
-import { motion, useReducedMotion } from "motion/react";
-import { Download, type LucideIcon } from "lucide-react";
-import { type ComponentProps, type ReactNode, useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Check, Download, type LucideIcon } from "lucide-react";
+import { type ComponentProps, type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { LINUX_APPIMAGE_URL, MACOS_DMG_URL, WINDOWS_EXE_URL } from "./site.ts";
 
 export type Tone = "ink" | "ochre" | "rec" | "yellow" | "blue" | "violet" | "pink" | "green" | "orange";
@@ -23,15 +23,21 @@ export function Tile({ icon: Icon, tone, tilt = 0, fill = false }: { icon: Lucid
   );
 }
 
-/** Fades content up once as it enters the viewport. */
+/**
+ * Fades content up once as it enters the viewport.
+ *
+ * The settle is opacity and a short rise only. A blur filter would look like more, but it costs a
+ * repaint of the whole block on every frame of the fade, and a blur-to-sharp entrance is the one
+ * animation every template ships. 16px of travel over 0.7s reads as a settle instead of a slide.
+ */
 export function Reveal({ children, delay = 0, className, as = "div" }: { children: ReactNode; delay?: number; className?: string; as?: "div" | "li" | "p" }) {
   const still = useReducedMotion();
   const C = motion[as];
   return (
     <C
       className={className}
-      initial={still ? false : { opacity: 0, y: 22, filter: "blur(6px)" }}
-      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      initial={still ? false : { opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.7, ease: [0.2, 0.7, 0.2, 1], delay }}
     >
@@ -50,11 +56,19 @@ export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-type Platform = "windows" | "mac" | "linux";
-const INSTALLERS: Record<Platform, { label: string; url: string }> = {
-  windows: { label: "Download for Windows", url: WINDOWS_EXE_URL },
-  mac: { label: "Download for Mac", url: MACOS_DMG_URL },
-  linux: { label: "Download for Linux", url: LINUX_APPIMAGE_URL },
+export type Platform = "windows" | "mac" | "linux";
+
+/** The three places Walkcast installs, and the file each one lands as. */
+const PLATFORMS: Record<Platform, { name: string; url: string }> = {
+  windows: { name: "Windows", url: WINDOWS_EXE_URL },
+  mac: { name: "macOS", url: MACOS_DMG_URL },
+  linux: { name: "Linux", url: LINUX_APPIMAGE_URL },
+};
+
+const PLATFORM_ICON: Record<Platform, ComponentType<ComponentProps<"svg">>> = {
+  windows: WindowsIcon,
+  mac: AppleIcon,
+  linux: LinuxIcon,
 };
 
 /**
@@ -72,13 +86,61 @@ function usePlatform(): Platform {
   return p;
 }
 
-export function DownloadButton({ big = false, label, className = "" }: { big?: boolean; label?: string; className?: string }) {
-  const installer = INSTALLERS[usePlatform()];
+/**
+ * The download button, and the only one there is: the platform's glyph, the platform's name and
+ * the arrow, in the same pill everywhere on the site. It follows the visitor's own machine.
+ */
+export function DownloadButton({
+  big = false,
+  label,
+  className = "",
+}: {
+  big?: boolean;
+  label?: string;
+  className?: string;
+}) {
+  const platform = usePlatform();
+  const meta = PLATFORMS[platform];
+  const Icon = PLATFORM_ICON[platform];
   return (
-    <motion.a className={`pill rec ${big ? "big" : ""} ${className}`} href={installer.url} whileTap={{ scale: 0.96 }}>
-      {label ?? installer.label}
+    <motion.a
+      className={`pill dl ${big ? "big" : ""} ${className}`}
+      href={meta.url}
+      onClick={() => announceDownload(meta.url)}
+      whileTap={{ scale: 0.97 }}
+    >
+      <Icon width={big ? 18 : 16} height={big ? 18 : 16} />
+      <span>{label ?? `Download for ${meta.name}`}</span>
       <Download size={big ? 17 : 15} strokeWidth={2.2} />
     </motion.a>
+  );
+}
+
+/**
+ * The same button three times, one per platform. Fixed order, so nothing moves when the page
+ * hydrates and learns which machine the visitor is on.
+ */
+export function DownloadButtons({ big = false }: { big?: boolean }) {
+  return (
+    <div className="os-row" role="group" aria-label="Download Walkcast">
+      {(Object.keys(PLATFORMS) as Platform[]).map((key) => {
+        const meta = PLATFORMS[key];
+        const Icon = PLATFORM_ICON[key];
+        return (
+          <motion.a
+            key={key}
+            className={`pill dl ${big ? "big" : ""}`}
+            href={meta.url}
+            onClick={() => announceDownload(meta.url)}
+            whileTap={{ scale: 0.97 }}
+          >
+            <Icon width={big ? 18 : 16} height={big ? 18 : 16} />
+            <span>{meta.name}</span>
+            <Download size={big ? 17 : 15} strokeWidth={2.2} />
+          </motion.a>
+        );
+      })}
+    </div>
   );
 }
 
@@ -133,6 +195,69 @@ export function WindowBar({ title, children }: { title: ReactNode; children?: Re
       <span className="lights" aria-hidden="true"><i /><i /><i /></span>
       <span className="win-title">{title}</span>
       {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ download receipt */
+
+const DOWNLOAD_EVENT = "walkcast:download";
+
+/** Tell the page a download started, so the receipt can say which file is on its way. */
+function announceDownload(url: string) {
+  dispatchEvent(new CustomEvent(DOWNLOAD_EVENT, { detail: decodeURIComponent(url.split("/").pop() ?? "") }));
+}
+
+/**
+ * A small receipt that slides up after a download click: the file's name, a short fill while the
+ * browser picks it up, then where to find it. Without it the click looks like it did nothing,
+ * because a download never leaves the page. Mounted once, for every download button.
+ */
+export function DownloadToast() {
+  const still = useReducedMotion();
+  const [file, setFile] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    let t1: ReturnType<typeof setTimeout>;
+    let t2: ReturnType<typeof setTimeout>;
+    const on = (e: Event) => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      setFile((e as CustomEvent<string>).detail);
+      setDone(false);
+      t1 = setTimeout(() => setDone(true), 1400);
+      t2 = setTimeout(() => setFile(null), 5200);
+    };
+    addEventListener(DOWNLOAD_EVENT, on);
+    return () => {
+      removeEventListener(DOWNLOAD_EVENT, on);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+  return (
+    <div className="dl-toast-wrap" role="status" aria-live="polite">
+      <AnimatePresence>
+        {file && (
+          <motion.div
+            key="toast"
+            className="dl-toast"
+            initial={still ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={still ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+          >
+            <span className={`dl-toast-ic ${done ? "done" : ""}`} aria-hidden="true">
+              {done ? <Check size={15} strokeWidth={2.8} /> : <Download size={15} strokeWidth={2.4} />}
+            </span>
+            <span className="dl-toast-text">
+              <b className="mono">{file}</b>
+              <small>{done ? "Open it from your Downloads folder." : "Downloading…"}</small>
+            </span>
+            <span className="dl-toast-bar" aria-hidden="true"><i className={done ? "full" : ""} /></span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
