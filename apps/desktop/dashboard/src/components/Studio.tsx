@@ -50,6 +50,24 @@ export function chaptersOf(r: RecordingSummary): { start: number; title: string;
   return out.length ? out : r.captions.length ? [{ start: 0, line: 0, title: hostOf(r.url) }] : [];
 }
 
+/**
+ * The second each page first appeared.
+ *
+ * `chaptersOf` reads "Opening …" lines, and a sign-in adds one for the login page that is not in
+ * `pages`. The page the recorder landed on after signing in has no opening line of its own: it is
+ * on screen when sign-in succeeds and the next line starts scrolling it. So page one takes that
+ * moment, and the openings after the login one line up with pages two onwards.
+ */
+function pageStartsOf(r: RecordingSummary, chapters: ReturnType<typeof chaptersOf>): (number | undefined)[] {
+  const loginFirst = Boolean(r.signIn?.attempted && chapters[0] && /login page/i.test(chapters[0].title));
+  const signedInAt = r.captions.find((c) => /^Sign-in succeeded/.test(c.text))?.start;
+  let next = loginFirst ? 1 : 0;
+  return r.pages.map((_, i) => {
+    if (i === 0) return loginFirst ? signedInAt ?? chapters[0]?.start : chapters[next++]?.start;
+    return chapters[next++]?.start;
+  });
+}
+
 function sourcesOf(r: RecordingSummary) {
   return (
     [
@@ -88,11 +106,12 @@ export function Studio({
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
   const chapters = useMemo(() => chaptersOf(r), [r]);
+  const pageStarts = useMemo(() => pageStartsOf(r, chapters), [r, chapters]);
   // A picture of each page, in the order the walkthrough opened them. The video says what it
   // shows; the pictures say what it contains.
   const pictures = useMemo(
-    () => r.pages.map((p, i) => ({ page: p, at: chapters[i]?.start ?? 0 })).filter((x) => Boolean(x.page.screenshot)),
-    [r.pages, chapters],
+    () => r.pages.map((p, i) => ({ page: p, at: pageStarts[i] ?? 0 })).filter((x) => Boolean(x.page.screenshot)),
+    [r.pages, pageStarts],
   );
   const poster = pictures[0]?.page.screenshot ? mediaUrl(r.dir, pictures[0].page.screenshot) : undefined;
   const active = r.captions.findIndex((c) => time >= c.start && time < c.end);
@@ -387,7 +406,7 @@ export function Studio({
             ))}
           </div>
         )}
-        {tab === "steps" && <Steps recording={r} chapters={chapters} seek={seek} />}
+        {tab === "steps" && <Steps recording={r} starts={pageStarts} seek={seek} />}
         {tab === "transcript" && (
           <ol ref={list} className={cn("min-h-0 flex-1 overflow-y-auto p-1.5", compact ? "max-h-[19rem]" : "max-h-[34rem]")}>
             {r.captions.map((c, i) => {
@@ -462,20 +481,20 @@ export function Studio({
  */
 function Steps({
   recording: r,
-  chapters,
+  starts,
   seek,
 }: {
   recording: RecordingSummary;
-  chapters: ReturnType<typeof chaptersOf>;
+  starts: (number | undefined)[];
   seek: (t: number, play?: boolean) => void;
 }) {
   const steps = useMemo(
     () =>
       guideSteps(
-        r.pages.map((p, i) => ({ ...p, at: chapters[i]?.start })),
+        r.pages.map((p, i) => ({ ...p, at: starts[i] })),
         r.actions ?? [],
       ),
-    [r.pages, r.actions, chapters],
+    [r.pages, r.actions, starts],
   );
 
   return (
@@ -535,7 +554,7 @@ function Steps({
                     src={mediaUrl(r.dir, step.image)}
                     alt=""
                     loading="lazy"
-                    className="h-10 w-16 shrink-0 rounded object-cover object-top"
+                    className="h-10 w-16 shrink-0 rounded border border-line bg-panel-2 object-cover object-left-top"
                   />
                 )}
               </button>
@@ -842,20 +861,53 @@ function VoiceRecorder({
 }) {
   const [state, setState] = useState<"idle" | "recording" | "review" | "saving">("idle");
   const [take, setTake] = useState<{ blob: Blob; url: string } | null>(null);
+  const [takeDuration, setTakeDuration] = useState(0);
+  const [trim, setTrim] = useState({ start: 0, end: 0 });
   const [level, setLevel] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
   const rec = useRef<{ recorder: MediaRecorder; stream: MediaStream; ctx: AudioContext; raf: number; started: number } | null>(null);
   const blocker = editBlocker(caps) ?? (typeof MediaRecorder === "undefined" ? "This browser can't record audio." : null);
+
+  // The cleanup below runs once, on unmount. `take` is state, so a closure would keep the first
+  // render's value (always null); a ref always points at the take that is on screen.
+  const takeRef = useRef(take);
+  takeRef.current = take;
 
   useEffect(
     () => () => {
       stopAll();
-      if (take) URL.revokeObjectURL(take.url);
+      if (takeRef.current) URL.revokeObjectURL(takeRef.current.url);
     },
     // Unmount-only cleanup: runs once, on purpose.
     [],
   );
+
+  // How long the take is, so the trim handles have a range to work in. Decoding also proves the
+  // browser can read its own recording; if it cannot, the take is still uploadable untrimmed.
+  useEffect(() => {
+    if (!take) {
+      setTakeDuration(0);
+      setTrim({ start: 0, end: 0 });
+      return;
+    }
+    let alive = true;
+    void takeSeconds(take.blob)
+      .then((seconds) => {
+        if (!alive) return;
+        setTakeDuration(seconds);
+        setTrim({ start: 0, end: seconds });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setTakeDuration(0);
+        setTrim({ start: 0, end: 0 });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [take]);
 
   function stopAll() {
     const cur = rec.current;
@@ -922,10 +974,28 @@ function VoiceRecorder({
     setState("saving");
     setError(null);
     try {
-      onSaved(await uploadVoiceover(r.id, take.blob));
+      // Keep the original file when nothing was trimmed; only re-encode a real cut.
+      const whole = takeDuration === 0 || (trim.start <= 0.05 && trim.end >= takeDuration - 0.05);
+      const audio = whole ? take.blob : await trimTake(take.blob, trim.start, trim.end);
+      onSaved(await uploadVoiceover(r.id, audio));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setState("review");
+    }
+  };
+
+  /** The player auditions the slice, not the whole take: play from the in point, stop at the out. */
+  const playTrim = () => {
+    const el = audio.current;
+    if (!el || takeDuration === 0) return;
+    if (el.currentTime < trim.start || el.currentTime >= trim.end) el.currentTime = trim.start;
+  };
+  const stopAtEnd = () => {
+    const el = audio.current;
+    if (!el || takeDuration === 0) return;
+    if (el.currentTime >= trim.end) {
+      el.pause();
+      el.currentTime = trim.start;
     }
   };
 
@@ -950,7 +1020,52 @@ function VoiceRecorder({
           <span className="text-ink-2">{clock(elapsed)}</span>
         </div>
       )}
-      {take && state !== "recording" && <audio controls src={take.url} className="w-full" />}
+      {take && state !== "recording" && (
+        <>
+          <audio ref={audio} controls src={take.url} className="w-full" onPlay={playTrim} onTimeUpdate={stopAtEnd} />
+          {takeDuration > 0.3 && (
+            <div className="grid gap-2 rounded-xl border border-line bg-panel-2/40 px-3 py-2.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span className="text-[12.5px] font-medium text-ink">Trim the take</span>
+                <span className="tabular font-mono text-[11.5px] text-ink-3">
+                  {clock(trim.start)} – {clock(trim.end)} · {clock(Math.max(0, trim.end - trim.start))} kept
+                </span>
+              </div>
+              <label className="grid gap-1 text-[11.5px] text-ink-3">
+                Start
+                <input
+                  type="range"
+                  min={0}
+                  max={takeDuration}
+                  step={0.05}
+                  value={trim.start}
+                  onChange={(e) => setTrim((t) => ({ ...t, start: Math.max(0, Math.min(Number(e.target.value), t.end - 0.15)) }))}
+                  className="w-full"
+                />
+              </label>
+              <label className="grid gap-1 text-[11.5px] text-ink-3">
+                End
+                <input
+                  type="range"
+                  min={0}
+                  max={takeDuration}
+                  step={0.05}
+                  value={trim.end}
+                  onChange={(e) => setTrim((t) => ({ ...t, end: Math.min(takeDuration, Math.max(Number(e.target.value), t.start + 0.15)) }))}
+                  className="w-full"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setTrim({ start: 0, end: takeDuration })}
+                className="justify-self-start text-[11.5px] text-ink-3 underline-offset-2 hover:text-ink hover:underline"
+              >
+                Use the whole take
+              </button>
+            </div>
+          )}
+        </>
+      )}
       {error && <p className="text-[12.5px] text-fail">{error}</p>}
       {blocker && <p className="text-[12.5px] text-ink-3">{blocker}</p>}
       <div className="flex flex-wrap gap-2">
@@ -965,10 +1080,72 @@ function VoiceRecorder({
         )}
         {take && state !== "recording" && (
           <Button tone="primary" disabled={state === "saving" || Boolean(blocker)} onClick={save} className="ml-auto">
-                        {state === "saving" ? "Mixing…" : "Use this take"}
+            {state === "saving" ? "Mixing…" : "Use this take"}
           </Button>
         )}
       </div>
     </div>
   );
+}
+
+/** How long a recorded take is, read with the same decoder that will trim it. */
+async function takeSeconds(blob: Blob): Promise<number> {
+  const ctx = new AudioContext();
+  try {
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    return decoded.duration;
+  } finally {
+    void ctx.close();
+  }
+}
+
+/**
+ * The slice between `start` and `end`, as a mono 16-bit WAV.
+ *
+ * The server converts a voiceover to 22 kHz mono anyway (media.ts), so downmixing here costs
+ * nothing and keeps the upload small. A trimmed take is a real cut: everything outside the
+ * handles is not sent.
+ */
+async function trimTake(blob: Blob, start: number, end: number): Promise<Blob> {
+  const ctx = new AudioContext();
+  try {
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const rate = decoded.sampleRate;
+    const from = Math.max(0, Math.min(decoded.length, Math.floor(start * rate)));
+    const to = Math.max(from + 1, Math.min(decoded.length, Math.ceil(end * rate)));
+    const mono = new Float32Array(to - from);
+    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+      const data = decoded.getChannelData(ch);
+      for (let i = 0; i < mono.length; i++) mono[i] = (mono[i] ?? 0) + (data[from + i] ?? 0) / decoded.numberOfChannels;
+    }
+    return encodeWav(mono, rate);
+  } finally {
+    void ctx.close();
+  }
+}
+
+/** Mono float samples to a 16-bit PCM WAV, which every ffmpeg can read. */
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM chunk size
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // bytes per second
+  view.setUint16(32, 2, true); // bytes per frame
+  view.setUint16(34, 16, true); // bits per sample
+  ascii(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0, offset = 44; i < samples.length; i++, offset += 2) {
+    const sample = Math.max(-1, Math.min(1, samples[i] ?? 0));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
 }
