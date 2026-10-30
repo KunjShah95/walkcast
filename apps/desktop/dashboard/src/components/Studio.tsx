@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
-import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, exportShape, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { type Annotation, type Capabilities, type Voice, buildSilentCopy, createAnnotation, deleteAnnotation, exportShape, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
 import { guideSteps } from "../../../../../packages/core/src/record/guide.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
@@ -9,6 +9,7 @@ import { Button, ExhibitTag, Panel, PlayMark, Stamp } from "./ui.tsx";
 
 /** How a cloud provider is named in the voice line under the player. */
 const PROVIDER_NAME: Record<string, string> = {
+  kokoro: "Kokoro",
   elevenlabs: "ElevenLabs",
   openai: "OpenAI",
   google: "Google",
@@ -122,6 +123,7 @@ export function Studio({
   const [sttError, setSttError] = useState<string | null>(null);
   // Which feed shape is encoding, if any: one at a time, each is a full re-encode.
   const [shaping, setShaping] = useState<"vertical" | "square" | null>(null);
+  const [silencing, setSilencing] = useState(false);
   // Known only on a live server; elsewhere let the server answer.
   const sttMissing = caps?.live && caps.sttProviders?.length === 0;
 
@@ -368,6 +370,37 @@ export function Studio({
                   </button>
                 );
               })}
+            {!compact && r.media.voice !== "none" && (() => {
+              const cls = "inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40";
+              if (r.media.silent) {
+                return (
+                  <a href={mediaUrl(r.dir, r.media.silent)} download={`${r.id}-${r.media.silent}`} title="The walkthrough with no narration, captions still on" className={cls}>
+                    No voice
+                  </a>
+                );
+              }
+              return (
+                <button
+                  type="button"
+                  disabled={silencing || !r.media.mp4}
+                  title="Make a download of this walkthrough with the narration stripped out"
+                  onClick={async () => {
+                    setSilencing(true);
+                    setSttError(null);
+                    try {
+                      onChange?.(await buildSilentCopy(r.id));
+                    } catch (e) {
+                      setSttError(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setSilencing(false);
+                    }
+                  }}
+                  className={cls}
+                >
+                  {silencing ? "Making…" : "Download (no voice)"}
+                </button>
+              );
+            })()}
             {!compact && (
               // The visit as numbered steps, each with a picture of the screen: for a help
               // article or an onboarding doc, where people skim instead of watching.

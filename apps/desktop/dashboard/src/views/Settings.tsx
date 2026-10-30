@@ -49,9 +49,6 @@ export function Settings({ me }: { me: Me | null }) {
               Windows (.exe / MSI)
             </a>
             <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
-              macOS (.dmg / app)
-            </a>
-            <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">
               Linux (.AppImage / .deb)
             </a>
           </div>
@@ -77,7 +74,7 @@ export function Settings({ me }: { me: Me | null }) {
                 onLanguage={(l) => setPrefs({ ttsLanguages: { ...prefs.ttsLanguages, [prefs.ttsProvider]: l } })}
                 localVoicePicker={<VoicePicker value={prefs.voice} onChange={(voice: Voice) => setPrefs({ voice })} available={caps?.voices?.available ?? false} />}
               />
-              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. Without one, use the basic offline voice (robotic) or no voice at all.</p>
+              <p className="text-[12.5px] text-ink-3">Cloud providers need their API key in this server's settings. Without one, Kokoro gives a natural offline voice; the basic offline voice (robotic) and no voice are still there too.</p>
             </div>
           </div>
           <label className="grid gap-1.5">

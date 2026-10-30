@@ -15,6 +15,7 @@ import { Button } from "./ui.tsx";
 export function SharePanel({ recording, onChange }: { recording: RecordingSummary; onChange?: (r: RecordingSummary) => void }) {
   const [days, setDays] = useState(7);
   const [includeNotes, setIncludeNotes] = useState(false);
+  const [silent, setSilent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -30,7 +31,7 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
     setBusy(true);
     setError(null);
     try {
-      const made = await createShare(recording.id, days, includeNotes);
+      const made = await createShare(recording.id, days, includeNotes, silent);
       remember(made.shares);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -98,6 +99,15 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
         </label>
         <span className="text-[11.5px] text-ink-3">Your notes stay private until a link carries them.</span>
       </div>
+      {recording.media.voice !== "none" && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5 text-[12.5px] text-ink-2">
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" checked={silent} onChange={(e) => setSilent(e.target.checked)} className="size-3.5 accent-signal" />
+            Share without narration
+          </label>
+          <span className="text-[11.5px] text-ink-3">The link plays the walkthrough with no voice, captions still on.</span>
+        </div>
+      )}
       {error && <p className="border-b border-line px-4 py-2.5 text-[12.5px] text-fail">{error}</p>}
       {links.length === 0 ? (
         <p className="px-4 py-3 text-[12.5px] text-ink-3">No links yet. The walkthrough stays private until you make one.</p>
@@ -110,6 +120,7 @@ export function SharePanel({ recording, onChange }: { recording: RecordingSummar
                 <code className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-2">{url}</code>
                 <span className="shrink-0 font-mono text-[11.5px] text-ink-3">until {link.expiresAt.slice(0, 10)}</span>
                 {link.includeNotes && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-3">notes</span>}
+                {link.silent && <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-3">no voice</span>}
                 <button
                   type="button"
                   onClick={() => copy(url)}

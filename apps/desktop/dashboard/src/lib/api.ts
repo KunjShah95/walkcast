@@ -378,6 +378,15 @@ export async function exportShape(id: string, shape: "vertical" | "square"): Pro
   return body.recording;
 }
 
+/** Build (or reuse) a no-narration copy of the recording, for downloading without the voiceover. */
+export async function buildSilentCopy(id: string): Promise<RecordingSummary> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/no-voice`, { method: "POST" });
+  const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.recording) throw new Error(body.error ?? `Couldn't build a no-voice copy (${res.status}).`);
+  return body.recording;
+}
+
 /** Delete a recording and its files. */
 export async function deleteRecording(id: string): Promise<void> {
   const res = await fetch(`/api/recordings/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -421,6 +430,8 @@ export interface ShareLink {
   expiresAt: string;
   /** Whether this link carries the owner's notes. */
   includeNotes?: boolean;
+  /** Whether this link plays the recording with no narration track. */
+  silent?: boolean;
 }
 
 /**
@@ -429,11 +440,11 @@ export interface ShareLink {
  * No account, no sign-in on the other side. The link works until the day it names, and it can
  * be switched off before then.
  */
-export async function createShare(id: string, days = 7, includeNotes = false): Promise<{ url: string; share: ShareLink; shares: ShareLink[] }> {
+export async function createShare(id: string, days = 7, includeNotes = false, silent = false): Promise<{ url: string; share: ShareLink; shares: ShareLink[] }> {
   const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/share`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ days, includeNotes }),
+    body: JSON.stringify({ days, includeNotes, silent }),
   });
   const body = (await res.json().catch(() => ({}))) as { url?: string; share?: ShareLink; shares?: ShareLink[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");

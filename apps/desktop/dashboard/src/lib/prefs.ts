@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Voice } from "./api.ts";
 
 /** Recording defaults, kept in this browser (Settings → Recording defaults). */
-export type TtsProvider = "flite" | "none" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom" | "custom-voice";
+export type TtsProvider = "kokoro" | "flite" | "none" | "sarvam" | "bhashini" | "elevenlabs" | "google" | "azure" | "awspolly" | "openai" | "murf" | "reverie" | "custom" | "custom-voice";
 export interface RecordingPrefs {
   voice: Voice;
   ttsProvider: TtsProvider;
@@ -25,7 +25,7 @@ export interface RecordingPrefs {
 
 const KEY = "walkcast:recording-prefs";
 const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, ttsLanguages: {}, maxPages: 8, maxSeconds: 120, captions: true, zoom: true, presenter: true, voiceChosen: false };
-const PROVIDERS: TtsProvider[] = ["flite", "none", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
+const PROVIDERS: TtsProvider[] = ["kokoro", "flite", "none", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
 
 export function readPrefs(): RecordingPrefs {
   try {

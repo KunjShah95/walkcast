@@ -1,13 +1,13 @@
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
-import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, sapiAvailable, sapiEngine } from "./voice.ts";
+import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, kokoroEngine, sapiAvailable, sapiEngine } from "./voice.ts";
 import { transcribe } from "./stt.ts";
-import { zoomFilterFor } from "./zoom.ts";
+import { readFocus, writeFocus, zoomFilterFor } from "./zoom.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -58,6 +58,10 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   };
   if (!video) return finish("The browser produced no video.");
   if (!canEncode()) return finish("ffmpeg (with libx264) is not installed; the recording has video and captions only.");
+  // Shorten any long static stretch (a page sitting still while the recorder waited for it to
+  // settle) before anything else sees the video, so the dead air never reaches a viewer. A
+  // failed or inconclusive trim must not cost the recording: it just ships at its full length.
+  await trimDeadAir(dir, video, captions, onProgress);
   // Keep the whole visit either way: a silent MP4 with the caption track still plays anywhere.
   const silent = async (note: string) => {
     writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
@@ -163,8 +167,8 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
 }
 
 /** The visit with no narration: H.264 video plus the caption track, for when nothing speaks. */
-async function muxSilent(dir: string, video: string, onProgress?: (p: string) => void): Promise<Pick<MediaResult, "mp4">> {
-  const mp4 = join(dir, "recording.mp4");
+async function muxSilent(dir: string, video: string, onProgress?: (p: string) => void, outName = "recording.mp4"): Promise<Pick<MediaResult, "mp4">> {
+  const mp4 = join(dir, outName);
   onProgress?.("Encoding the MP4");
   await withZoomFallback(zoomFilterFor(dir, await probeSeconds(join(dir, video))), (zoom) =>
     run([
@@ -178,7 +182,25 @@ async function muxSilent(dir: string, video: string, onProgress?: (p: string) =>
       mp4,
     ]),
   );
-  return { mp4: existsSync(mp4) && statSync(mp4).size > 0 ? "recording.mp4" : null };
+  return { mp4: existsSync(mp4) && statSync(mp4).size > 0 ? outName : null };
+}
+
+/**
+ * Build (or reuse) a no-narration copy of an already-narrated recording, for "Download (no
+ * voice)" in the Library. Reuses the raw browser capture and caption track `muxSilent` already
+ * builds for the voice-less fallback path, just under a filename that won't collide with the
+ * narrated `recording.mp4` sitting next to it.
+ */
+export async function buildSilentCopy(dir: string, onProgress?: (p: string) => void): Promise<string> {
+  const outName = "no-voice.mp4";
+  const existing = join(dir, outName);
+  if (existsSync(existing) && statSync(existing).size > 0) return outName;
+  const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
+  if (!video) throw new Error("The original browser video isn't kept for this recording, so a no-voice copy can't be made.");
+  if (!canEncode()) throw new Error("ffmpeg (with libx264) is not installed.");
+  const { mp4 } = await muxSilent(dir, video, onProgress, outName);
+  if (!mp4) throw new Error("Encoding the no-voice copy failed.");
+  return mp4;
 }
 
 /**
@@ -380,12 +402,22 @@ export function robotVoiceAllowed(env: NodeJS.ProcessEnv = process.env): boolean
   return env.LAB_ROBOT_VOICE === "1";
 }
 
-/** A configured cloud voice (LAB_TTS_PROVIDER) wins; then the offline one if asked for; else silent. */
+/**
+ * A configured cloud voice (LAB_TTS_PROVIDER) wins; then Kokoro's natural offline voice when
+ * nothing was asked for and it's installed; then the robotic offline one if asked for; else
+ * silent. Explicit LAB_TTS_PROVIDER=flite skips Kokoro and keeps the old behaviour on purpose.
+ */
 export function pickEngine(voice: Voice = VOICE): VoiceEngine | null {
   const provider = process.env.LAB_TTS_PROVIDER?.trim().toLowerCase();
   if (provider && provider !== "flite") {
     const engine = chooseVoiceEngine();
-    if (engine.kind === "cloud") return engine;
+    // Kokoro is a local engine, not the robotic fallback this cloud-only gate exists to keep
+    // opt-in, so an explicit choice of it must not be rejected here.
+    if (engine.kind === "cloud" || provider === "kokoro") return engine;
+  }
+  if (!provider) {
+    const kokoro = kokoroEngine();
+    if (kokoro) return kokoro;
   }
   return robotVoiceAllowed() ? localVoice(voice) : null;
 }
@@ -457,6 +489,98 @@ async function probeSeconds(file: string): Promise<number> {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Cut long static stretches (a loading spinner, a page sitting still while the recorder waited
+ * for it to settle) down to a short hold, so a walkthrough doesn't carry real idle seconds into
+ * the finished video. The wait that produces the dead air stays untouched in `site.ts` — it
+ * exists for capture reliability — this only shortens what shipped once the wait was over, and
+ * shifts `captions` (mutated in place) to match the shortened timeline. Run before anything else
+ * reads the video, so narration, the mux and a future "no voice" download all see the trimmed cut.
+ */
+async function trimDeadAir(dir: string, video: string, captions: Caption[], onProgress?: (p: string) => void): Promise<void> {
+  // buildMedia() can run twice for the same recording (site.ts retries with the offline voice
+  // when a cloud one fails), and the second call's video is already trimmed. A marker, not a
+  // "did it change" check, skips the decode-only freezedetect pass on that retry too.
+  const marker = join(dir, ".dead-air-checked");
+  if (existsSync(marker)) return;
+  writeFileSync(marker, "");
+  const freezeSeconds = 1.5;
+  const holdSeconds = 0.6;
+  const input = join(dir, video);
+  let log = "";
+  try {
+    log = await execFileAsync(FFMPEG, ["-hide_banner", "-i", input, "-vf", `freezedetect=n=-60dB:d=${freezeSeconds}`, "-map", "0:v", "-f", "null", "-"], {
+      timeout: FFMPEG_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    }).then((r) => r.stderr, (e: { stderr?: string }) => e.stderr ?? "");
+  } catch {
+    return;
+  }
+  const starts = [...log.matchAll(/freeze_start:\s*([\d.]+)/g)].map((m) => Number.parseFloat(m[1]!));
+  const ends = [...log.matchAll(/freeze_end:\s*([\d.]+)/g)].map((m) => Number.parseFloat(m[1]!));
+  const pairs = Math.min(starts.length, ends.length);
+  if (pairs === 0) return;
+  // Each freeze keeps its first `holdSeconds` and loses the rest: a static screen still reads as
+  // "arrived and settled", it just doesn't sit there in real time.
+  const cuts = Array.from({ length: pairs }, (_, i) => ({ from: starts[i]! + holdSeconds, to: ends[i]! })).filter((c) => c.to > c.from);
+  // Too fragmented to be worth a re-encode (an unusually twitchy page, or a false-positive run):
+  // ship the untouched video rather than build a filter graph with dozens of segments.
+  if (cuts.length === 0 || cuts.length > 40) return;
+  const duration = await probeSeconds(input);
+  if (!duration) return;
+  const keep: { start: number; end: number }[] = [];
+  let cursor = 0;
+  for (const c of cuts) {
+    if (c.from > cursor) keep.push({ start: cursor, end: c.from });
+    cursor = c.to;
+  }
+  if (cursor < duration) keep.push({ start: cursor, end: duration });
+  if (keep.length === 0) return;
+
+  onProgress?.("Trimming dead air between screens");
+  const out = join(dir, ".video-trimmed.webm");
+  rmSync(out, { force: true });
+  try {
+    const parts = keep.map((k, i) => `[0:v]trim=start=${k.start}:end=${k.end},setpts=PTS-STARTPTS[v${i}]`);
+    const concat = `${keep.map((_, i) => `[v${i}]`).join("")}concat=n=${keep.length}:v=1:a=0[outv]`;
+    await run(["-i", input, "-filter_complex", [...parts, concat].join(";"), "-map", "[outv]", "-c:v", "libvpx", "-crf", "24", "-b:v", "0", out]);
+    if (!existsSync(out) || statSync(out).size === 0) {
+      rmSync(out, { force: true });
+      return;
+    }
+  } catch {
+    rmSync(out, { force: true });
+    return;
+  }
+  renameSync(out, input);
+
+  // Shift every timestamp onto the shortened timeline: unaffected before a cut, collapsed to the
+  // cut point if it fell inside one, shifted back by everything already removed after it.
+  const remap = (t: number): number => {
+    let removed = 0;
+    for (const c of cuts) {
+      if (t <= c.from) break;
+      if (t >= c.to) removed += c.to - c.from;
+      else {
+        removed += t - c.from;
+        break;
+      }
+    }
+    return round(t - removed);
+  };
+  for (const c of captions) {
+    c.start = remap(c.start);
+    c.end = remap(c.end);
+  }
+  // The zoom plan is seconds against this same video, written before the trim ran: left alone,
+  // every moment after a cut would zoom on whatever is on screen at its old (now too-late) time.
+  const focus = readFocus(dir);
+  if (focus) {
+    writeFocus(dir, { ...focus, moments: focus.moments.map((m) => ({ ...m, start: remap(m.start), end: remap(m.end) })) });
+  }
 }
 
 /**

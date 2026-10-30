@@ -52,7 +52,7 @@ export function TtsPicker({ provider, voice, language, onProvider, onVoice, onLa
         ) : (
           <>
             {localVoicePicker}
-            {provider === "flite" && <p className="text-[12px] text-ink-3">Sounds robotic. For a natural voice, pick ElevenLabs or OpenAI and add its key in Settings.</p>}
+            {provider === "flite" && <p className="text-[12px] text-ink-3">Sounds robotic. For a natural voice with no API key, pick Kokoro above — or ElevenLabs/OpenAI with a key in Settings.</p>}
           </>
         )}
       </div>

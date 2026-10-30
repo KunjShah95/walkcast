@@ -117,6 +117,8 @@ export interface ShareLink {
   expiresAt: string;
   /** Whether this link carries the owner's notes. Each link answers for itself. */
   includeNotes?: boolean;
+  /** Whether this link plays the recording with no narration track. */
+  silent?: boolean;
 }
 
 /** A named recording as it is listed by the dashboard. */
@@ -142,6 +144,8 @@ export interface RecordingSummary {
     note: string;
     /** The same MP4 re-framed for a feed (9:16, 1:1), once someone has asked for it. */
     exports?: Partial<Record<"vertical" | "square", string>>;
+    /** The same recording with no narration track, once someone has asked to download it that way. */
+    silent?: string;
   };
   /** Why the walk ended, when a length cap was set. */
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };

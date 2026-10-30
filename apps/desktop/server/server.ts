@@ -14,8 +14,8 @@ import { type FailureReport, type RunFailure, explainFailure } from "../../../pa
 import { PROVIDERS, apiKey, baseURL, configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
-import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders, engineFor } from "../../../packages/core/src/record/voice.ts";
+import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio, buildSilentCopy } from "../../../packages/core/src/record/media.ts";
+import { configuredCloudProviders, engineFor, kokoroAvailable } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -208,9 +208,10 @@ function connectedProviders(user: { openrouterKey?: string; chatgpt?: { refreshT
 }
 
 /** Every narration provider the dashboard may select, local ones first. */
-const TTS_PROVIDERS = ["flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
+const TTS_PROVIDERS = ["kokoro", "flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
 
 const TTS_PROVIDER_LABEL: Record<string, string> = {
+  kokoro: "Kokoro (natural, offline)",
   flite: "Basic offline voice (robotic, works offline)",
   none: "No voice (captions only)",
   sarvam: "Sarvam (Indian)",
@@ -922,11 +923,12 @@ export function createApp(o: ServeOptions = {}): App {
             id: p,
             label: TTS_PROVIDER_LABEL[p] ?? p,
             cloud,
-            /** A provider with credentials, so a choice here can actually speak. */
-            configured: !cloud || configuredCloudProviders().includes(p),
+            /** A provider with credentials (or, for Kokoro, a working local install), so a choice
+             *  here can actually speak. */
+            configured: p === "kokoro" ? kokoroAvailable() : !cloud || configuredCloudProviders().includes(p),
             /** False when the provider's voice ids aren't a public list: the picker takes a text box. */
             hasList: voices.length > 0,
-            defaultVoice: cloud ? defaultVoiceFor(p) : (p === "flite" ? VOICES[0] : ""),
+            defaultVoice: cloud || p === "kokoro" ? defaultVoiceFor(p) : (p === "flite" ? VOICES[0] : ""),
             /** The language the default voice speaks, and whether the picker asks for one. */
             defaultLanguage: cloud ? defaultLanguageFor(p) : "",
             needsLanguage: cloud && needsLanguageInput(p),
@@ -1030,6 +1032,31 @@ try {
       await saveRecordingSummary(id, row.owner, fresh);
       return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
     }
+    // A download of the same walkthrough with no narration track, for a recording that was
+    // made with a voice but is wanted without one (sharing with sound off, dubbing it elsewhere).
+    // Built once per recording and reused after that, the same way an export is.
+    const silentMatch = /^\/api\/recordings\/([\w.-]+)\/no-voice$/.exec(url.pathname);
+    if (silentMatch && req.method === "POST") {
+      const id = silentMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "A no-voice download needs the recording kept on this server's disk." });
+      const dir = join(root, "recordings", id);
+      const file = join(dir, "recording.json");
+      if (!existsSync(file)) return json(404, { error: "Recording not found." });
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
+      let silent: string;
+      try {
+        silent = await buildSilentCopy(dir);
+      } catch (e) {
+        return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
+      }
+      const fresh = rereadSummary(file, summary);
+      fresh.media = { ...fresh.media, silent };
+      writeFileSync(file, JSON.stringify(fresh, null, 2));
+      await saveRecordingSummary(id, row.owner, fresh);
+      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
+    }
     // Share a walkthrough: a link that plays it for whoever has it, until it expires.
     //
     // The token is the permission and it lives in the walkthrough's own summary, so revoking
@@ -1050,12 +1077,24 @@ try {
         await saveRecordingSummary(id, row.owner, summary);
         return json(200, { ok: true, shares: kept });
       }
-      const body = (await readJson(req).catch(() => ({}))) as { days?: number; includeNotes?: boolean };
+      const body = (await readJson(req).catch(() => ({}))) as { days?: number; includeNotes?: boolean; silent?: boolean };
       const days = clampInt(body.days, 1, 90, 7);
       // Notes are the owner's private reading of the walkthrough. They go on a link only when
       // the owner asks for it, and each link carries its own answer.
       const includeNotes = body.includeNotes === true;
-      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(), includeNotes };
+      // A link made with no narration: build the no-voice copy now if nobody has asked for one
+      // yet, same as the Library's own "Download (no voice)" button does.
+      const wantsSilent = body.silent === true;
+      if (wantsSilent && !summary.media.silent) {
+        if (media.kind !== "local") return json(501, { error: "A no-voice link needs the recording kept on this server's disk." });
+        const dir = join(root, "recordings", id);
+        try {
+          summary.media = { ...summary.media, silent: await buildSilentCopy(dir) };
+        } catch (e) {
+          return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
+        }
+      }
+      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(), includeNotes, ...(wantsSilent ? { silent: true } : {}) };
       summary.shares = [...shares, share];
       await saveRecordingSummary(id, row.owner, summary);
       log.info("recording.shared", { id, owner, until: share.expiresAt });
@@ -1089,6 +1128,7 @@ try {
             summary.media.mp4,
             summary.media.webm,
             summary.media.video,
+            summary.media.silent,
             summary.media.captions,
             summary.media.audio,
             ...summary.pages.map((p) => p.screenshot),
@@ -1102,11 +1142,15 @@ try {
         return streamFile(req, res, where.path, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
       }
       const base = `/share/${encodeURIComponent(id)}/${token}`;
-      const sources = [
-        summary.media.mp4 ? { url: `${base}/${summary.media.mp4}`, type: "video/mp4" } : null,
-        summary.media.webm ? { url: `${base}/${summary.media.webm}`, type: "video/webm" } : null,
-        summary.media.mp4 || summary.media.webm ? null : summary.media.video ? { url: `${base}/${summary.media.video}`, type: "video/webm" } : null,
-      ].filter((s): s is { url: string; type: string } => s !== null);
+      // A link made with no narration plays the no-voice copy only: the narrated mp4/webm sitting
+      // next to it on disk is exactly what this link was asked to leave out.
+      const sources = share.silent && summary.media.silent
+        ? [{ url: `${base}/${summary.media.silent}`, type: "video/mp4" }]
+        : [
+            summary.media.mp4 ? { url: `${base}/${summary.media.mp4}`, type: "video/mp4" } : null,
+            summary.media.webm ? { url: `${base}/${summary.media.webm}`, type: "video/webm" } : null,
+            summary.media.mp4 || summary.media.webm ? null : summary.media.video ? { url: `${base}/${summary.media.video}`, type: "video/webm" } : null,
+          ].filter((s): s is { url: string; type: string } => s !== null);
       if (sources.length === 0) return json(404, { error: "This walkthrough has no video to share." });
       const captions = summary.captions ?? [];
       // A chapter starts where the recorder opened a page, exactly as it does in the app.
@@ -1306,6 +1350,11 @@ try {
         const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
         const env = credentialFor(input.ttsProvider);
         return refuse(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the basic offline voice.`);
+      }
+      // Kokoro needs a local Python install with the kokoro package; without it the recording
+      // would silently fall back to the robotic voice, which reads the same as the cloud case above.
+      if (kind === "record" && worker && input.ttsProvider === "kokoro" && !kokoroAvailable()) {
+        return refuse(400, "Kokoro is selected but this server has no working Python + kokoro install, so the recording would not use it. Install kokoro, or pick the basic offline voice.");
       }
       // A custom voice sample is the uploader's. Naming somebody else's id in the form would
       // narrate in a stranger's voice, so it is refused rather than quietly swapped for a default.

@@ -13,12 +13,14 @@ const NATURAL_LABEL: Record<Natural, string> = { elevenlabs: "ElevenLabs", opena
  * Continue gives a narrated video. The answer becomes the default; Settings changes it later.
  */
 export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsProvider) => void; onCancel: () => void }) {
-  const [choice, setChoice] = useState<"natural" | "flite" | "none">("flite");
+  const [choice, setChoice] = useState<"natural" | "kokoro" | "flite" | "none">("flite");
   const [natural, setNatural] = useState<Natural>("elevenlabs");
   const [configured, setConfigured] = useState<Record<Natural, boolean>>({ elevenlabs: false, openai: false });
   const [editable, setEditable] = useState(true);
-  // The offline voice needs ffmpeg's flite or Windows speech; macOS and most Linux builds have neither.
+  // The offline voice needs ffmpeg's flite or Windows speech; most Linux builds have neither.
   const [offline, setOffline] = useState(true);
+  // Kokoro needs a local Python install with the kokoro package; not every server has it.
+  const [kokoroOk, setKokoroOk] = useState(false);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +39,15 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
       const has = (id: Natural) => Boolean(list.find((p) => p.id === id)?.configured);
       const found = { elevenlabs: has("elevenlabs"), openai: has("openai") };
       setConfigured(found);
-      // A key already saved means the natural voice works right now: offer it first.
+      const kokoro = Boolean(list.find((p) => p.id === "kokoro")?.configured);
+      setKokoroOk(kokoro);
+      // A key already saved means the natural voice works right now: offer it first. Otherwise
+      // Kokoro (free, offline, not robotic) beats the flat flite/SAPI fallback when it's installed.
       if (found.elevenlabs || found.openai) {
         setChoice("natural");
         setNatural(found.elevenlabs ? "elevenlabs" : "openai");
+      } else if (kokoro) {
+        setChoice("kokoro");
       }
     });
     void fetch("/api/credentials")
@@ -116,6 +123,7 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
               {needsKey && editable && <p className="text-[12px] text-ink-3">Saved on this computer only, in Walkcast's settings.</p>}
             </div>
           )}
+          <Option checked={choice === "kokoro"} onSelect={() => setChoice("kokoro")} title="Kokoro" note={kokoroOk ? "Free, offline, no key. Sounds natural." : "Not available on this server."} disabled={!kokoroOk} />
           <Option checked={choice === "flite"} onSelect={() => setChoice("flite")} title="Basic offline voice" note={offline ? "Works right away, no key. Sounds robotic." : "Not available on this computer."} disabled={!offline} />
           <Option checked={choice === "none"} onSelect={() => setChoice("none")} title="No voice" note="Captions and a transcript only." />
         </div>
