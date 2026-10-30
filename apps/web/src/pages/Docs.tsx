@@ -2,7 +2,7 @@ import { Check, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { FAQ, GUIDE_STEPS, MORE_FAQ } from "../content.ts";
 import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { AppleIcon, LinuxIcon, WindowsIcon } from "../ui.tsx";
+import { LinuxIcon, WindowsIcon } from "../ui.tsx";
 import { Doc } from "./Doc.tsx";
 import { GuidesIndexPage, ProductDemoPage, WebsiteTutorialPage } from "./Guides.tsx";
 import { LoomComparePage, ScribeComparePage, ScreenStudioComparePage } from "./Compare.tsx";

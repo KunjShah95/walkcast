@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { AppleIcon, BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
+import { BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
 import { AUTHOR, FAQ } from "../content.ts";
 
 /* ------------------------------------------------------------------ bento */
