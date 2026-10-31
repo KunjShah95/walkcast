@@ -178,6 +178,34 @@ Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;
 honours `robots.txt`; paces requests; credentials registered as secrets (never on disk).
 
+### A journey instead of a crawl
+
+`journey.ts` reads a flow the way a person says it, one step per line, and the recorder follows
+it exactly rather than choosing pages itself:
+
+```
+# the sign-up flow
+goto /pricing
+click "Buy now"
+fill "Email" "jane@example.com"
+select "Plan" "Pro"
+check "I accept the terms"
+press Enter
+waitFor "Dashboard"
+expect "Your trial ends in 14 days"
+hover "Features"
+scroll
+```
+
+`goto`, `click`, `fill`, `press`, `select`, `check`, `uncheck`, `hover`, `wait`, `waitFor`,
+`expect` and `scroll`. The limits the person set still hold, and a step that cannot be done is
+narrated as a step that did not happen rather than quietly skipped.
+
+The same journey copies out as a Playwright script (Record screen → *Copy as a Playwright
+script*): the site as `baseURL`, one numbered step per line, `expect` for `expect`/`waitFor`,
+and the lines that could not be read kept as comments. The walkthrough of a flow and the test
+for that flow are the same list, so there is no second script to write and keep in sync.
+
 ### After the recording: notes, sharing, export
 
 The visit is the product, so the walkthrough is not the end of it:
@@ -239,7 +267,7 @@ Runs, Fixtures, Experiments, Compare.
 | | What | Where | Runs on |
 | --- | --- | --- | --- |
 | **Website** | React landing page (Vite), prerendered at build time. Static files, no backend. | `apps/web/` | Any static host (Vercel) |
-| **Desktop app** | The product: recorder, dashboard, lab runs, sign-in, API. Tauri shell around the local Node server. | `apps/desktop/` | Windows, macOS, Linux |
+| **Desktop app** | The product: recorder, dashboard, lab runs, sign-in, API. Tauri shell around the local Node server. | `apps/desktop/` | Windows, Linux |
 
 ```sh
 npm run desktop:dev      # Tauri window over the local server (needs Rust)

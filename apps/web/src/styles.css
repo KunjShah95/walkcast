@@ -1006,3 +1006,39 @@ footer { margin-top: clamp(100px, 12vw, 160px); overflow: hidden; }
   .trust svg path, .trust svg polyline { stroke-dashoffset: 0; }
   .hub-node { transition: none; }
 }
+
+/* ---------------------------------------------------------------- compact navigation */
+.nav-end { display: flex; align-items: center; justify-self: end; gap: 8px; }
+.nav-burger {
+  display: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--ink); cursor: pointer; align-items: center; justify-content: center;
+  flex-direction: column; gap: 5px; transition: background 0.18s;
+}
+.nav-burger:hover { background: var(--panel); }
+.nav-burger span { width: 17px; height: 1.5px; border-radius: 2px; background: currentColor; transition: transform 0.2s var(--ease); }
+.nav.open .nav-burger span:first-child { transform: translateY(3.25px) rotate(45deg); }
+.nav.open .nav-burger span:last-child { transform: translateY(-3.25px) rotate(-45deg); }
+.nav-sheet { display: none; }
+
+@media (max-width: 640px) {
+  .nav-row { height: 56px; }
+  .nav-end { gap: 4px; }
+  .nav-cta { font-size: 11.5px; padding: 7px 10px; }
+  .nav-burger { display: flex; }
+  .nav-sheet {
+    display: block; position: absolute; z-index: 31; top: 100%; left: 0; right: 0; max-height: calc(100dvh - 56px);
+    overflow-y: auto; padding: 10px max(16px, calc((100vw - 1240px) / 2));
+    background: rgb(251 248 243 / 0.97); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--line); box-shadow: 0 22px 34px -30px rgb(30 26 22 / 0.35);
+  }
+  .nav-sheet nav { display: grid; }
+  .nav-sheet nav a {
+    display: grid; grid-template-columns: 32px 1fr 18px; align-items: center; gap: 10px; min-height: 52px;
+    border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 16px; font-weight: 550;
+  }
+  .nav-sheet nav a:last-child { border-bottom: 0; }
+  .nav-sheet nav a > svg { color: var(--muted); }
+  .nav-sheet-n { color: var(--signal); font-size: 11px; }
+  .nav-sheet-foot { margin: 14px 0 8px; color: var(--muted); font-size: 12px; }
+  .nav-sheet-foot a { color: var(--ink); text-underline-offset: 3px; }
+}

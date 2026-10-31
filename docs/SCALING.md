@@ -45,6 +45,7 @@ One web instance costs ~100 MB. One browser worker is an order of magnitude heav
 | --- | --- | --- |
 | Chromium (Playwright) | ~500 MB–1 GB RSS | The recorder walks ≤30 pages with screenshots; lab runs add Stagehand + Chrome for Testing as a second head. |
 | ffmpeg encode (H.264 + AAC mix) | ~1 CPU core for minutes | H.264 of a multi-minute screencast is the CPU spike in every `record` job. flite narration is cheap. |
+| Live preview (`record/live-view.ts`) | a second x264 encoder per running job | `ultrafast` stills at 960px, one keyframe per picture, six segments kept. Bounded twice: `LIVE_MAX_SESSIONS` (2, `LAB_LIVE_SESSIONS`) encoders per process, and a frame ffmpeg has stopped reading is dropped instead of queued. Counted in `/api/metrics` as `live.previews`. |
 | LLM loop (lab jobs) | network-bound but long | Live model runs can consume the whole 6-min deadline; Stagehand resolution doubles model calls. |
 
 From real running: a lab run is ~30 s; a recording of a small site is ~1–3 min. Budget **~2 min
@@ -176,6 +177,11 @@ You cannot autoscale what you cannot see. Cheap, in priority order (all existing
 emitted by each web instance) and `GET /api/metrics`. 2 is `store.metrics()` (p50/p95 per kind,
 in `/api/metrics`). 3 is visible as `job.failed` with `retry: true` and in `walkcast doctor`'s
 lease list; no separate alarm yet.
+
+A preview is a CPU consumer the queue depth does not show, so it is counted too: `live.previews`
+and `live.limit` in `/api/metrics`, plus `live.stopped` (`frames`, `dropped`) and `live.refused`
+in the log. A high `dropped` count on one worker means that worker is already saturated; keep the
+fleet's `LAB_LIVE_SESSIONS` at its default there rather than raising it.
 
 ---
 

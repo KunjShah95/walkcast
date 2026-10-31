@@ -73,6 +73,12 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 - [x] The regression gate: `npm run lab -- ci <fixtures>` replays every fixture and fails when one that used to pass stops passing, against a baseline file that remembers what each fixture did last time. A workflow runs it on pull requests and comments the table (docs/CI-GATE.md).
 - [x] Journeys: record a flow instead of crawling the site — `goto`, `click`, `fill`, `wait`, `scroll`, one per line — narrated step by step, and printed as a Playwright script.
 
+## A journey is a test, and a preview is bounded (2026-10-31)
+- [x] Journeys grew the verbs a real flow needs: `press`, `select`, `check`, `uncheck`, `hover`, `waitFor` and `expect`. Each one is followed by the recorder (recorded, narrated, and pictured in the guide like a click), so the walkthrough and the test stay the same list of steps.
+- [x] The Playwright script a journey copies out as is now a file you can run: the site as `baseURL`, one numbered step per line (a failure names the journey line), `expect(...)` for `expect`/`waitFor`, `expect` imported only when it is used, and unreadable lines kept as comments.
+- [x] The presenter reads more of each page: what a form asks for (`fields`), and, on an app screen with no prose, what the controls offer (`actionsLine`) — never a value that was typed. The scroll line now names four sections and three prices.
+- [x] Live preview while a recording runs: the page pictures go to an x264 encoder as they are taken and play as HLS. Bounded so a preview can never cost a recording — at most `LIVE_MAX_SESSIONS` (`LAB_LIVE_SESSIONS`) encoders per process, `ultrafast` stills, one keyframe per picture, six segments kept, a frame dropped when ffmpeg falls behind, and `live.previews` in `/api/metrics` (docs/SCALING.md).
+
 ## Model spend guards (2026-10-21)
 - [x] A per-run model budget: every live run carries a ceiling on tokens and on estimated dollars (250k tokens / ~$5 by default; `LAB_AGENT_TOKEN_BUDGET`, `LAB_AGENT_COST_BUDGET_USD`, per agent with the `_SH_P1` style suffix). The run stops when it reaches one and reports `budget-exhausted`, which is not a verdict on the agent. Replays and scripted runs cost nothing and are never charged against it.
 - [ ] Backoff and retry inside a backend on 429/5xx, before the fallback chain moves on: today a single-provider run fails hard on a rate limit.
@@ -80,7 +86,7 @@ Living roadmap for the desktop app + lab harness. Milestones are ordered; each s
 
 ## Up next (v0.6+)
 - [x] Voice cloning / custom voice upload for narration (upload + playback fallback).
-- [ ] Code-signed installers (Windows/macOS) to remove SmartScreen warnings. Blocked on buying certificates; unsigned by decision for now (docs/SIGNING.md).
+- [ ] Code-signed installers (Windows) to remove SmartScreen warnings. Blocked on buying certificates; unsigned by decision for now (docs/SIGNING.md).
 - [ ] Native mobile companion app: Capacitor shell scaffolded in `apps/mobile` (Android + iOS projects, connect screen, opens the server's mobile view). Not yet built or run on a device: needs Android Studio / Xcode.
 - [x] Additional TTS/STT providers and auto-caption generation from recorded audio (11 TTS, 5 STT).
 - [x] First-run sample site: "Try it on a sample site" on the Record screen records a sample CRM the recorder starts for the job.

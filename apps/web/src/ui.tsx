@@ -58,7 +58,7 @@ export function Eyebrow({ n, children }: { n: number; children: ReactNode }) {
 
 export type Platform = "windows" | "linux";
 
-/** The three places Walkcast installs, and the file each one lands as. */
+/** The two places Walkcast installs, and the file each one lands as. */
 const PLATFORMS: Record<Platform, { name: string; url: string }> = {
   windows: { name: "Windows", url: WINDOWS_EXE_URL },
   linux: { name: "Linux", url: LINUX_APPIMAGE_URL },
@@ -71,7 +71,7 @@ const PLATFORM_ICON: Record<Platform, ComponentType<ComponentProps<"svg">>> = {
 
 /**
  * The visitor's desktop OS. Prerendered pages say Windows (most visitors, and what crawlers see);
- * after hydration a Mac or Linux visitor gets their own installer instead of a Windows .exe.
+ * after hydration a Linux visitor gets their own installer instead of a Windows .exe.
  */
 function usePlatform(): Platform {
   const [p, setP] = useState<Platform>("windows");

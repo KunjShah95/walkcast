@@ -1,16 +1,10 @@
 # Releases are unsigned (by design)
 
 Walkcast installers are **not code-signed**. This is a deliberate choice: signing costs
-money (~$99/yr Apple + $200-500/yr Windows cert) and is skipped.
+money (~$200-500/yr for a Windows certificate) and is skipped.
 
 ## What users see
 - **Windows**: "Windows protected your PC" — click **More info → Run anyway**.
-- **macOS**: blocked Gatekeeper — right-click the app → **Open**, or:
-
-  ```sh
-  xattr -d com.apple.quarantine /Applications/walkcast.app
-  ```
-
 - **Linux (.deb / .AppImage)**: no warning.
 
 ## Building
@@ -18,8 +12,8 @@ money (~$99/yr Apple + $200-500/yr Windows cert) and is skipped.
 (`.github/workflows/release.yml`) builds and publishes them as-is, with no certificates.
 
 ## If signing is ever needed
-Add a `bundle.windows.certificateThumbprint` (OV/EV cert) and Apple Developer
-credentials, then wire them into the release workflow. Until then, leave it unsigned.
+Add a `bundle.windows.certificateThumbprint` (OV/EV cert), then wire it into the release
+workflow. Until then, leave it unsigned.
 ## In-app updates use a different, free key
 
 The desktop app updates itself (Settings → Updates) with Tauri's updater. That needs no paid

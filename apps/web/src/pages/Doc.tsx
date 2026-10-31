@@ -34,7 +34,7 @@ export function Doc({
         <aside className="doc-cta">
           <div>
             <b>Make your first walkthrough</b>
-            <p>Free for Windows, Mac and Linux. Version {VERSION}.</p>
+            <p>Free for Windows and Linux. Version {VERSION}.</p>
           </div>
           <DownloadButton />
         </aside>

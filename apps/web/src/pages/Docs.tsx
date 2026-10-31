@@ -32,7 +32,7 @@ export function GuidePage() {
 
       <h2>What you need</h2>
       <ul>
-        <li>A Windows 10/11 PC (x64), a Mac (macOS 12+, Apple Silicon), or an x86_64 Linux machine. Or run Walkcast from source on any platform.</li>
+        <li>A Windows 10/11 PC (x64) or an x86_64 Linux machine. Or run Walkcast from source on either.</li>
         <li>The address of the site, and permission to test it (your own site, or a client's that asked you to).</li>
         <li>For pages behind a login: a username and password for a test account. Two-step email-then-password forms work.</li>
       </ul>
@@ -258,7 +258,7 @@ export function DownloadPage() {
 
       <h2>Requirements</h2>
       <ul>
-        <li>Windows 10 or 11 (64-bit), macOS 12+ on Apple Silicon, or a 64-bit Linux distribution.</li>
+        <li>Windows 10 or 11 (64-bit), or a 64-bit Linux distribution.</li>
         <li>About 600 MB of disk: the app, plus the recording browser (Chromium) it downloads once on first launch.</li>
         <li>An internet connection to reach the sites you record. Everything else runs locally; ffmpeg and the voices are included.</li>
       </ul>
@@ -267,18 +267,17 @@ export function DownloadPage() {
       <p>
         The installer is not code-signed yet, so Windows may show "Windows protected your PC". Choose <strong>More info</strong>, then <strong>Run anyway</strong>.
         The installers are built in public by GitHub Actions from the tagged source; every release and its build log is on{" "}
-        <a href={RELEASES_URL}>GitHub Releases</a>.
+        <a href={RELEASES_URL} target="_blank" rel="noopener">GitHub Releases</a>.
       </p>
 
       <h2>Uninstall</h2>
       <p>Settings → Apps → Installed apps → Walkcast → Uninstall. Recordings in your app data folder are kept until you delete them.</p>
 
-      <h2>macOS and Linux</h2>
+      <h2>Linux</h2>
       <p>
-        The Mac build is not notarized yet, so macOS blocks the first launch. Right-click Walkcast in Applications and choose <strong>Open</strong>; on
-        macOS 15 or later, open it once, then go to System Settings → Privacy &amp; Security and choose <strong>Open Anyway</strong>. On Linux, make the
+        Make the
         AppImage executable (<code>chmod +x</code>) and run it, or install the .deb. You can also run Walkcast from source with Node.js 22, Rust and
-        ffmpeg: see the <a href={`${REPO_URL}#quick-start`}>README</a>.
+        ffmpeg: see the <a href={`${REPO_URL}#quick-start`} target="_blank" rel="noopener">README</a>.
       </p>
     </Doc>
   );
@@ -336,7 +335,7 @@ export function PrivacyPage() {
 
       <h2>Source</h2>
       <p>
-        Every claim here can be checked: Walkcast is open source under the MIT license at <a href={REPO_URL}>github.com/KunjShah95/walkcast</a>.
+        Every claim here can be checked: Walkcast is open source under the MIT license at <a href={REPO_URL} target="_blank" rel="noopener">github.com/KunjShah95/walkcast</a>.
       </p>
     </Doc>
   );

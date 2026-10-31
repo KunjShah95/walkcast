@@ -32,7 +32,7 @@ export interface Route {
     kind: "landing",
     title: "Walkcast · Paste a link, get a video tour of your website",
     description:
-      "A real browser signs in, clicks through your pages and records the whole visit. You get an MP4 with captions and a transcript. Free for Windows, Mac and Linux.",
+      "A real browser signs in, clicks through your pages and records the whole visit. You get an MP4 with captions and a transcript. Free for Windows and Linux.",
     answerSelector: "#what .lede",
   },
   {
@@ -49,7 +49,7 @@ export interface Route {
       ],
       [
         "Do the guides need the Walkcast app?",
-        "Most of them do. Walkcast is a free desktop app for Windows, macOS and Linux, and every guide ends with the same short path: paste a link, press Record, get an MP4 with captions and a transcript.",
+        "Most of them do. Walkcast is a free desktop app for Windows and Linux, and every guide ends with the same short path: paste a link, press Record, get an MP4 with captions and a transcript.",
       ],
     ],
   },
@@ -75,7 +75,7 @@ export interface Route {
     kind: "guide",
     title: "How to make a website tutorial video · Walkcast",
     description:
-      "Record a website tutorial video from the live site: narrated, captioned, and re-recordable after every change. Windows, Mac and Linux, free.",
+      "Record a website tutorial video from the live site: narrated, captioned, and re-recordable after every change. Windows and Linux, free.",
   },
   {
     path: "/compare/screen-recording",
@@ -137,9 +137,9 @@ export interface Route {
     path: "/download",
     label: "Download",
     kind: "download",
-    title: "Download Walkcast for Windows, Mac and Linux · Walkcast",
+    title: "Download Walkcast for Windows and Linux · Walkcast",
     description:
-      "Download Walkcast free: Windows .exe (no admin rights) or .msi, macOS .dmg for Apple Silicon, Linux AppImage or .deb. Requirements and first-run notes.",
+      "Download Walkcast free: Windows .exe (no admin rights) or .msi, Linux AppImage or .deb. Requirements and first-run notes.",
   },
   {
     path: "/privacy",
@@ -211,7 +211,7 @@ export const COMPARE_FAQ: Record<string, [string, string][]> = {
     ],
     [
       "Which runs on Windows and Linux?",
-      "Both do, along with Apple Silicon macOS. Walkcast is a desktop app for Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, and 64-bit Linux through an AppImage or a .deb package.",
+      "Both do. Walkcast is a desktop app for Windows 10 or 11 (64-bit) and 64-bit Linux through an AppImage or a .deb package.",
     ],
     [
       "Is Walkcast open source?",
@@ -221,7 +221,7 @@ export const COMPARE_FAQ: Record<string, [string, string][]> = {
   "/compare/screen-studio": [
     [
       "What is the best Screen Studio alternative for Windows?",
-      "Screen Studio only runs on macOS, so Windows and Linux users have no equivalent from its maker. Walkcast runs on all three and records your website rather than your screen; OBS Studio is the better choice if you want free manual screen recording with full control.",
+      "Screen Studio only runs on macOS, so Windows and Linux users have no equivalent from its maker. Walkcast runs on both and records your website rather than your screen; OBS Studio is the better choice if you want free manual screen recording with full control.",
     ],
     [
       "How much does Screen Studio cost?",
@@ -293,9 +293,9 @@ export const MORE_FAQ: [string, string][] = [
 ];
 export const TAGLINE = "Paste a link, get a video tour of your website";
 export const DESCRIPTION =
-  "Paste a link and get a video tour of your website. A real browser signs in, clicks through your pages like a first-time user and hands back the whole visit as an MP4 with captions and a transcript. Free desktop app for Windows, Mac and Linux.";
+  "Paste a link and get a video tour of your website. A real browser signs in, clicks through your pages like a first-time user and hands back the whole visit as an MP4 with captions and a transcript. Free desktop app for Windows and Linux.";
 export const DEFINITION =
-  "Walkcast is a free, open-source desktop app (Windows, macOS and Linux) that makes a video tour of your website from one link. A real browser signs in, visits up to 30 pages the way a first-time user would (8 by default) and returns the complete recording as an MP4 with WebVTT captions and a transcript. A voice-over is included when you add a voice key. Every caption comes from what the browser actually did.";
+  "Walkcast is a free, open-source desktop app (Windows and Linux) that makes a video tour of your website from one link. A real browser signs in, visits up to 30 pages the way a first-time user would (8 by default) and returns the complete recording as an MP4 with WebVTT captions and a transcript. A voice-over is included when you add a voice key. Every caption comes from what the browser actually did.";
 
 /**
  * The plainest true sentence about the product, for the visitor who has no idea what this is.
@@ -342,7 +342,7 @@ export const FAQ: [string, string][] = [
   ],
   [
     "Which computers does Walkcast run on?",
-    "Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, and most 64-bit Linux distributions (AppImage or .deb). It is a desktop app because it runs a real browser on your computer; it does not run on phones.",
+    "Windows 10 or 11 (64-bit), or most 64-bit Linux distributions (AppImage or .deb). It is a desktop app because it runs a real browser on your computer; it does not run on phones.",
   ],
   [
     "How do I make a narrated video walkthrough of my website?",
@@ -438,7 +438,7 @@ export const COMPARES: Compare[] = [
       ["Records pages behind a login", "yes", "yes", "Walkcast signs in with a test account and never submits a form."],
       ["Shows your desktop, other tabs or notifications", "no", "yes", "Walkcast records only its own browser window."],
       ["Captions and a transcript", "yes", "yes", "Loom transcribes on the cloud; Walkcast writes WebVTT captions timed to the voice."],
-      ["Runs on Windows and Linux", "yes", "yes", "Loom works in the browser and on desktop; Walkcast is a desktop app for all three."],
+      ["Runs on Windows and Linux", "yes", "yes", "Loom works in the browser and on desktop; Walkcast is a desktop app for both."],
       ["Files stay on your machine", "yes", "no", "Loom hosts your videos. Walkcast writes them to your own folder, and the app uploads nothing."],
       ["Hosting and sharing links", "some", "yes", "Walkcast makes a share link that plays in a browser and expires on the day you name, served by the server you run. Loom hosts the video for you and adds comments and reactions."],
       ["A written step-by-step guide", "yes", "no", "Walkcast turns the same visit into numbered steps with a picture per click. Loom gives you the video and its transcript."],
@@ -490,7 +490,7 @@ export const COMPARES: Compare[] = [
     facts: [
       ["Screen Studio is $29 per month or $108 per year, with no free plan and no one-time licence for new buyers.", "https://screen.studio/pricing"],
       ["Screen Studio requires macOS 13.1 or later; there is no Windows build.", "https://screen.studio/download"],
-      ["Walkcast runs on Windows 10 or 11 (64-bit), macOS 12+ on Apple Silicon, and 64-bit Linux.", "https://github.com/KunjShah95/walkcast"],
+      ["Walkcast runs on Windows 10 or 11 (64-bit) and 64-bit Linux.", "https://github.com/KunjShah95/walkcast"],
     ],
   },
   {

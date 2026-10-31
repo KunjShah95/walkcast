@@ -415,7 +415,7 @@ export function Faq() {
           <div className="ask">
             <b>Still have a question?</b>
             <p>Open an issue and we will help you get set up.</p>
-            <a className="pill solid" href={ISSUES_URL}><GithubIcon />Ask on GitHub</a>
+            <a className="pill solid" href={ISSUES_URL} target="_blank" rel="noopener"><GithubIcon />Ask on GitHub</a>
           </div>
         </Reveal>
         <Reveal className="qa" delay={0.08}>
@@ -580,15 +580,14 @@ export function Closing() {
           >
             <DownloadButton big />
           </span>
-          <p className="fineprint">Free. Windows, macOS (Apple Silicon) and Linux. Version {VERSION}.</p>
+          <p className="fineprint">Free. Windows and Linux. Version {VERSION}.</p>
           <p className="fineprint">
-            The installers are not code-signed yet, so Windows may show "Windows protected your PC" and macOS may block
-            the first launch. Both are expected, and the <a href="/download">download page</a> has the steps to get past
-            them.
+            The installers are not code-signed yet, so Windows may show "Windows protected your PC". That is expected, and
+            the <a href="/download">download page</a> has the steps to get past it.
           </p>
           <p className="fineprint">
-            Built by <a href={AUTHOR.url}>{AUTHOR.name}</a>. If it does not do what you need,{" "}
-            <a href={ISSUES_URL}>open an issue</a> and tell us what you were trying to do.
+            Built by <a href={AUTHOR.url} target="_blank" rel="noopener">{AUTHOR.name}</a>. If it does not do what you need,{" "}
+            <a href={ISSUES_URL} target="_blank" rel="noopener">open an issue</a> and tell us what you were trying to do.
           </p>
         </Reveal>
       </div>
@@ -610,7 +609,7 @@ export function Footer() {
               the whole visit as a video.
             </p>
             <DownloadButton />
-            <span className="ver mono"><a href={RELEASES_URL}>v{VERSION}</a> · Windows 10/11 · x64</span>
+            <span className="ver mono"><a href={RELEASES_URL} target="_blank" rel="noopener">v{VERSION}</a> · Windows 10/11 · x64</span>
           </div>
           <div>
             <h4>Product</h4>
@@ -634,7 +633,7 @@ export function Footer() {
               <li><a href={WINDOWS_MSI_URL}><WindowsIcon width={14} height={14} />Windows .msi</a></li>
               <li><a href={LINUX_APPIMAGE_URL}><LinuxIcon width={14} height={14} />Linux .AppImage</a></li>
               <li><a href={LINUX_DEB_URL}><LinuxIcon width={14} height={14} />Linux .deb</a></li>
-              <li><a href={RELEASES_URL}><Rocket size={14} />All releases</a></li>
+              <li><a href={RELEASES_URL} target="_blank" rel="noopener"><Rocket size={14} />All releases</a></li>
             </ul>
           </div>
           <div>
@@ -653,10 +652,10 @@ export function Footer() {
           <div>
             <h4>Project</h4>
             <ul>
-              <li><a href={REPO_URL}>Source on GitHub</a></li>
-              <li><a href={LAB_URL}>Walkcast Lab</a></li>
-              <li><a href={ISSUES_URL}>Issues</a></li>
-              <li><a href={LICENSE_URL}>MIT License</a></li>
+              <li><a href={REPO_URL} target="_blank" rel="noopener">Source on GitHub</a></li>
+              <li><a href={LAB_URL} target="_blank" rel="noopener">Walkcast Lab</a></li>
+              <li><a href={ISSUES_URL} target="_blank" rel="noopener">Issues</a></li>
+              <li><a href={LICENSE_URL} target="_blank" rel="noopener">MIT License</a></li>
             </ul>
           </div>
         </div>
@@ -670,7 +669,7 @@ export function Footer() {
           <a href="/llms.txt" rel="noopener">
             llms.txt
           </a>
-          <a href={REPO_URL} aria-label="Walkcast on GitHub"><GithubIcon width={17} height={17} /></a>
+          <a href={REPO_URL} aria-label="Walkcast on GitHub" target="_blank" rel="noopener"><GithubIcon width={17} height={17} /></a>
         </div>
       </div>
       <Wordmark />

@@ -269,9 +269,9 @@ Soft, confident pills.
 
 ### The Download Button
 One family for the whole site: signal fill, white text, the platform's glyph, the platform's name, the download arrow. Every download on every page is this button — the nav pill, the hero's three platform pills, the installer cards, the footer, the closing panel. No second treatment, no icon-only variant, and never the record light (the red dot means recording, not installing).
-- **Single:** the visitor's own platform, labelled "Download for Windows / macOS / Linux".
-- **Row:** the three platforms, fixed order so nothing moves when the page hydrates and learns the visitor's machine.
-- **Installer card:** the same button, labelled for the file it fetches (.exe, .msi, .dmg, .AppImage, .deb).
+- **Single:** the visitor's own platform, labelled "Download for Windows / Linux".
+- **Row:** both platforms, fixed order so nothing moves when the page hydrates and learns the visitor's machine.
+- **Installer card:** the same button, labelled for the file it fetches (.exe, .msi, .AppImage, .deb).
 
 ### Chips
 - **Citation chip:** exhibit cream, exhibit ink, mono 600 11px, 6px radius, a half-opacity dot before the EX-n label; click seeks and spotlights the cited transcript line.

@@ -25,6 +25,18 @@ subtitle track. `walkcast-launch.vtt` holds the same captions for YouTube or Lin
 
 Every number is taken from `results/` or from the Lab dashboard screenshots in `docs/screenshots/`. None are made up.
 
+## What this cut predates
+
+The film is 88 s and every scene has an absolute cue, so a new beat is a re-time of everything
+after it plus a re-voiced `voiceover.py` — it is a re-cut, not an edit. These shipped after this
+cut and are not in it:
+
+- **Live preview while it records** (`record/live-view.ts`): the pages appear as a slideshow while the browser is still walking.
+- **A journey that becomes a test** (`record/journey.ts`): `press`, `select`, `check`, `hover`, `waitFor`, `expect`, and the flow copied out as a runnable Playwright script.
+
+A re-cut needs the Kokoro model files (`kokoro-v1.0.onnx`, `voices-v1.0.bin`) and the full
+`Rebuilding` pipeline below; `video.html` alone is not the deliverable.
+
 ## Voice-over
 
 The narration is spoken by Kokoro (`af_heart` voice), an open-weights neural TTS (Apache-2.0)

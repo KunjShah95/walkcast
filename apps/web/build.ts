@@ -84,7 +84,7 @@ const APP = {
   name: NAME,
   description: DEFINITION,
   applicationCategory: "MultimediaApplication",
-  operatingSystem: "Windows 10, Windows 11",
+  operatingSystem: "Windows 10, Windows 11, Linux",
   softwareVersion: VERSION,
   downloadUrl: [WINDOWS_EXE_URL, WINDOWS_MSI_URL],
   installUrl: url("/download"),
@@ -314,12 +314,12 @@ const links = [
   `- [Full answers](${SITE}/llms-full.txt): every FAQ answer in plain text`,
 ].join("\n");
 const facts = [
-  "- Platform: Windows 10 and 11, 64-bit (macOS and Linux from source)",
+  "- Platform: Windows 10 and 11, 64-bit (Linux from source)",
   `- Version: ${VERSION}`,
   "- Price: free, MIT licensed, no paid tier, no watermark",
   "- Output: MP4 (H.264 + AAC), WebM, WebVTT captions, transcript, WAV narration, page list with HTTP status",
   "- Sharing: a share link that plays the walkthrough for anyone who has it (no account, expiring), a one-line iframe embed, notes pinned to the second of the video, and the whole visit as a Markdown document",
-  "- Voice: the voices built into Windows, offline (flite when run from source on Linux/macOS)",
+  "- Voice: the voices built into Windows, offline (flite when run from source on Linux)",
   "- Limits: up to 30 pages per recording, same site only",
   "- Safety: password held in memory only, stops at CAPTCHA and 2FA, no form submissions after sign-in, respects robots.txt",
   "- Privacy: runs on your PC, no analytics, recordings are never uploaded",
@@ -335,7 +335,7 @@ writeFileSync(
 // behalf cannot scrape a rendered pricing section; this file it can just parse.
 writeFileSync(
   join(out, "pricing.md"),
-  `# Pricing — ${NAME}\n\nLast updated: ${UPDATED}\n\n## Free\n\n- Price: $0 total, forever\n- License: MIT\n- Seats: unlimited. There is no account system and no per-user pricing.\n- Recordings per day: no limit. The only ceiling is your machine.\n- Pages per recording: up to 30, on one site.\n- Watermark: none.\n- Paid tier: none. There is no paid tier and no plan for one.\n- Cloud narration voices: optional and not required. Use the built-in offline voices at no cost,\n  or bring your own ElevenLabs or OpenAI key.\n- Disk: about 600 MB (the app plus the recording browser it downloads once).\n- Network: only the sites you record. Recordings are never uploaded.\n\n## What you get\n\n- A desktop app for Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, and 64-bit Linux.\n- One link in, one video out: an MP4 with a spoken voice-over, WebVTT captions, a transcript,\n  the narration as a WAV file, and a list of every page visited with its HTTP status.\n- Pages behind a login, recorded with a test account you provide.\n- Walkcast Lab, in the same app: failed browser AI agent runs turned into classified causes\n  and replayable regression fixtures.\n\n## What it does not do\n\n- It does not record your screen. It records your website, in its own browser.\n- It does not submit forms. It stops at CAPTCHA and two-factor prompts.\n- It does not edit or splice video. It records one continuous visit.\n\n## Links\n\n- [Pricing page](${url("/pricing")})\n- [Download](${url("/download")})\n- [Source code](${REPO_URL})\n`,
+  `# Pricing — ${NAME}\n\nLast updated: ${UPDATED}\n\n## Free\n\n- Price: $0 total, forever\n- License: MIT\n- Seats: unlimited. There is no account system and no per-user pricing.\n- Recordings per day: no limit. The only ceiling is your machine.\n- Pages per recording: up to 30, on one site.\n- Watermark: none.\n- Paid tier: none. There is no paid tier and no plan for one.\n- Cloud narration voices: optional and not required. Use the built-in offline voices at no cost,\n  or bring your own ElevenLabs or OpenAI key.\n- Disk: about 600 MB (the app plus the recording browser it downloads once).\n- Network: only the sites you record. Recordings are never uploaded.\n\n## What you get\n\n- A desktop app for Windows 10 or 11 (64-bit) and 64-bit Linux.\n- One link in, one video out: an MP4 with a spoken voice-over, WebVTT captions, a transcript,\n  the narration as a WAV file, and a list of every page visited with its HTTP status.\n- Pages behind a login, recorded with a test account you provide.\n- Walkcast Lab, in the same app: failed browser AI agent runs turned into classified causes\n  and replayable regression fixtures.\n\n## What it does not do\n\n- It does not record your screen. It records your website, in its own browser.\n- It does not submit forms. It stops at CAPTCHA and two-factor prompts.\n- It does not edit or splice video. It records one continuous visit.\n\n## Links\n\n- [Pricing page](${url("/pricing")})\n- [Download](${url("/download")})\n- [Source code](${REPO_URL})\n`,
 );
 
 // The machine-readable files belong in the crawlable map too, so a crawler that reads the

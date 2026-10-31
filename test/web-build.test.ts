@@ -166,6 +166,41 @@ test("the comparison pages are structured for citation", { timeout: 180_000 }, a
   }
 });
 
+test("no page promises a platform the releases do not ship", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const out = build();
+
+  // macOS was dropped from the release matrix (7b5f962): no .dmg is built, no browser is found for
+  // the Lab. The comparison pages still name macOS on purpose — Screen Studio is a Mac tool — so
+  // these patterns describe Walkcast's own support, which is the claim that went stale.
+  const claims = [/Mac and Linux/i, /macOS and Linux/i, /Apple Silicon/i, /\.dmg\b/];
+  const pages: [string, string][] = ROUTES.map((r) => [
+    r.path,
+    r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`,
+  ]);
+  const files: [string, string][] = [
+    ...pages,
+    ["llms.txt", "llms.txt"],
+    ["llms-full.txt", "llms-full.txt"],
+    ["pricing.md", "pricing.md"],
+  ];
+  for (const [label, file] of files) {
+    const body = read(out, file);
+    for (const claim of claims) assert.ok(!claim.test(body), `${label} does not claim macOS support (${claim})`);
+  }
+
+  // And the pages must name the ones that do ship.
+  const download = read(out, "download/index.html");
+  assert.match(download, /Windows installer/);
+  assert.match(download, /Linux AppImage/);
+  for (const path of ["/", "/download", "/faq"]) {
+    const file = path === "/" ? "index.html" : `${path.slice(1)}/index.html`;
+    const html = read(out, file);
+    assert.match(html, /Windows/, `${path} names Windows`);
+    assert.match(html, /Linux/, `${path} names Linux`);
+  }
+});
+
 test("the guides index lists every guide as a structured list", { timeout: 180_000 }, async () => {
   const { GUIDES } = await import("../apps/web/src/content.ts");
   const out = build();

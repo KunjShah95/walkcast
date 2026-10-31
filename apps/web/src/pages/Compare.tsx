@@ -112,7 +112,7 @@ function CompareArticle({ compare }: { compare: Compare }) {
       <p>
         The fastest way to settle this is to record the same page with both tools and watch them side by side. Walkcast is
         a{" "}
-        <a href="/download">free download for Windows, Mac and Linux</a>. It requires no account, so the only thing it
+        <a href="/download">free download for Windows and Linux</a>. It requires no account, so the only thing it
         costs you is the time to try it.
       </p>
     </Doc>

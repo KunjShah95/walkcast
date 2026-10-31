@@ -128,7 +128,7 @@ export function LabPage() {
       <p>
         The Lab chapter of the README walks through runs, fixtures, experiments, compare and the fault replay simulator,
         with the commands to run them:{" "}
-        <a href={LAB_URL} rel="noopener">
+        <a href={LAB_URL} target="_blank" rel="noopener">
           Walkcast Lab on GitHub
         </a>
         .

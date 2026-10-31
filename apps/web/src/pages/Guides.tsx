@@ -19,7 +19,7 @@ export function GuidesIndexPage() {
         <p className="eyebrow">
           <span className="eyebrow-n">Guides</span>
           Updated <time dateTime={UPDATED}>{new Date(UPDATED + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time> · by{" "}
-          <a href={AUTHOR.url}>{AUTHOR.name}</a>
+          <a href={AUTHOR.url} target="_blank" rel="noopener">{AUTHOR.name}</a>
         </p>
 
         <h1>
@@ -75,7 +75,7 @@ export function GuidesIndexPage() {
         <h2>What every guide assumes</h2>
         <ul>
           <li>
-            A Windows 10 or 11 PC (64-bit), a Mac (macOS 12 or later, Apple Silicon), or a 64-bit Linux machine.
+            A Windows 10 or 11 PC (64-bit) or a 64-bit Linux machine.
           </li>
           <li>The address of a site you own, or one whose owner asked you to test it. Walkcast asks you to confirm this.</li>
           <li>For pages behind a login: a username and password for a test account. Two-step email-then-password forms work.</li>
@@ -84,7 +84,7 @@ export function GuidesIndexPage() {
         <aside className="doc-cta">
           <div>
             <b>Make your first walkthrough</b>
-            <p>Free for Windows, Mac and Linux. No account needed.</p>
+            <p>Free for Windows and Linux. No account needed.</p>
           </div>
           <DownloadButton />
         </aside>
@@ -126,7 +126,7 @@ export function ProductDemoPage() {
 
       <h2>What you need</h2>
       <ul>
-        <li>Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, or a 64-bit Linux machine.</li>
+        <li>Windows 10 or 11 (64-bit), or a 64-bit Linux machine.</li>
         <li>The address of your app, and permission to record it. Walkcast asks you to confirm you own it or are authorised to test it.</li>
         <li>If your app needs a login: a username and password for a test account. Two-step email-then-password forms work.</li>
         <li>A test account with realistic data. Empty states and placeholder rows make a dull demo.</li>
@@ -242,7 +242,7 @@ export function WebsiteTutorialPage() {
 
       <h2>What you need</h2>
       <ul>
-        <li>Windows 10 or 11 (64-bit), macOS 12 or later on Apple Silicon, or a 64-bit Linux machine.</li>
+        <li>Windows 10 or 11 (64-bit), or a 64-bit Linux machine.</li>
         <li>The address of the site, and permission to record it.</li>
         <li>For a tutorial behind a login: a test account. Two-step email-then-password forms work.</li>
       </ul>
