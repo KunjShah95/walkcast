@@ -6,13 +6,15 @@
 // The app polls releases/latest/download/latest.json (tauri.conf.json → plugins.updater). Each
 // platform entry points at the installer the updater can apply in place, plus the minisign
 // signature Tauri produced for it at build time (TAURI_SIGNING_PRIVATE_KEY):
-//   windows-x86_64  NSIS *-setup.exe   darwin-aarch64  *.app.tar.gz   linux-x86_64  *.AppImage
+//   windows-x86_64  NSIS *-setup.exe   linux-x86_64  *.AppImage
+//
+// macOS is no longer built (release.yml's matrix dropped it); this manifest has no darwin entry
+// to match, so a macOS install never offers this version to auto-update to.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const PLATFORMS = {
   "windows-x86_64": (name) => /_x64-setup\.exe$/.test(name),
-  "darwin-aarch64": (name) => /\.app\.tar\.gz$/.test(name),
   "linux-x86_64": (name) => /\.AppImage$/.test(name),
 };
 
