@@ -1,7 +1,7 @@
 import type { ClaimEvent, StepEvent, TraceEvent } from "../capture/recorder.ts";
 import { scrubText } from "../capture/secrets.ts";
 import type { PageVisit, SignInOutcome } from "./site.ts";
-import { briefLine, tourLine, type Brief } from "./brief.ts";
+import { actionsLine, briefLine, formLine, tourLine, type Brief } from "./brief.ts";
 
 /** One narrated line, in seconds from the start of the video. */
 export interface Caption {
@@ -38,6 +38,9 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
   let lastPath = "";
   const presenter = (ctx.style ?? "presenter") === "presenter";
   let brief: Brief | undefined = ctx.brief;
+  // Which page this is, so the brief/tour lines below rotate their phrasing instead of reading
+  // the same template on every page of a multi-page tour.
+  let pageIndex = -1;
 
   for (const step of steps) {
     if (step.type === "claim") {
@@ -55,6 +58,7 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
         const path = pathOf(String(step.args.path), ctx.origin);
         say(step.startedAt, out.length === 0 ? `Opening ${hostOf(ctx.origin)}${path === "/" ? "" : `, at ${spoken(path)}`}.` : `Opening ${spoken(path)}.`);
         lastPath = path;
+        pageIndex++;
         break;
       }
       case "fill": {
@@ -67,17 +71,38 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
       case "click":
         say(step.startedAt, `Clicking ${name}.`);
         break;
-      case "press":
-        say(step.startedAt, "Pressing Enter to submit.");
+      case "press": {
+        // The key the journey pressed, said as what it is for: Enter submits, everything else
+        // is a key. A recording does not claim to know what a key will do until it does it.
+        const key = typeof step.args.key === "string" && step.args.key ? step.args.key : "Enter";
+        say(step.startedAt, key === "Enter" ? "Pressing Enter to submit." : `Pressing ${key}.`);
         break;
+      }
+      case "hover": {
+        const hovered = typeof step.args.name === "string" ? step.args.name : "the control";
+        say(step.startedAt, presenter ? `Hovering over “${hovered}” to open what it holds.` : `Hovering over ${hovered}.`);
+        break;
+      }
+      case "waitForText":
+      case "expectText": {
+        const text = typeof step.args.text === "string" ? step.args.text : "the text";
+        const found = step.result === true;
+        if (!found) say(step.startedAt, step.tool === "waitForText" ? `Waiting for “${text}”. It never appeared.` : `The page was supposed to say “${text}”, and it does not.`);
+        else if (step.tool === "expectText") say(step.startedAt, `The page says “${text}”.`);
+        break;
+      }
       case "brief": {
         brief = step.result as Brief | undefined;
-        const line = presenter && brief ? briefLine(brief) : null;
-        if (line) say(step.startedAt, line);
+        if (presenter && brief) {
+          // One line per thing the page does: what it says, what it asks for, what it offers.
+          for (const line of [briefLine(brief, pageIndex), formLine(brief, pageIndex), actionsLine(brief, pageIndex)]) {
+            if (line) say(step.startedAt, line);
+          }
+        }
         break;
       }
       case "scroll": {
-        const tour = presenter && brief ? tourLine(brief) : null;
+        const tour = presenter && brief ? tourLine(brief, pageIndex) : null;
         if (tour) {
           say(step.startedAt, tour);
           if (step.before) lastPath = pathOf(step.before.url, ctx.origin);
@@ -98,7 +123,8 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
         // A step of the journey that could not be done. The walkthrough says so, because a
         // journey that quietly skipped a step is not the journey anybody asked for.
         const name = typeof step.args.name === "string" ? step.args.name : "the control";
-        say(step.startedAt, `There is no control named “${name}” on this page, so that step is skipped.`);
+        const why = typeof step.args.why === "string" ? step.args.why.trim() : "";
+        say(step.startedAt, why ? (why.endsWith(".") ? why : `${why}.`) : `There is no control named “${name}” on this page, so that step is skipped.`);
         break;
       }
     }
