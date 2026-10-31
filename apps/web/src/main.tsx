@@ -1,7 +1,10 @@
+import { inject } from "@vercel/analytics";
 import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./styles.css";
+
+inject();
 
 const root = document.getElementById("root")!;
 const path = location.pathname.replace(/\/+$/, "") || "/";
