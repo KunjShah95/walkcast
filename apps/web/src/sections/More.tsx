@@ -25,7 +25,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
-import { AUTHOR, FAQ } from "../content.ts";
+import { AUTHOR, FAQ, UPDATED } from "../content.ts";
 
 /* ------------------------------------------------------------------ bento */
 
@@ -660,7 +660,10 @@ export function Footer() {
           </div>
         </div>
         <div className="legal">
-          <span>© 2026 Walkcast. Open source under MIT.</span>
+          <span>
+            © 2026 Walkcast. Open source under MIT. Updated{" "}
+            <time dateTime={UPDATED}>{new Date(UPDATED + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time>.
+          </span>
           <a href="/privacy">Privacy</a>
           <a href="/download">Download details</a>
           <a href="/pricing.md" rel="noopener">

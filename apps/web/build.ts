@@ -314,7 +314,7 @@ const links = [
   `- [Full answers](${SITE}/llms-full.txt): every FAQ answer in plain text`,
 ].join("\n");
 const facts = [
-  "- Platform: Windows 10 and 11, 64-bit (Linux from source)",
+  "- Platform: Windows 10 and 11 (64-bit, .exe or .msi), and 64-bit Linux (AppImage or .deb)",
   `- Version: ${VERSION}`,
   "- Price: free, MIT licensed, no paid tier, no watermark",
   "- Output: MP4 (H.264 + AAC), WebM, WebVTT captions, transcript, WAV narration, page list with HTTP status",
