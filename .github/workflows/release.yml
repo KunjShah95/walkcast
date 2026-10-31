@@ -123,8 +123,8 @@ jobs:
       - name: Build Tauri (unsigned)
         run: npx tauri build --target ${{ matrix.target }}
         env:
-          # Shipped unsigned by design. Windows shows a SmartScreen "more info" prompt and macOS
-          # requires right-click → Open; no signing certificates are used or required.
+          # Shipped unsigned by design. Windows shows a SmartScreen "more info" prompt; no signing
+          # certificates are used or required.
           TAURI_BUNDLE_ENABLED: "true"
           # Not OS code signing: the free minisign key the in-app updater verifies downloads with
           # (pubkey in tauri.conf.json). Produces a .sig next to each updatable installer.

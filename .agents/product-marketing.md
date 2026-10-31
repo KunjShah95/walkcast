@@ -6,7 +6,7 @@ page.
 
 ## The product
 
-Walkcast is a free, MIT-licensed desktop app (Windows, macOS on Apple Silicon, Linux) that turns
+Walkcast is a free, MIT-licensed desktop app (Windows, Linux) that turns
 one URL into a video tour of a website. A real Chromium browser signs in, follows links across the
 site, scrolls each page, and hands back the whole visit as an MP4 with WebVTT captions, a plain-text
 transcript, a page list with HTTP status, and an optional voice-over.
