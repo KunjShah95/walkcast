@@ -13,7 +13,7 @@ import { clock } from "./transcript.ts";
 /** One action the recorder took, as `recording.json` keeps it. Seconds are video time. */
 export interface GuideAction {
   at: number;
-  kind: "click" | "fill";
+  kind: "click" | "fill" | "select";
   /** The control's accessible name, as the recorder saw it. */
   name: string;
   /** The page it happened on. */
@@ -46,7 +46,7 @@ export interface GuideStep {
 function quoted(name: string, kind: GuideAction["kind"]): string {
   const clean = name.replace(/\s+/g, " ").trim().slice(0, 80);
   if (clean) return `“${clean}”`;
-  return kind === "fill" ? "the field" : "the button";
+  return kind === "fill" ? "the field" : kind === "select" ? "the menu" : "the button";
 }
 
 function pathOf(url: string): string {
@@ -100,9 +100,11 @@ function actionStep(a: GuideAction): Omit<GuideStep, "n"> {
   const title =
     a.kind === "click"
       ? `Click ${quoted(a.name, "click")}`
-      : a.secret
-        ? `Enter your password in ${quoted(a.name, "fill")}`
-        : `Fill in ${quoted(a.name, "fill")}`;
+      : a.kind === "select"
+        ? `Choose an option in ${quoted(a.name, "select")}`
+        : a.secret
+          ? `Enter your password in ${quoted(a.name, "fill")}`
+          : `Fill in ${quoted(a.name, "fill")}`;
   return { at: a.at, title, detail: `On ${pathOf(a.url)} at ${clock(a.at)} in the video`, ...(a.shot ? { image: a.shot } : {}) };
 }
 

@@ -140,6 +140,46 @@ export class BrowserTools {
     }, undefined, () => this.checkTarget(element, from));
   }
 
+  /** Move the pointer over a control without pressing it (a journey's "hover"). */
+  async hover(index: number, from?: Observation): Promise<void> {
+    const element = this.element(index, from);
+    await this.record(
+      "hover",
+      { index, name: element.name },
+      async () => {
+        await this.page.hover(element.selector, { timeout: 2000 });
+      },
+      undefined,
+      () => this.checkTarget(element, from),
+    );
+  }
+
+  /**
+   * Wait for text to be on the page, and say whether it arrived.
+   *
+   * A journey that waits is not an assertion: a menu that never opens is a step that did not
+   * happen, and the walkthrough says so rather than stopping.
+   */
+  async waitForText(text: string, timeoutMs = 10000): Promise<boolean> {
+    return this.record("waitForText", { text, timeoutMs }, () => this.textShown(text, timeoutMs));
+  }
+
+  /** Whether the page shows this text, after giving it a moment (a journey's "expect"). */
+  async expectText(text: string, timeoutMs = 2000): Promise<boolean> {
+    return this.record("expectText", { text, timeoutMs }, () => this.textShown(text, timeoutMs));
+  }
+
+  private textShown(text: string, timeoutMs: number): Promise<boolean> {
+    return this.page
+      .getByText(text)
+      .first()
+      .waitFor({ state: "visible", timeout: Math.max(1, timeoutMs) })
+      .then(
+        () => true,
+        () => false,
+      );
+  }
+
   /** Click a CSS selector directly (e.g. one cached from an earlier run). */
   async clickSelector(selector: string, timeoutMs = 2000): Promise<void> {
     await this.record("clickSelector", { selector }, async () => {

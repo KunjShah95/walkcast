@@ -21,7 +21,7 @@ export interface Focus {
   /** When the action on it finished. */
   end: number;
   box: Box;
-  kind: "click" | "fill";
+  kind: "click" | "fill" | "select";
 }
 
 /** What `focus.json` holds. */

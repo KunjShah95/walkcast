@@ -122,7 +122,12 @@ test("first-run sample site: a demo job records a sample CRM the worker starts i
   const worker = new Worker({ store, media: new LocalMedia(join(root, "recordings")), root, pollMs: 100 }).start();
   try {
     let j = await store.job(job.id);
-    for (let i = 0; i < 300 && (j?.status === "queued" || j?.status === "running"); i++) {
+    // Wait out the whole test budget, not an arbitrary 90s: this job is a real two-page
+    // recording plus an MP4 encode, and on a laptop it takes 80-100s of wall clock with the
+    // encode swinging 20-30s on its own. A 90s poll reported a job that was still working as a
+    // failure. The assertion below is what matters, and it stays exact.
+    const giveUp = Date.now() + 170_000;
+    while ((j?.status === "queued" || j?.status === "running") && Date.now() < giveUp) {
       await new Promise((res) => setTimeout(res, 300));
       j = await store.job(job.id);
     }
