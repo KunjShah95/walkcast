@@ -14,7 +14,7 @@
   "scripts": {
     "lab": "tsx apps/desktop/cli.ts",
     "app": "node --import tsx apps/desktop/cli.ts app",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test --test-concurrency=2 test/*.test.ts",
     "typecheck": "tsc --noEmit && tsc -p apps/desktop/dashboard --noEmit && tsc -p apps/web --noEmit",
     "web:dev": "vite --config apps/web/vite.config.ts",
     "web:build": "node --import tsx apps/web/build.ts",
@@ -52,6 +52,7 @@
     "@fontsource-variable/schibsted-grotesk": "5.3.0",
     "@vercel/analytics": "^2.0.1",
     "clsx": "2.1.1",
+    "hls.js": "1.6.13",
     "lucide-react": "1.57.0",
     "motion": "14.2.0",
     "openai": "7.33.0",
