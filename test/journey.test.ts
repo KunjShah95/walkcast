@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { journeyAsPlaywright, journeyAsText, parseJourney } from "../packages/core/src/record/journey.ts";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+import { JOURNEY_SPEC, journeyAsPlaywright, journeyAsText, parseJourney, writeJourneySpec } from "../packages/core/src/record/journey.ts";
 
 /**
  * A journey: the path through a site that somebody chose.
@@ -127,4 +130,82 @@ test("a journey reads back as the steps it is, every verb included", () => {
     'expect "Thank you"',
     "scroll",
   ]);
+});
+
+const dirs: string[] = [];
+after(() => {
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+/** A recording folder of its own. */
+function recordingDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "walkcast-journey-"));
+  dirs.push(dir);
+  return dir;
+}
+
+const FLOW = [
+  "goto /login",
+  'fill "Email" "jane@example.com"',
+  'fill "Password" "{{secret:site_password}}"',
+  'click "Sign in"',
+  'waitFor "Dashboard"',
+  'select "Plan" "Pro"',
+  'check "Terms"',
+  'click "Create account"',
+  'expect "Welcome"',
+].join("\n");
+
+test("the journey's script is a file beside the recording, not a terminal to copy from", () => {
+  const dir = recordingDir();
+  const written = writeJourneySpec(dir, FLOW, "https://shop.example", "Signing up on Shop");
+  assert.equal(written, JOURNEY_SPEC, "the writer says what it wrote");
+  const script = readFileSync(join(dir, JOURNEY_SPEC), "utf8");
+  assert.equal(script, journeyAsPlaywright(FLOW, "https://shop.example", "Signing up on Shop"), "and the file is the script");
+  // A recording folder that a person unzips or a server serves has both halves of the same thing.
+  assert.match(script, /^import \{ test, expect \} from '@playwright\/test';/);
+  assert.match(script, /test\.use\(\{ baseURL: "https:\/\/shop\.example" \}\);/);
+  assert.match(script, /test\("Signing up on Shop", async \(\{ page \}\)/);
+});
+
+test("the recording's title names the test, so a folder of scripts is readable", () => {
+  // Each script is built into its own const: a regex right after a call's `)` reads as division.
+  const titled = journeyAsPlaywright("goto /", "https://shop.example", "Signing up on Shop");
+  assert.match(titled, /^test\("Signing up on Shop", async \(\{ page \}\) => \{$/m);
+  // A page title that happens to start with "the" reads badly inside test("...").
+  const leadingThe = journeyAsPlaywright("goto /", "", "The pricing page");
+  assert.match(leadingThe, /^test\("pricing page"/m, "the page title reading is kept out of the test name");
+  const untitled = journeyAsPlaywright("goto /", "");
+  assert.match(untitled, /^test\("the journey"/m, "with no title the test has the name it always had");
+  // A title is a string literal, not interpolation: an apostrophe in a page title is safe, and a
+  // quote in one cannot end the string the script is built from.
+  const apostrophe = journeyAsPlaywright("goto /", "", "Bob's plan");
+  assert.match(apostrophe, /^test\("Bob's plan"/m, "an apostrophe is safe inside a quoted title");
+  const quoted = journeyAsPlaywright("goto /", "", 'Our "Pro" plan');
+  assert.match(quoted, /^test\("Our \\"Pro\\" plan", async/m, "a quote in a title is escaped, not fatal");
+});
+
+test("every step of the journey is in the script, in the journey's own order", () => {
+  const script = journeyAsPlaywright(FLOW, "https://shop.example");
+  const { steps } = parseJourney(FLOW);
+  const said = journeyAsText(steps);
+  // The numbered comments are the journey as the person wrote it: if the script and the walk
+  // drifted apart, this is where it shows.
+  const numbered = script.split("\n").map((l) => l.match(/^\s*\/\/ (\d+)\. (.*)$/)).filter(Boolean) as RegExpMatchArray[];
+  assert.equal(numbered.length, steps.length, "one numbered step per journey step");
+  numbered.forEach((m, i) => {
+    assert.equal(Number(m[1]), i + 1, "the steps are numbered in order");
+    assert.equal(m[2], said[i], `step ${i + 1} is the journey's own line`);
+  });
+});
+
+test("a folder that cannot be written costs the script, never the recording", () => {
+  const dir = recordingDir();
+  const missing = join(dir, "no-such-folder");
+  assert.equal(writeJourneySpec(missing, FLOW, "https://shop.example"), null, "a missing folder is reported, not thrown");
+  // A recording folder that already has something called `journey.spec.ts` in it — a directory of
+  // that name — cannot hold the script either, and must still come back with the recording.
+  const taken = recordingDir();
+  mkdirSync(join(taken, JOURNEY_SPEC), { recursive: true });
+  assert.equal(writeJourneySpec(taken, FLOW, "https://shop.example"), null, "a path the script can't be written to is reported too");
 });

@@ -1,11 +1,12 @@
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toWebVtt, type Caption } from "./narration.ts";
 import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, kokoroEngine, sapiAvailable, sapiEngine } from "./voice.ts";
+import { cachedClip, clipKey, storeClip } from "./voice-cache.ts";
 import { transcribe } from "./stt.ts";
 import { readFocus, writeFocus, zoomFilterFor } from "./zoom.ts";
 
@@ -89,16 +90,11 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
 }
 
 async function narrate(dir: string, video: string, captions: Caption[], result: MediaResult, engine: VoiceEngine, onProgress?: (p: string) => void): Promise<MediaResult> {
-  // 1. Speak each caption to its own clip. One beat per line: this loop is one of only two long
-  // stretches of a recording that would otherwise report nothing at all, and a job the worker
-  // hears nothing from is a job its stall guard aborts.
-  const clips: { file: string; seconds: number }[] = [];
-  for (const [i, caption] of captions.entries()) {
-    onProgress?.(`Narrating line ${i + 1} of ${captions.length}`);
-    const file = join(dir, `.tts-${i}.wav`);
-    await engine.speak(caption.text.replace(/[{}]/g, ""), file, dir);
-    clips.push({ file, seconds: wavSeconds(file) });
-  }
+  // 1. Speak each caption to its own clip, in as few voice processes as the engine allows and
+  // without speaking a line this machine has already spoken. One beat per line: this loop is one
+  // of only two long stretches of a recording that would otherwise report nothing at all, and a
+  // job the worker hears nothing from is a job its stall guard aborts.
+  const clips = await speakLines(dir, captions.map((c) => c.text.replace(/[{}]/g, "")), engine, onProgress);
 
   // 2. Lay them out: each line starts at its event time, or after the previous line finishes.
   let cursor = 0;
@@ -123,6 +119,71 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   result.voice = "flite";
   result.note = `Narrated with the "${engine.id}" voice (${captions.length} lines).`;
   return result;
+}
+
+/**
+ * Speak `texts` into `.tts-<i>.wav` files in `dir`, reusing clips this machine has already spoken.
+ *
+ * Two costs are removed here, and neither is the voice's own: the fixed start-up per call (Kokoro
+ * loads a model, Windows speech starts PowerShell) and speaking a line that has been spoken
+ * before. A line's audio depends only on the words and the voice, so a clip cached under both is
+ * a copy — and the same site recorded twice says most of the same words.
+ *
+ * Exported because it is the whole narration contract in one function: which lines are spoken,
+ * which are copied, and what happens when a batch fails halfway.
+ */
+export async function speakLines(dir: string, texts: string[], engine: VoiceEngine, onProgress?: (p: string) => void): Promise<{ file: string; seconds: number }[]> {
+  const files = texts.map((_, i) => join(dir, `.tts-${i}.wav`));
+  const keys = texts.map((t) => clipKey(engine, t));
+  const misses: number[] = [];
+  let reused = 0;
+  for (const [i, key] of keys.entries()) {
+    const hit = cachedClip(key);
+    // A hit is a copy, and a copy is only a hit if it is the clip it claims to be: a truncated or
+    // foreign file would be mixed as silence or as somebody else's voice.
+    if (hit && copyClip(hit, files[i]!) && wavSeconds(files[i]!) > 0) {
+      reused++;
+      continue;
+    }
+    misses.push(i);
+  }
+  if (misses.length) {
+    const lines = misses.map((i) => ({ text: texts[i]!, file: files[i]! }));
+    const say = (done: number) => onProgress?.(reused > 0 ? `Narrating line ${done} of ${texts.length} (${reused} already spoken)` : `Narrating line ${done} of ${texts.length}`);
+    say(reused + 1);
+    // One process for the lot where the engine can: the fixed start-up is paid once, not per line.
+    let done = false;
+    if (engine.speakMany) {
+      try {
+        await engine.speakMany(lines, dir, (n) => say(reused + n));
+        done = true;
+      } catch {
+        // A batch that failed halfway must not cost the recording. Fall through and let the lines
+        // be tried one at a time: a single bad line then fails alone, as it did before.
+      }
+    }
+    if (!done) {
+      for (const [i, line] of lines.entries()) {
+        say(reused + i + 1);
+        await engine.speak(line.text, line.file, dir);
+      }
+    }
+    for (const i of misses) {
+      const file = files[i]!;
+      if (wavSeconds(file) > 0) storeClip(keys[i]!, file);
+    }
+  }
+  return files.map((file) => ({ file, seconds: wavSeconds(file) }));
+}
+
+/** A cache hit, copied into place. False when the cache entry cannot be read as audio. */
+function copyClip(from: string, to: string): boolean {
+  try {
+    copyFileSync(from, to);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Video + narration track (+ captions) into the MP4 and the narrated WebM. */
@@ -319,39 +380,60 @@ export async function cloudVoicePreview(provider: string, voice: string = "", la
 let cacheDir: string | undefined;
 const spoken = new Map<string, number>();
 
+/** Words in a line, the way the pacing estimate counts them. */
+function words(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
 /**
- * How long the narration voice takes to say `text`, in ms.
+ * How long the narration voice takes to say `texts`, in ms, in total.
  *
- * The recording holds each action on screen for as long as its line takes, so the answer has to
- * come from the voice that will actually speak it. With flite available the line is synthesized
- * once (and cached) so the measurement is exact; a cloud voice is measured by its own pace,
- * because a line timed by the offline voice's speed arrives after the action it describes has
- * already moved on.
+ * The recording holds each action on screen for as long as its lines take, so the answer has to
+ * come from the voice that will actually speak them. With a local voice the lines are synthesized
+ * once — in one process, all together, because they are all known before the first one is needed
+ * — so the measurement is exact. A cloud voice is measured by its own pace, because a line timed
+ * by the offline voice's speed arrives after the action it describes has already moved on.
+ *
+ * The clips measured here are kept in the narration cache, so the same lines are not spoken twice
+ * in one recording: the walk measures them to pace the screen, and the mux then finds them ready.
  */
-export async function speechMs(text: string, engine?: VoiceEngine | null): Promise<number> {
-  const words = text.split(/\s+/).filter(Boolean).length;
+export async function speechMsMany(texts: string[], engine?: VoiceEngine | null): Promise<number> {
+  if (texts.length === 0) return 0;
   if (engine && engine.kind !== "local") {
     const rate = engine.wordsPerSecond ?? 2.8;
-    return Math.round((words / rate) * 1000) + 250;
+    return texts.reduce((sum, t) => sum + Math.round((words(t) / rate) * 1000) + 250, 0);
   }
   const local = engine ?? localVoice(VOICE);
-  if (!local) return words * 380 + 400;
-  // The cache is per voice: the same line measured by flite and by Windows speech is two
+  if (!local) return texts.reduce((sum, t) => sum + words(t) * 380 + 400, 0);
+  // The in-process memo is per voice: the same line measured by flite and by Windows speech is two
   // different lengths, and a recording paced by the wrong one drifts.
-  const key = `${local.id}|${text}`;
-  const cached = spoken.get(key);
-  if (cached !== undefined) return cached;
+  const cold: string[] = [];
+  let total = 0;
+  for (const text of texts) {
+    const cached = spoken.get(`${local.id}|${text}`);
+    if (cached === undefined) cold.push(text);
+    else total += cached;
+  }
+  if (cold.length === 0) return total;
   cacheDir ??= mkdtempSync(join(tmpdir(), "lab-tts-"));
-  const i = spoken.size;
-  const txt = join(cacheDir, `${i}.txt`);
-  const wav = join(cacheDir, `${i}.wav`);
-  writeFileSync(txt, text.replace(/[{}]/g, ""));
-  await local.speak(text.replace(/[{}]/g, ""), wav, cacheDir);
-  const ms = Math.round(wavSeconds(wav) * 1000);
-  rmSync(txt, { force: true });
-  rmSync(wav, { force: true });
-  spoken.set(key, ms);
-  return ms;
+  // The clips `speakLines` writes are the ones to measure: it names them itself, and it has
+  // already put them in the narration cache, so the mux will copy rather than speak them again.
+  const clips = await speakLines(cacheDir, cold, local);
+  try {
+    for (const [i, text] of cold.entries()) {
+      const ms = Math.round((clips[i]?.seconds ?? 0) * 1000);
+      spoken.set(`${local.id}|${text}`, ms);
+      total += ms;
+    }
+  } finally {
+    for (const clip of clips) rmSync(clip.file, { force: true });
+  }
+  return total;
+}
+
+/** How long the narration voice takes to say `text`, in ms. */
+export async function speechMs(text: string, engine?: VoiceEngine | null): Promise<number> {
+  return speechMsMany([text], engine);
 }
 
 const execFileAsync = promisify(execFile);

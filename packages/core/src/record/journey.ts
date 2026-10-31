@@ -1,3 +1,6 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 /**
  * A journey: the path through a site that somebody actually wants recorded.
  *
@@ -196,15 +199,18 @@ function stepCode(step: JourneyStep): string {
  * names the line of the journey it came from instead of "somewhere in the test". Only the
  * imports the script uses are imported: a copied file that does not lint is a file nobody runs.
  */
-export function journeyAsPlaywright(journey: string, baseUrl: string): string {
+export function journeyAsPlaywright(journey: string, baseUrl: string, title?: string): string {
   const { steps, problems } = parseJourney(journey);
   const base = baseUrl.trim().replace(/\/+$/, "");
   const awaited = steps.map(stepCode);
   const needsExpect = awaited.some((line) => line.startsWith("await expect("));
   const header = base ? `// The journey recorded on ${base.replace(/^https?:\/\//, "")}: ${steps.length} step${steps.length === 1 ? "" : "s"}.` : `// The journey: ${steps.length} step${steps.length === 1 ? "" : "s"}.`;
+  // The recording's own title names the test, so a folder of scripts reads like the library it
+  // came from rather than ten files all called "the journey".
+  const name = (title ?? "").replace(/\s+/g, " ").trim().replace(/^the /i, "");
   const lines: string[] = [`import { test${needsExpect ? ", expect" : ""} } from '@playwright/test';`, "", header, ""];
   if (base) lines.push(`test.use({ baseURL: ${jq(base)} });`, "");
-  lines.push("test('the journey', async ({ page }) => {");
+  lines.push(`test(${jq(name || "the journey")}, async ({ page }) => {`);
   lines.push(base ? `  await page.goto(${jq("/")});` : `  await page.goto("/"); // set baseURL in playwright.config.ts, or replace "/" with the site`);
   steps.forEach((step, i) => {
     lines.push("", `  // ${i + 1}. ${journeyAsText([step])[0]}`, `  ${awaited[i]}`);
@@ -218,8 +224,7 @@ export function journeyAsPlaywright(journey: string, baseUrl: string): string {
   return lines.join("\n");
 }
 
-/** The journey as one line each, for the person to read back. */
-export function journeyAsText(steps: JourneyStep[]): string[] {
+/** The journey as one line each, for the person to read back. */export function journeyAsText(steps: JourneyStep[]): string[] {
   return steps.map((step) => {
     switch (step.kind) {
       case "goto":
@@ -248,4 +253,28 @@ export function journeyAsText(steps: JourneyStep[]): string[] {
         return "scroll";
     }
   });
+}
+
+/** The name a recording's script is written under, beside its video. */
+export const JOURNEY_SPEC = "journey.spec.ts";
+
+/**
+ * Write the journey's Playwright script into the recording's folder.
+ *
+ * The walkthrough and the test that replays it belong together: a recording that only prints its
+ * script hands the person a terminal to copy from, and a folder copied to another machine loses
+ * it. Written next to `recording.mp4`, the file travels with the recording and is served from the
+ * same place as its video.
+ *
+ * Returns the file's name, or null when the folder cannot be written — a read-only folder still
+ * has a recording, and losing the script must not cost it.
+ */
+export function writeJourneySpec(dir: string, journey: string, baseUrl: string, title?: string): string | null {
+  const file = join(dir, JOURNEY_SPEC);
+  try {
+    writeFileSync(file, journeyAsPlaywright(journey, baseUrl, title), "utf8");
+    return JOURNEY_SPEC;
+  } catch {
+    return null;
+  }
 }

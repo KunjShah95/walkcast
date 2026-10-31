@@ -5,7 +5,7 @@ import { type Page } from "playwright";
 import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation, type ObservedElement } from "../capture/tools.ts";
-import { buildMedia, localVoice, pickEngine, speechMs, type MediaResult, type Voice } from "./media.ts";
+import { buildMedia, localVoice, pickEngine, speechMsMany, type MediaResult, type Voice } from "./media.ts";
 import { engineFor, type VoiceEngine } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser, warmBrowserEnabled } from "./browser.ts";
@@ -16,7 +16,7 @@ import { OVERLAY_SCRIPT, clearOverlays, overlaysEnabled } from "./overlays.ts";
 import { parseRobots, robotsAllows, type RobotsRule } from "./robots.ts";
 import { attachEvidence } from "./failure.ts";
 import { analyzeRecording, type RecordingInsights } from "./insights.ts";
-import { parseJourney, type JourneyStep } from "./journey.ts";
+import { parseJourney, writeJourneySpec, type JourneyStep } from "./journey.ts";
 import { CURSOR_SCRIPT, clearRing, pointAt, press } from "./cursor.ts";
 import { writeFocus, type Focus } from "./zoom.ts";
 import type { GuideAction } from "./guide.ts";
@@ -111,7 +111,7 @@ export interface RecordingResult {
   /** What the recorder found on the site while it walked it. */
   insights?: RecordingInsights;
   /** The journey that was followed, and the lines of it that could not be read. */
-  journey?: { steps: number; problems: { line: number; text: string; why: string }[] };
+  journey?: { steps: number; problems: { line: number; text: string; why: string }[]; spec?: string };
   /** Requests the SSRF guard refused. */
   blockedRequests?: string[];
   /** Every click and fill, with a picture of the screen just before it: the step-by-step guide. */
@@ -284,8 +284,10 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
       media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
     }
-    const result: RecordingResult = {
-      ...(options.owner ? { owner: options.owner } : {}),
+    // The flow as a test, in the recording's own folder: a copy of the recording is a copy of the
+    // script that replays it, served from the same place as the video.
+    const spec = options.journey ? writeJourneySpec(dir, options.journey, start.origin, pages[0]?.title) : null;
+    const result: RecordingResult = {      ...(options.owner ? { owner: options.owner } : {}),
       ...(blockedRequests.length ? { blockedRequests } : {}),
       kind: "recording",
       id,
@@ -301,7 +303,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       dir,
       insights,
       ...(tools?.actions.length ? { actions: tools.actions } : {}),
-      ...(options.journey ? { journey: { steps: parsedJourney.steps.length, problems: parsedJourney.problems } } : {}),
+      ...(options.journey ? { journey: { steps: parsedJourney.steps.length, problems: parsedJourney.problems, ...(spec ? { spec } : {}) } } : {}),
       ...(options.ttsProvider
         ? {
             narration: {
@@ -444,8 +446,9 @@ class NarratedTools extends BrowserTools {
       .map((c) => c.text)
       .filter((t) => !t.startsWith("Recording finished") && !t.startsWith("That's the tour"));
     if (tool === "brief") this.brief = value as Brief;
-    let speech = 0;
-    for (const t of lines) speech += await speechMs(t, this.voice);
+    // One pass for the page's lines: the voice can say them all in one process, and the clips it
+    // produces are the ones the mux will reuse, so a line is never spoken twice in a recording.
+    const speech = await speechMsMany(lines, this.voice);
     const owed = speech - (this.recorder.now() - last.startedAt);
     if (owed > 0) await this.page.waitForTimeout(owed);
     return value;
