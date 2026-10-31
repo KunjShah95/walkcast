@@ -11,7 +11,7 @@ import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { signHeaders } from "../media/s3.ts";
 import { resolveLanguage, resolveVoice } from "./voices.ts";
 
@@ -127,10 +127,26 @@ async function ensureWav(file: string, cwd: string): Promise<void> {
 export interface VoiceEngine {
   /** Short label shown in `MediaResult.note` and in the voice picker. */
   readonly id: string;
-  /** Where text-to-speech runs for this engine. */
+  /** Where text-to-speech runs: local, a cloud provider, or a recording the person uploaded. */
   readonly kind: "local" | "cloud" | "custom-voice";
+  /**
+   * Everything that changes the bytes this voice produces, for the narration clip cache. The id
+   * is the answer for most engines; one whose output also depends on something the id does not
+   * name (a model chosen by env var, an uploaded sample) says so here, or the cache would hand
+   * back a clip in another voice for the same words.
+   */
+  readonly fingerprint?: string;
   /** Synthesize `text` into `outFile`. */
   speak(text: string, outFile: string, cwd: string): Promise<void>;
+  /**
+   * Say many lines, in order, into the given files.
+   *
+   * An engine whose cost is mostly start-up implements this: Kokoro loads a neural model and
+   * Windows speech starts PowerShell, and a recording is a dozen lines, so a loop of `speak`
+   * pays that fixed cost a dozen times. A line that fails fails the batch; the caller retries
+   * line by line rather than losing the recording.
+   */
+  speakMany?(lines: { text: string; file: string }[], cwd: string, onLine?: (done: number, total: number) => void): Promise<void>;
   /** Zero-network engines are always available; cloud ones need a key + network. */
   available(): boolean;
   /**
@@ -139,6 +155,19 @@ export interface VoiceEngine {
    * the offline voice's, the line it speaks arrives after the action it describes has moved on.
    */
   wordsPerSecond?: number;
+}
+
+/**
+ * A scratch file that belongs to one call.
+ *
+ * Every engine writes the line to a file before running its tool, and used to write it to the
+ * same `.tts-tmp.txt` in the working directory. Two lines synthesized at once therefore shared
+ * one path, and whichever finished first deleted the other's file — a `FileNotFoundError` in the
+ * middle of a recording, from a filename nobody had reason to think was shared.
+ */
+let scratchSeq = 0;
+function scratchFile(cwd: string, engine: string): string {
+  return join(cwd, `.tts-${engine}-${process.pid}-${++scratchSeq}.txt`);
 }
 
 /** The pace of a typical cloud narration voice, in words a second. */
@@ -202,39 +231,86 @@ export function kokoroAvailable(): boolean {
   return false;
 }
 
+/** Kokoro's one-liner as valid Python: real newlines, so a loop is a statement and not a `;`-joined clause. */
+export function kokoroScript(): string {
+  return [
+    "import sys, numpy as np",
+    "from kokoro import KPipeline",
+    "import soundfile as sf",
+    "text=open(sys.argv[1],encoding='utf-8').read()",
+    "voice=sys.argv[2]; out=sys.argv[3]",
+    "lang_code=voice[0] if voice else 'a'",
+    "pipe=KPipeline(lang_code=lang_code)",
+    "chunks=[]",
+    "for gs,ps,audio in pipe(text,voice=voice): chunks.append(audio)",
+    "audio=np.concatenate(chunks) if chunks else np.zeros(0,dtype='float32')",
+    "sf.write(out,audio,24000)",
+  ].join("\n");
+}
+
+/**
+ * Kokoro, speaking a whole recording's lines in one process.
+ *
+ * The model is the expensive part: loading it costs ten-plus seconds, and each `speak` used to
+ * pay that again for a line of a few words. A recording is a dozen lines, so the walkthrough
+ * spent most of its wall clock re-loading a model it already had. Here the lines arrive as a
+ * manifest and `KPipeline` is built once, outside the loop.
+ */
+export function kokoroScriptMany(): string {
+  return [
+    "import sys, json, numpy as np",
+    "from kokoro import KPipeline",
+    "import soundfile as sf",
+    "lines=json.load(open(sys.argv[1],encoding='utf-8'))",
+    "voice=sys.argv[2]",
+    "lang_code=voice[0] if voice else 'a'",
+    "pipe=KPipeline(lang_code=lang_code)",
+    "for item in lines:",
+    "    chunks=[audio for _,_,audio in pipe(item['text'],voice=voice)]",
+    "    audio=np.concatenate(chunks) if chunks else np.zeros(0,dtype='float32')",
+    "    sf.write(item['out'],audio,24000)",
+  ].join("\n");
+}
+
 /** Kokoro open-source TTS (hexgrad/Kokoro), run through Python. Free and offline. */
 export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
   if (!kokoroAvailable()) return null;
   const voice = cloudVoice?.trim() || process.env.KOKORO_VOICE?.trim() || "af_heart";
   const py = process.platform === "win32" ? "python" : (spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true }).status === 0 ? "python3" : "python");
+  /** One Python process for `lines`: the model loads once. */
+  const speakMany = async (lines: { text: string; file: string }[], cwd: string, onLine?: (done: number, total: number) => void): Promise<void> => {
+    if (lines.length === 0) return;
+    const manifest = scratchFile(cwd, "kokoro");
+    writeFileSync(manifest, JSON.stringify(lines.map((l) => ({ text: l.text, out: l.file }))), "utf8");
+    try {
+      // UTF-8 mode: kokoro reads its own config.json with a default open(), and on Windows the
+      // default is the OEM code page, which cannot decode that file. Same speech either way.
+      await execFileAsync(py, ["-c", kokoroScriptMany(), manifest, voice], {
+        cwd,
+        timeout: 5 * 60_000,
+        windowsHide: true,
+        maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, PYTHONUTF8: "1" },
+      });
+    } finally {
+      rmSync(manifest, { force: true });
+    }
+    for (const [i, line] of lines.entries()) {
+      if (!existsSync(line.file)) throw new Error(`kokoro produced no audio for line ${i + 1}`);
+      await ensureWav(line.file, cwd);
+      onLine?.(i + 1, lines.length);
+    }
+  };
   return {
     id: `kokoro:${voice}`,
     kind: "local",
     available: (): boolean => true,
     wordsPerSecond: 2.9,
+    // The loaded model is not named by the id; KOKORO_VOICE the voice, nothing else moves.
+    fingerprint: `kokoro:${voice}`,
+    speakMany,
     async speak(text, outFile, cwd) {
-      const txt = join(cwd, ".tts-tmp.txt");
-      writeFileSync(txt, text, "utf8");
-      const script = [
-        "import sys, numpy as np",
-        "from kokoro import KPipeline",
-        "import soundfile as sf",
-        "text=open(sys.argv[1],encoding='utf-8').read()",
-        "voice=sys.argv[2]; out=sys.argv[3]",
-        "lang_code=voice[0] if voice else 'a'",
-        "pipe=KPipeline(lang_code=lang_code)",
-        "chunks=[]",
-        "for gs,ps,audio in pipe(text,voice=voice): chunks.append(audio)",
-        "audio=np.concatenate(chunks) if chunks else np.zeros(0,dtype='float32')",
-        "sf.write(out,audio,24000)",
-      ].join(";");
-      try {
-        await execFileAsync(py, ["-c", script, txt, voice, outFile], { cwd, timeout: 5 * 60_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
-      } finally {
-        rmSync(txt, { force: true });
-      }
-      if (!existsSync(outFile)) throw new Error("kokoro produced no audio");
-      await ensureWav(outFile, cwd);
+      await speakMany([{ text, file: outFile }], cwd);
     },
   };
 }
@@ -248,11 +324,11 @@ export function fliteEngine(voice: FliteVoice): VoiceEngine {
     // chooses for the pace of it.
     wordsPerSecond: 2.2,
     async speak(text, outFile, cwd) {
-      const txt = join(cwd, ".tts-tmp.txt");
+      const txt = scratchFile(cwd, "flite");
       writeFileSync(txt, text.replace(/[{}]/g, ""));
       // The line's text is scratch: it used to stay behind in every recording's folder.
       try {
-        await run(["-f", "lavfi", "-i", `flite=textfile=.tts-tmp.txt:voice=${voice}`, "-ar", "22050", "-ac", "1", outFile], { cwd });
+        await run(["-f", "lavfi", "-i", `flite=textfile=${basename(txt)}:voice=${voice}`, "-ar", "22050", "-ac", "1", outFile], { cwd });
       } finally {
         rmSync(txt, { force: true });
       }
@@ -299,38 +375,60 @@ export function sarvamEngine(cloudVoice?: string, cloudLanguage?: string): Voice
  */
 export function sapiEngine(voice: FliteVoice): VoiceEngine {
   const gender = voice === "slt" ? "Female" : "Male";
+  /** One PowerShell (and one voice) for every line, instead of one per line. */
+  const speakMany = async (lines: { text: string; file: string }[], cwd: string, onLine?: (done: number, total: number) => void): Promise<void> => {
+    if (lines.length === 0) return;
+    // Each line's text goes to its own file: SSML and quote characters would otherwise have to
+    // survive a trip through a JSON manifest and PowerShell's own parsing.
+    const items = lines.map((l, i) => {
+      const textFile = scratchFile(cwd, `sapi-${i}`);
+      writeFileSync(textFile, l.text, "utf8");
+      return { text: textFile, out: l.file };
+    });
+    const manifest = scratchFile(cwd, "sapi");
+    writeFileSync(manifest, JSON.stringify(items), "utf8");
+    try {
+      // Paths and text reach PowerShell through files named in the environment, so nothing here
+      // needs quoting.
+      await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SAPI_MANY_SCRIPT], {
+        env: { ...process.env, WALKCAST_TTS_MANIFEST: manifest, WALKCAST_TTS_GENDER: gender },
+        timeout: 5 * 60_000,
+        windowsHide: true,
+      });
+    } finally {
+      rmSync(manifest, { force: true });
+      for (const item of items) rmSync(item.text, { force: true });
+    }
+    for (const [i, line] of lines.entries()) {
+      if (!existsSync(line.file)) throw new Error(`Windows speech produced no audio for line ${i + 1}`);
+      await ensureWav(line.file, cwd);
+      onLine?.(i + 1, lines.length);
+    }
+  };
   return {
     id: `windows:${gender.toLowerCase()}`,
     kind: "local",
     available: sapiAvailable,
     wordsPerSecond: 2.6,
+    // Which installed voice answers for a gender is the machine's choice, and it moves when the
+    // person changes it: a clip cached under this id is only as right as that choice.
+    fingerprint: `windows:${gender.toLowerCase()}`,
+    speakMany,
     async speak(text, outFile, cwd) {
-      const txt = join(cwd, ".tts-tmp.txt");
-      writeFileSync(txt, text, "utf8");
-      // Paths and text reach PowerShell through the environment, so nothing needs quoting.
-      try {
-        await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SAPI_SCRIPT], {
-          env: { ...process.env, WALKCAST_TTS_IN: txt, WALKCAST_TTS_OUT: outFile, WALKCAST_TTS_GENDER: gender },
-          timeout: 60_000,
-          windowsHide: true,
-        });
-      } finally {
-        rmSync(txt, { force: true });
-      }
-      if (!existsSync(outFile)) throw new Error("Windows speech produced no audio");
-      await ensureWav(outFile, cwd);
+      await speakMany([{ text, file: outFile }], cwd);
     },
   };
 }
 
-const SAPI_SCRIPT = [
+/** The same voice, reading a manifest of lines: one process and one synthesizer for the lot. */
+const SAPI_MANY_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
   "Add-Type -AssemblyName System.Speech",
   "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer",
   "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::$env:WALKCAST_TTS_GENDER) } catch {}",
   "$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(22050, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)",
-  "$s.SetOutputToWaveFile($env:WALKCAST_TTS_OUT, $f)",
-  "$s.Speak([IO.File]::ReadAllText($env:WALKCAST_TTS_IN))",
+  "$lines = Get-Content -Raw -Encoding UTF8 $env:WALKCAST_TTS_MANIFEST | ConvertFrom-Json",
+  "foreach ($line in $lines) { $s.SetOutputToWaveFile($line.out, $f); $s.Speak([IO.File]::ReadAllText($line.text, [Text.Encoding]::UTF8)) }",
   "$s.Dispose()",
 ].join("; ");
 
@@ -416,6 +514,11 @@ export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
     kind: "cloud",
     available: (): boolean => Boolean(key),
     wordsPerSecond: 2.9,
+    // A free account falls back to the premade voice, and the model comes from env: neither is in
+    // the id, and both change the bytes.
+    get fingerprint() {
+      return `elevenlabs:${voiceId}:${model}`;
+    },
     async speak(text, outFile, cwd) {
       let res = await say(text);
       // Free accounts may only use premade voices through the API; a library voice (one picked
@@ -575,6 +678,9 @@ export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
     kind: "cloud",
     available: (): boolean => Boolean(key),
     wordsPerSecond: 3,
+    // The model is chosen by env and is not in the id: a clip cached under "openai:alloy" must not
+    // outlive a switch from gpt-4o-mini-tts to tts-1.
+    fingerprint: `openai:${voice}:${model}`,
     async speak(text, outFile, cwd) {
       const res = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
@@ -661,6 +767,9 @@ export function customTtsEngine(cloudVoice?: string, cloudLanguage?: string): Vo
     kind: "cloud",
     available: (): boolean => Boolean(endpoint),
     wordsPerSecond: DEFAULT_WORDS_PER_SECOND,
+    // The endpoint is the voice here: pointing LAB_TTS_ENDPOINT somewhere else must not replay
+    // clips the old one answered.
+    fingerprint: `custom:${voice ?? "default"}:${endpoint}`,
     async speak(text, outFile, cwd) {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -718,11 +827,21 @@ function customVoiceEngine(picked?: string): VoiceEngine | null {
   const chosen = pickCustomVoiceSample(dir, picked);
   if (!chosen) return null;
   const sample = join(dir, chosen);
+  // The id is the same for every upload, so the sample itself has to be the fingerprint: a new
+  // upload under the same name would otherwise replay the old person's voice.
+  let sampleId = chosen;
+  try {
+    const st = statSync(sample);
+    sampleId = `${chosen}:${st.size}:${Math.round(st.mtimeMs)}`;
+  } catch {
+    /* unreadable sample: the copy will fail and the caller reports it */
+  }
   return {
     id: "custom-voice",
     kind: "custom-voice",
     available: () => true,
     wordsPerSecond: DEFAULT_WORDS_PER_SECOND,
+    fingerprint: `custom-voice:${sampleId}`,
     async speak(_text: string, outFile: string, cwd: string) {
       const { copyFileSync } = await import("node:fs");
       copyFileSync(sample, outFile);

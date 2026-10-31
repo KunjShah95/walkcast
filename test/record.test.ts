@@ -158,7 +158,10 @@ test("an explicit language from the picker is honoured, a junk one ignored", asy
   assert.equal(resolveLanguage("sarvam", "", "anushka"), "en-IN");
 });
 
-test("a length cap stops the walk at the next page boundary, and the narration says why", { timeout: 180_000 }, async () => {
+// Alone this is ~90 s of walking, narration and encoding (the cap is 15 s; the rest is the video
+// that proves it). Side by side with another browser and ffmpeg file it does not fit in 180 s,
+// which was the ceiling that failed, not the recorder — same reasoning as the test above.
+test("a length cap stops the walk at the next page boundary, and the narration says why", { timeout: 300_000 }, async () => {
   // Paced slowly so ten pages cannot fit in the budget: the cap has to be what stops the walk.
   const r = await recordSite({ url: app.url, username: "demo", password: "demo-pass", maxPages: 10, maxSeconds: 15, authorized: true, outDir: out, paceMs: 1500 });
   assert.equal(r.stopped?.reason, "time");
