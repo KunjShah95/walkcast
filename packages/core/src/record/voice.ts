@@ -7,7 +7,7 @@
  * default a recording ships silent with captions. Any failure to reach the provider throws so the recording still ships with video
  * + captions (the existing `buildMedia` catch keeps what we have). Keys never leave the server.
  */
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -148,17 +148,58 @@ export type FliteVoice = "slt" | "awb" | "kal" | "rms";
 
 let kokoroPython: boolean | undefined;
 
-/** Whether Python can import kokoro on this machine. */
+/**
+ * Checks (once, in the background) whether Python can import kokoro. A machine that actually has
+ * it installed pays a real cost to prove it: importing kokoro loads TensorFlow, which alone took
+ * 15+ seconds in testing. `spawnSync` paid that as a synchronous block of the whole process —
+ * including the worker's own heartbeat timer, which then saw no heartbeat for long enough to
+ * trip its lease-margin watchdog and kill the very recording that triggered the check. Checking
+ * asynchronously, once, keeps that cost off the event loop; a recording that starts before the
+ * first check finishes just doesn't get Kokoro's voice, exactly as if it weren't installed.
+ */
+function probeKokoro(bin: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn(bin, ["-c", "import kokoro; print('ok')"], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      resolve(false);
+      return;
+    }
+    let out = "";
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const timer = setTimeout(() => {
+      proc.kill();
+      finish(false);
+    }, 30_000);
+    proc.stdout?.on("data", (d: Buffer) => (out += d));
+    proc.on("error", () => finish(false));
+    proc.on("close", (code) => finish(code === 0 && out.trim() === "ok"));
+  });
+}
+
+let kokoroProbe: Promise<void> | null = null;
+function warmKokoroCheck(): void {
+  if (kokoroProbe) return;
+  kokoroProbe = (async () => {
+    const first = process.platform === "win32" ? "python" : "python3";
+    kokoroPython = await probeKokoro(first);
+    // Fall back to `python` on non-Windows too, in case python3 isn't on PATH.
+    if (!kokoroPython && first !== "python") kokoroPython = await probeKokoro("python");
+  })();
+}
+
+/** Whether Python can import kokoro on this machine. False until the background check resolves. */
 export function kokoroAvailable(): boolean {
   if (kokoroPython !== undefined) return kokoroPython;
-  const out = spawnSync(process.platform === "win32" ? "python" : "python3", ["-c", "import kokoro; print('ok')"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
-  kokoroPython = out.status === 0 && out.stdout.trim() === "ok";
-  if (!kokoroPython) {
-    // Fall back to `python` on non-Windows too, in case python3 isn't on PATH.
-    const out2 = spawnSync("python", ["-c", "import kokoro; print('ok')"], { encoding: "utf8", timeout: 30_000, windowsHide: true });
-    kokoroPython = out2.status === 0 && out2.stdout.trim() === "ok";
-  }
-  return kokoroPython;
+  warmKokoroCheck();
+  return false;
 }
 
 /** Kokoro open-source TTS (hexgrad/Kokoro), run through Python. Free and offline. */
