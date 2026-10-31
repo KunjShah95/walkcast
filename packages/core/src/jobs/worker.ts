@@ -355,6 +355,7 @@ export class Worker {
         outDir,
         blockPrivate: Boolean(input.blockPrivate),
         ...(job.owner ? { owner: job.owner } : {}),
+        jobId: job.id,
         signal,
         onProgress,
       });

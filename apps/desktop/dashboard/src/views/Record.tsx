@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Hls from "hls.js";
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
 import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
@@ -222,7 +223,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
               <label className="flex items-center justify-between gap-3">
                 <span>
                   <span className="block text-[13px] font-medium">Record a journey instead of the whole site</span>
-                  <span className="block text-[12.5px] text-ink-3">One step per line: goto, click, fill, wait, scroll.</span>
+                  <span className="block text-[12.5px] text-ink-3">One step per line: goto, click, fill, press, select, check, hover, wait, waitFor, expect, scroll.</span>
                 </span>
                 <Toggle on={journeyOn} onChange={setJourneyOn} disabled={busy} label="Record a journey instead of the whole site" />
               </label>
@@ -233,7 +234,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                     onChange={(e) => setJourney(e.target.value)}
                     rows={5}
                     spellCheck={false}
-                    placeholder={'goto /pricing\nclick "Buy now"\nfill "Email" "jane@example.com"\nwait 500'}
+                    placeholder={'goto /pricing\nclick "Buy now"\nfill "Email" "jane@example.com"\nselect "Plan" "Pro"\nexpect "Thank you"'}
                     aria-label="The journey to record"
                     className={cn(fieldClass, "h-auto resize-y font-mono text-[12.5px] leading-relaxed")}
                   />
@@ -450,6 +451,56 @@ function stageOf(job: JobStatus): number {
   return 1;
 }
 
+/**
+ * A slideshow, not a smooth video: each page's own picture (already taken for the thumbnail
+ * strip) held for a few seconds, live while the recording is still walking the site. The point
+ * is "it's actually there right now", not production-quality playback.
+ */
+function LivePreview({ jobId }: { jobId: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    setFailed(false);
+    const src = `/api/jobs/${encodeURIComponent(jobId)}/live/live.m3u8`;
+    let hls: Hls | null = null;
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+    } else if (Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: true });
+      // The manifest doesn't exist until the first page lands, so an early load is a 404, not a
+      // failure: retry a few times before giving up and hiding the player.
+      let retries = 0;
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retries < 10) {
+          retries++;
+          setTimeout(() => hls?.startLoad(), 1000);
+        } else {
+          setFailed(true);
+        }
+      });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+    } else {
+      setFailed(true);
+    }
+    return () => hls?.destroy();
+  }, [jobId]);
+
+  if (failed) return null;
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-line bg-panel-2">
+      <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full bg-black" />
+      <p className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-ink-3">
+        <span className="size-1.5 rounded-full bg-rec" /> Live — what the browser is seeing right now
+      </p>
+    </div>
+  );
+}
+
 /** What the recorder is doing right now. */
 function JobPanel({ job, target, onCancel }: { job: JobStatus | null; target: string | null; onCancel?: () => void }) {
   const [cancelling, setCancelling] = useState(false);
@@ -505,6 +556,7 @@ function JobPanel({ job, target, onCancel }: { job: JobStatus | null; target: st
               )}
             </p>
           )}
+          {job?.status === "running" && job.live && <LivePreview jobId={job.id} />}
           {job && (job.status === "queued" || job.status === "running") && (
             <p className="mt-2 text-[11.5px] text-ink-3">
               Switch away or close this window — the recording keeps going, and the video, captions and transcript appear in your

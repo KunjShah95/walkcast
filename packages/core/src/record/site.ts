@@ -20,6 +20,7 @@ import { parseJourney, type JourneyStep } from "./journey.ts";
 import { CURSOR_SCRIPT, clearRing, pointAt, press } from "./cursor.ts";
 import { writeFocus, type Focus } from "./zoom.ts";
 import type { GuideAction } from "./guide.ts";
+import { pushLiveFrame, startLiveView, stopLiveView } from "./live-view.ts";
 
 /**
  * Site recorder: open a URL the user is authorized to test, sign in if credentials are given,
@@ -47,6 +48,8 @@ export interface RecordOptions {
   blockPrivate?: boolean;
   /** Account id of whoever asked for the recording (the dashboard only shows it to them). */
   owner?: string;
+  /** The job this recording runs as, if any: keys the live preview (record/live-view.ts). */
+  jobId?: string;
   /** Aborting stops the recording at once (job deadline, worker shutdown). */
   signal?: AbortSignal;
   /** Called as the recording advances ("Signing in", "Page 3 of 8"). */
@@ -145,6 +148,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const id = `${start.hostname.replace(/[^a-z0-9.-]/gi, "_")}-${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   const dir = join(options.outDir, id);
   mkdirSync(dir, { recursive: true });
+  if (options.jobId) startLiveView(options.jobId, dir);
   // The journey, read once. A line that cannot be read is said out loud rather than skipped:
   // a journey that quietly does less than it says is worse than one that admits it.
   const parsedJourney = options.journey ? parseJourney(options.journey) : { steps: [], problems: [] };
@@ -320,6 +324,8 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     const video = existsSync(join(dir, "video.webm")) && (screenshot || pages.length > 0) ? "video.webm" : null;
     attachEvidence(e, { dir, pages, signIn, skipped, durationMs: Date.now() - started, screenshot, video });
     throw e;
+  } finally {
+    if (options.jobId) stopLiveView(options.jobId);
   }
 }
 
@@ -375,12 +381,24 @@ class NarratedTools extends BrowserTools {
     }
   }
 
+  /** Choosing an option is a moment of its own: the pointer rings the control, the guide names it. */
+  override async selectByLabel(index: number, label: string, from?: Observation): Promise<string> {
+    const element = this.element(index, from);
+    const done = await this.point(element, "select");
+    try {
+      return await super.selectByLabel(index, label, from);
+    } finally {
+      done();
+      await clearRing(this.page);
+    }
+  }
+
   /**
    * Glide the pointer to a control and ring it, then picture the screen: the guide's image for
    * this step, taken before anything is typed, so it never shows a value. Returns a function
    * that marks the action finished, which closes the moment the zoom holds on.
    */
-  private async point(element: ObservedElement, kind: "click" | "fill"): Promise<() => void> {
+  private async point(element: ObservedElement, kind: "click" | "fill" | "select"): Promise<() => void> {
     const seconds = () => Math.max(0, (this.recorder.now() - this.context().videoStart) / 1000);
     const start = seconds();
     const url = this.page.url();
@@ -459,6 +477,21 @@ async function followJourney(
 ): Promise<{ done: number; stopped: "time" | "pages" | null }> {
   let shot = 1;
   let done = 0;
+  // Whatever moved the page on - a goto, a click, a key press - gets the same picture of where
+  // it landed, once, at the top of the page.
+  const notePage = async () => {
+    const after = normalize(page.url());
+    if (pages.length === 0 || pages[pages.length - 1]!.url !== after) {
+      shot += 1;
+      await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, after, false);
+    }
+  };
+  /** A step that did not happen is part of the walkthrough, not a reason to stop the journey. */
+  const misfire = async (kind: JourneyStep["kind"], name: string, why: string, error?: string) => {
+    const result = error ? { found: true, error } : { found: false };
+    await tools.record("journeyStep", { kind, name, why, ...result }, async () => result);
+    options.onProgress?.(why);
+  };
   for (const step of steps) {
     options.signal?.throwIfAborted();
     // The limits the person set hold for a journey as they do for a crawl.
@@ -482,8 +515,7 @@ async function followJourney(
       await tools.waitForQuiet(400, 8000);
       if (!went && normalize(page.url()) !== normalize(url)) {
         // The page did not open: say so, and do not count the page that is still on screen.
-        await tools.record("journeyStep", { kind: "goto", name: step.path, found: false }, async () => ({ found: false }));
-        options.onProgress?.(`Could not open ${step.path}`);
+        await misfire(step.kind, step.path, `Could not open ${step.path}`);
         continue;
       }
       await clearOverlays(page);
@@ -491,31 +523,66 @@ async function followJourney(
       await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, url, false);
       continue;
     }
+    if (step.kind === "press") {
+      try {
+        // The key press is a recorded step of its own, so the trace shows the Enter that
+        // submitted the form, not just the page it landed on.
+        await tools.record("press", { key: step.key }, () => page.keyboard.press(step.key));
+      } catch (e) {
+        const error = (e instanceof Error ? e.message : String(e)).split("\n")[0]!.slice(0, 160);
+        await misfire(step.kind, step.key, `Could not press ${step.key}`, error);
+        continue;
+      }
+      await tools.waitForQuiet(400, 8000);
+      await notePage();
+      continue;
+    }
+    if (step.kind === "waitFor" || step.kind === "expect") {
+      // Waiting is how a journey reaches a page that loads late; expecting is how it says what
+      // the page should show. Neither one ends the walk when it fails: it is said out loud.
+      const found = step.kind === "waitFor" ? await tools.waitForText(step.text) : await tools.expectText(step.text);
+      if (!found) {
+        await misfire(step.kind, step.text, step.kind === "waitFor" ? `“${step.text}” never appeared` : `The page does not say “${step.text}”`);
+      }
+      await tools.waitForQuiet(400, 8000);
+      await notePage();
+      continue;
+    }
     const obs = await tools.observe();
     const target = findControl(obs, step.name);
     if (!target) {
-      // A step that could not be done is part of the walkthrough, not a reason to stop.
-      await tools.record("journeyStep", { kind: step.kind, name: step.name, found: false }, async () => ({ found: false }));
-      options.onProgress?.(`No control named “${step.name}” on this page`);
+      await misfire(step.kind, step.name, `No control named “${step.name}” on this page`);
       continue;
     }
     try {
-      if (step.kind === "click") await tools.click(target.index, obs);
-      else await tools.fill(target.index, step.value, obs);
+      switch (step.kind) {
+        case "click":
+          await tools.click(target.index, obs);
+          break;
+        case "fill":
+          await tools.fill(target.index, step.value, obs);
+          break;
+        case "select":
+          await tools.selectByLabel(target.index, step.option, obs);
+          break;
+        case "check":
+        case "uncheck":
+          // A checkbox is pressed, not filled: the click path already rings it and pictures it.
+          await tools.click(target.index, obs);
+          break;
+        case "hover":
+          await tools.hover(target.index, obs);
+          break;
+      }
     } catch (e) {
       // A control that is there but will not take the action is a step that failed, recorded
       // as such; the rest of the journey still runs.
       const error = (e instanceof Error ? e.message : String(e)).split("\n")[0]!.slice(0, 160);
-      await tools.record("journeyStep", { kind: step.kind, name: step.name, found: true, error }, async () => ({ found: true, error }));
-      options.onProgress?.(`Could not ${step.kind} “${step.name}”`);
+      await misfire(step.kind, step.name, `Could not ${step.kind} “${step.name}”`, error);
       continue;
     }
     await tools.waitForQuiet(400, 8000);
-    const after = normalize(page.url());
-    if (pages.length === 0 || pages[pages.length - 1]!.url !== after) {
-      shot += 1;
-      await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, after, false);
-    }
+    await notePage();
   }
   return { done, stopped: null };
 }
@@ -552,6 +619,7 @@ async function recordPage(
     () => true,
     () => false,
   );
+  if (shotOk) pushLiveFrame(dir, join(dir, shotName));
   await readBrief(tools);
   if (scroll) await scrollThrough(tools);
   const obs = await tools.observe();
@@ -658,6 +726,7 @@ async function browse(
       () => true,
       () => false,
     );
+    if (shotOk) pushLiveFrame(dir, join(dir, shot));
     await readBrief(tools);
     await scrollThrough(tools);
     const obs = await tools.observe();

@@ -32,6 +32,7 @@ import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insi
 import { chaptersOf, toSrt, toVtt, transcriptMarkdown } from "../../../packages/core/src/record/transcript.ts";
 import { guideHtml, guideMarkdown, guideSteps } from "../../../packages/core/src/record/guide.ts";
 import { providerHealth } from "../../../packages/core/src/llm/health.ts";
+import { liveDirForJob, LIVE_MAX_SESSIONS, liveSessionCount } from "../../../packages/core/src/record/live-view.ts";
 import { isShape, socialExport } from "../../../packages/core/src/record/social.ts";
 import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
 import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
@@ -50,6 +51,8 @@ const TYPES: Record<string, string> = {
   ".wav": "audio/wav",
   ".vtt": "text/vtt; charset=utf-8",
   ".json": "application/json",
+  ".m3u8": "application/vnd.apple.mpegurl",
+  ".ts": "video/mp2t",
 };
 
 function dashboardHtml(path = DIST): string {
@@ -1420,6 +1423,21 @@ try {
     }
     // Cancel a queued or running job (its owner only). The worker aborts at once when it is in this
     // process, else at its next heartbeat; the partial recording is discarded.
+    const liveMatch = /^\/api\/jobs\/([\w-]+)\/live\/([\w.-]+)$/.exec(url.pathname);
+    if (liveMatch) {
+      const [, id, file] = liveMatch as unknown as [string, string, string];
+      const job = await store.job(id);
+      if (!job || (requireAuth && job.owner !== owner)) return json(404, { error: "job not found" });
+      const dir = liveDirForJob(id);
+      const type = TYPES[extname(file).toLowerCase()];
+      // Only the manifest and its own segments; no path outside this job's own live/ directory.
+      if (!dir || !type) return json(404, { error: "no live preview for this job" });
+      const abs = join(dir, "live", file);
+      if (!existsSync(abs)) return json(404, { error: "not found" });
+      // Rewritten by ffmpeg every few seconds: a cached manifest would show stale segments, and a
+      // cached, since-deleted segment would 404 forever once the player tried it again.
+      return streamFile(req, res, abs, type, "no-store");
+    }
     const cancelMatch = /^\/api\/jobs\/([\w-]+)\/cancel$/.exec(url.pathname);
     if (cancelMatch && req.method === "POST") {
       const id = cancelMatch[1]!;
@@ -1456,7 +1474,8 @@ try {
       // A finished job changes "recordings used today": drop this viewer's cached capabilities so
       // the next read isn't up to 5 s stale.
       if (job.status === "succeeded" || job.status === "failed") capabilitiesCache.delete(user?.id ?? "__anon__");
-      const payload = { job: await withQueue(store, job) };
+      // A live preview manifest exists only while the job's own recordSite() call is running.
+      const payload = { job: { ...(await withQueue(store, job)), live: job.status === "running" && Boolean(liveDirForJob(id)) } };
       const body = JSON.stringify(payload);
       const etag = `"${createHash("sha1").update(body).digest("hex").slice(0, 16)}"`;
       setStatusCache(id, body, etag, job.owner ?? null);
@@ -1503,7 +1522,14 @@ try {
       const alarmMs = queueAlarmMs();
       // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
       // How each model provider has been answering this process's live calls (llm/health.ts).
-      return json(200, { ...snap, alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs }, providers: providerHealth(windowMs) });
+      return json(200, {
+        ...snap,
+        alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs },
+        providers: providerHealth(windowMs),
+        // A live preview is an x264 encoder this process is running; at fleet scale it is real
+        // CPU the capacity math in docs/SCALING.md has to account for, so it is counted here.
+        live: { previews: liveSessionCount(), limit: LIVE_MAX_SESSIONS },
+      });
     }
     // ---------------------------------------------------------------- webhooks (owner-scoped)
     if (url.pathname === "/api/webhooks" && req.method === "GET") {

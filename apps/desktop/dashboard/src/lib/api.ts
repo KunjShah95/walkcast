@@ -138,6 +138,8 @@ export interface JobStatus {
   createdAt?: string;
   /** Present while queued: the job's place in line. */
   queue?: { ahead: number; oldestQueuedMs: number; waitingMs: number };
+  /** True once a live preview manifest exists for this (running) job. */
+  live?: boolean;
 }
 
 /**
