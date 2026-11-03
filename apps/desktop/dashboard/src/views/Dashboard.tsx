@@ -70,8 +70,9 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
                   <p className="mt-1 text-[12.5px] text-ink-2">60 seconds — narrated by Kokoro (female voice), with captions.</p>
                 </div>
                 <div className="p-4">
-                  <video src="/walkthrough.mp4" poster="https://walkcast.kunjshah.in/favicon.svg" controls className="w-full h-[420px] rounded-xl bg-black" />
-                  <track kind="captions" src="/walkthrough.vtt" srclang="en" label="Narration" default />
+                  <video src="/walkthrough.mp4" poster="https://walkcast.kunjshah.in/favicon.svg" controls className="w-full h-[420px] rounded-xl bg-black">
+                    <track kind="captions" src="/walkthrough.vtt" srcLang="en" label="Narration" default />
+                  </video>
                 </div>
               </section>
             </>
