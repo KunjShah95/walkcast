@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume2 } from "lucide-react";
+import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume2, Globe2 } from "lucide-react";
 import type { Route } from "../App.tsx";
+import { normalizeUrl } from "../components/RecordBar.tsx";
 import { Empty, PageHead, fieldClass } from "../components/ui.tsx";
 import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo } from "../lib/api.ts";
 import type { LabIndex } from "../lib/types.ts";
@@ -16,16 +17,13 @@ const FALLBACK_VOICES = [
 export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (route: Route) => void; refresh: () => Promise<LabIndex> }) {
   const recordings = useMemo(() => (index.recordings ?? []).filter((recording) => {
     try {
-      const host = new URL(recording.url).hostname.toLowerCase();
-      const paths = recording.pages.map((page) => new URL(page.url).pathname.toLowerCase());
-      const hasLab = paths.some((path) => path === "/lab" || path.startsWith("/lab/"));
-      const hasDownload = paths.some((path) => path === "/download" || path.startsWith("/download/"));
-      return (host === "walkcast.kunjshah.in" || host === "www.walkcast.kunjshah.in") && hasLab && hasDownload && recording.durationMs >= 60_000 && Boolean(recording.media.mp4 || recording.media.video);
+      return ["http:", "https:"].includes(new URL(recording.url).protocol) && recording.durationMs >= 15_000 && recording.pages.length > 0 && Boolean(recording.media.mp4 || recording.media.video);
     } catch {
       return false;
     }
   }), [index.recordings]);
   const [selected, setSelected] = useState(recordings[0]?.id ?? "");
+  const [siteUrl, setSiteUrl] = useState("");
   const [voice, setVoice] = useState("af_heart");
   const [providers, setProviders] = useState<TtsProviderInfo[]>([]);
   const [task, setTask] = useState<DesktopTaskStatus | null>(null);
@@ -62,7 +60,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
 
   return (
     <div className="grid gap-6">
-      <PageHead title="Launch" dim="Studio." description="Turn a fresh Walkcast recording into a complete product-launch film." />
+      <PageHead title="Launch" dim="Studio." description="Turn a recording of any website into a polished product-launch film." />
 
       <section className="studio-card relative overflow-hidden rounded-[26px] border p-6 sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-signal/10 blur-3xl" />
@@ -73,7 +71,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
             </div>
             <div className="grid gap-3">
               <h1 className="max-w-2xl text-[clamp(30px,4vw,48px)] font-semibold leading-[1.02] tracking-[-.055em]">Make the launch film.<br /><span className="text-ink-3">Keep the craft.</span></h1>
-              <p className="max-w-xl text-[15px] leading-7 text-ink-2">A designed 88-second Walkcast film: fresh site footage, a custom motion story, locally generated narration, original music, synced sound effects, and captions.</p>
+              <p className="max-w-xl text-[15px] leading-7 text-ink-2">Make a product film from your own website: real browser footage, motion design, locally generated narration, original music, and captions.</p>
             </div>
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-[12.5px] text-ink-3">
               <span className="inline-flex items-center gap-1.5"><Film className="h-3.5 w-3.5" /> Motion and chapter cards</span>
@@ -83,6 +81,15 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
           </div>
 
           <div className="grid gap-4 rounded-2xl border border-line bg-paper/80 p-4 sm:p-5">
+            <form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); const normalized = normalizeUrl(siteUrl); if (normalized) go({ view: "record", url: normalized }); }}>
+              <label htmlFor="launch-site-url" className="text-[12px] font-medium text-ink-2">Start with your website</label>
+              <div className="flex gap-2">
+                <input id="launch-site-url" className={`${fieldClass} min-w-0 flex-1`} value={siteUrl} onChange={(event) => setSiteUrl(event.target.value)} placeholder="https://yourproduct.com" type="text" inputMode="url" autoComplete="url" disabled={busy} />
+                <button type="submit" disabled={!normalizeUrl(siteUrl) || busy} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-panel-3 px-3 text-[12.5px] font-semibold text-ink transition hover:bg-signal-soft disabled:cursor-not-allowed disabled:opacity-50"><Globe2 className="h-4 w-4" /> Record site</button>
+              </div>
+              <p className="text-[11px] leading-5 text-ink-3">Paste a site you’re authorized to record. Walkcast opens the recorder with this address filled in.</p>
+            </form>
+            <div className="h-px bg-line" />
             {recordings.length ? <>
               <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">
                 Fresh source recording
@@ -109,17 +116,16 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
               <button type="button" disabled={!recording || busy} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voice))} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-solid px-4 text-[14px] font-semibold text-on-solid shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
                 {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Generate launch film <ArrowRight className="h-4 w-4" />
               </button>
-              <p className="text-[11.5px] leading-5 text-ink-3">For the full story, record walkcast.kunjshah.in from Home through Download and Lab in one fresh walkthrough. Rendering happens on this computer.</p>
+              <p className="text-[11.5px] leading-5 text-ink-3">Choose any fresh website recording. The film uses its real page footage and titles. Rendering happens on this computer.</p>
             </> : (
               <div className="grid gap-4">
                 <div className="grid gap-1">
-                  <h2 className="text-[15px] font-semibold">Record the source first</h2>
-                  <p className="text-[12.5px] leading-5 text-ink-3">Capture Home, Download, and Lab in one Walkcast walkthrough. A fresh recording of at least one minute appears here automatically.</p>
+                  <h2 className="text-[15px] font-semibold">Record a website to begin</h2>
+                  <p className="text-[12.5px] leading-5 text-ink-3">Paste your website above, record its pages, then return here and select that recording to build the film.</p>
                 </div>
-                <button type="button" onClick={() => go({ view: "record", url: "https://walkcast.kunjshah.in/" })} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-solid px-4 text-[13.5px] font-semibold text-on-solid hover:brightness-110">
-                  Record Walkcast now <ArrowRight className="h-4 w-4" />
+                <button type="button" onClick={() => document.getElementById("launch-site-url")?.focus()} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-solid px-4 text-[13.5px] font-semibold text-on-solid hover:brightness-110">
+                  Paste a website above <ArrowRight className="h-4 w-4" />
                 </button>
-                <p className="text-[11px] leading-5 text-ink-3">Existing recordings of other websites stay in Library; this launch-film template is the Walkcast product story.</p>
               </div>
             )}
           </div>
@@ -150,7 +156,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
         </video>
       </section>}
 
-      {!recordings.length && <Empty title="No fresh Walkcast recording yet" tone="signal" icon={<Film />}>Record the Walkcast site first, then Launch Studio will build the motion film from that new capture.</Empty>}
+      {!recordings.length && <Empty title="No website recordings ready yet" tone="signal" icon={<Film />}>Paste a website above and record it. Once the recording is ready, select it here to generate a launch film.</Empty>}
     </div>
   );
 }

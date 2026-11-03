@@ -997,17 +997,10 @@ export function createApp(o: ServeOptions = {}): App {
       const row = await findRecording(id);
       if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "Recording not found." });
       if (media.kind !== "local") return json(501, { error: "Launch films need the recording saved on this computer." });
-      let hostName = "";
-      try { hostName = new URL(row.summary.url).hostname.toLowerCase(); } catch { /* invalid old recording */ }
-      if (hostName !== "walkcast.kunjshah.in" && hostName !== "www.walkcast.kunjshah.in") {
-        return json(400, { error: "This Launch Studio film is the Walkcast product launch. Record walkcast.kunjshah.in first." });
-      }
-      if (row.summary.durationMs < 60_000) return json(400, { error: "Choose a fresh Walkcast recording that covers Home, Download, and Lab (at least one minute)." });
-      const paths = row.summary.pages.flatMap((page) => {
-        try { return [new URL(page.url).pathname.toLowerCase()]; } catch { return []; }
-      });
-      if (!paths.some((path) => path === "/download" || path.startsWith("/download/")) || !paths.some((path) => path === "/lab" || path.startsWith("/lab/"))) {
-        return json(400, { error: "That walkthrough does not include both Download and Lab. Record those pages in one fresh Walkcast walkthrough." });
+      let sourceUrl: URL;
+      try { sourceUrl = new URL(row.summary.url); } catch { return json(400, { error: "This recording has an invalid website address." }); }
+      if (!(sourceUrl.protocol === "https:" || sourceUrl.protocol === "http:") || row.summary.durationMs < 15_000 || !row.summary.pages.length) {
+        return json(400, { error: "Choose a website recording with at least 15 seconds of footage and one visited page." });
       }
       const voice = String((await readJson(req, 20_000)).voice ?? "af_heart").trim();
       if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
@@ -1028,13 +1021,20 @@ export function createApp(o: ServeOptions = {}): App {
       const taskRoot = join(root, "launch-video-work", taskId);
       const workDir = join(taskRoot, "docs", "launch", "source");
       const outputDir = join(taskRoot, "rendered");
-      const captionsPath = join(outputDir, "Walkcast-Launch-Fresh.vtt");
+      const captionsPath = join(outputDir, "Site-Launch-Film.vtt");
+      const siteConfigPath = join(taskRoot, "site-film.json");
       mkdirSync(taskRoot, { recursive: true });
+      const pages = row.summary.pages.map((page) => {
+        let pathname = "";
+        try { pathname = new URL(page.url).pathname; } catch { /* invalid event URL; title remains useful */ }
+        return { title: String(page.title || pathname || sourceUrl.hostname).trim().slice(0, 60), url: page.url };
+      }).filter((page, index, all) => all.findIndex((other) => other.url === page.url) === index).slice(0, 8);
+      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs }));
       const task: DesktopTask = {
         id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
         message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
       };
-      const builder = join(APP_SOURCE_ROOT, "docs", "launch", "source", "build-fresh.mjs");
+      const builder = join(APP_SOURCE_ROOT, "docs", "launch", "source", "build-site-film.mjs");
       const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
       startDesktopTask(task, process.execPath, [builder, capture], APP_SOURCE_ROOT, {
         ...process.env,
@@ -1043,13 +1043,14 @@ export function createApp(o: ServeOptions = {}): App {
         WALKCAST_LAUNCH_WORK_DIR: workDir,
         WALKCAST_LAUNCH_OUTPUT_DIR: outputDir,
         WALKCAST_LAUNCH_CAPTIONS_PATH: captionsPath,
+        WALKCAST_LAUNCH_SITE_CONFIG: siteConfigPath,
         ...(findChrome() ? { PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: findChrome()! } : {}),
       }, async () => {
         const video = `launch-video-${taskId}.mp4`;
         const poster = `launch-video-${taskId}-poster.jpg`;
         const captions = `launch-video-${taskId}.vtt`;
-        copyFileSync(join(outputDir, "Walkcast-Launch-Fresh.mp4"), join(recordingDir, video));
-        copyFileSync(join(outputDir, "Walkcast-Launch-Fresh-poster.jpg"), join(recordingDir, poster));
+        copyFileSync(join(outputDir, "Site-Launch-Film.mp4"), join(recordingDir, video));
+        copyFileSync(join(outputDir, "Site-Launch-Film-poster.jpg"), join(recordingDir, poster));
         copyFileSync(captionsPath, join(recordingDir, captions));
         const made: LaunchVideo = { id: taskId, video, poster, captions, voice, createdAt: new Date().toISOString() };
         const fresh = rereadSummary(summaryFile, diskSummary);

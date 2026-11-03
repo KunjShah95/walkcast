@@ -42,10 +42,11 @@ of the older CRM demo used in the original launch cut.
 
 ## Build a fresh launch cut
 
-In the desktop app, open **Launch Studio**, record the Walkcast site through Home, Download, and
-Lab, choose a Kokoro narrator, and press **Generate launch film**. The Studio renders locally,
-shows job progress, then plays the MP4 and captions. Its generated assets are saved beside the
-source recording. Use the command below for the same workflow from a shell.
+In the desktop app, open **Launch Studio**, paste any website URL, and press **Record site**. After
+recording its pages, return to Launch Studio, choose that recording and a Kokoro narrator, and
+press **Generate launch film**. The Studio renders locally from the real recorded pages, shows job
+progress, then plays the MP4 and captions. Its generated assets are saved beside the source
+recording. The command below still builds the original Walkcast-specific launch cut from a raw MP4.
 
 Capture a new recording of the current product site, then pass its raw MP4 to the launch builder:
 

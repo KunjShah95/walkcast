@@ -252,12 +252,12 @@ the repository `.env` for local development.
 
 ### Launch Studio
 
-The desktop dashboard includes **Launch Studio**. Record `walkcast.kunjshah.in` through Home,
-Download, and Lab, then choose the recording and a Kokoro voice. Walkcast renders the designed
-1080p launch cut on the computer, with original score and effects, ducked narration, and captions;
-the MP4 and VTT are saved with the source recording. The first run can prepare Kokoro and its local
-voice-model cache from the Studio itself. `npm run launch:video -- <recording.mp4>` remains available
-for rebuilding from the command line.
+The desktop dashboard includes **Launch Studio**. Paste any website URL, record its pages, then
+choose that recording and a Kokoro voice. Walkcast builds a site-specific 1080p launch film from
+real footage and page titles, with a composed score, ducked narration, and captions. The MP4 and
+VTT are saved with the source recording. The first run can prepare Kokoro and its local voice-model
+cache from the Studio itself. `npm run launch:video -- <recording.mp4>` remains available for the
+original Walkcast product-launch cut.
 
 Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/2FA (stops and
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;
