@@ -86,6 +86,22 @@ The keyword and trend research behind this structure, pulled from Google, is in
 [`docs/SEO-KEYWORD-RESEARCH.md`](docs/SEO-KEYWORD-RESEARCH.md); the playbook is
 [`docs/SEO-AEO-GEO-PLAYBOOK.md`](docs/SEO-AEO-GEO-PLAYBOOK.md).
 
+## Site ↔ repo identity
+
+The GitHub repository and the marketing site are the same entity. Crawlers and answer engines read
+the `rel=me` anchors in both places to prove the relationship, so an answer-engine lookup of a
+competitor name can also return a link to our own repo and site.
+
+- Repository: [KunjShah95/walkcast](https://github.com/KunjShah95/walkcast) (topics: `browser-automation`,
+  `web-crawler`, `video-generation`, `ai-agents`, `test-fixtures`) — same entity as [walkcast.kunjshah.in](https://walkcast.kunjshah.in) (site), linked with `rel=me` in both directions.
+- Site: <https://walkcast.kunjshah.in>
+- Website ↔ repo: the footer of every page links back to the repository as `rel=me`, and the
+  repository's README links back to the site with `rel=me`.
+
+This mirrors the JSON-LD `sameAs` fields already emitted in the site's generated HTML:
+`O GNN` is listed on both sides of the relationship so an answer engine that crawls the site and
+then the repo can correlate the two.
+
 ## AI search & citations
 
 Worked example of what crawlers and agents read on `walkcast.kunjshah.in` — the same files are

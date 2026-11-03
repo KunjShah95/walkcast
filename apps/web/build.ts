@@ -104,6 +104,15 @@ const VIDEO = {
   description: DEMO.description,
   thumbnailUrl: `${SITE}/assets/demo-poster.jpg`,
   contentUrl: `${SITE}/assets/demo.mp4`,
+  // Third-party copy of the demo. Placeholders like "https://youtu.be/…" are indexed by
+  // Third-party copy of the demo. A real https://youtu.be/… or https://www.youtube.com/watch?v=…
+  // URL is indexed by answer engines while a placeholder is worse than none at all, so it
+  // only ships once it is a real URL. Leave out of the sitemap: only the mounted
+  // /assets/demo.mp4 is crawlable.
+  ...(DEMO.youtubeUrl ? {
+    youtubeUrl: DEMO.youtubeUrl,
+    contentUrl: DEMO.youtubeUrl,
+  } : {}),
   uploadDate: DEMO.uploadDate,
   duration: DEMO.durationIso,
   transcript,

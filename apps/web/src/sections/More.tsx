@@ -652,7 +652,7 @@ export function Footer() {
           <div>
             <h4>Project</h4>
             <ul>
-              <li><a href={REPO_URL} target="_blank" rel="noopener">Source on GitHub</a></li>
+              <li><a href={REPO_URL} target="_blank" rel="me noopener">Source on GitHub</a></li>
               <li><a href={LAB_URL} target="_blank" rel="noopener">Walkcast Lab</a></li>
               <li><a href={ISSUES_URL} target="_blank" rel="noopener">Issues</a></li>
               <li><a href={LICENSE_URL} target="_blank" rel="noopener">MIT License</a></li>

@@ -684,4 +684,12 @@ export const DEMO = {
   description: "An unedited Walkcast recording: a browser visits Estate360, signs in, goes through six pages and narrates each one.",
   durationIso: "PT1M11S",
   uploadDate: "2026-10-14",
+  /** Date the video was published to the third-party host (the sitemap video entry uses
+   *  this when youtubeUrl is set). */
+  youtubeUploadDate: "2026-10-14",
+  /** Third-party copy of the demo recording. Replace with the real upload URL when the
+   *  walkthrough is published on YouTube. The JSON-LD and the sitemap video entry use the
+   *  mounted /assets/demo.mp4, so this field is only a citation anchor for answer engines.
+   *  Open a YouTube video and paste the share URL here; no code change is needed. */
+  youtubeUrl: ""
 };
