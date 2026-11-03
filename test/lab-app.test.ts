@@ -17,7 +17,7 @@ const root = mkdtempSync(join(tmpdir(), "lab-app-"));
 let srv: Awaited<ReturnType<typeof serveDashboard>>;
 let cookie = "";
 before(async () => {
-  srv = await serveDashboard(6300 + Math.floor(Math.random() * 300), { root, unref: true, store: new FileStore(join(root, ".lab", "store.json")), worker: true });
+  srv = await serveDashboard(0, { root, unref: true, store: new FileStore(join(root, ".lab", "store.json")), worker: true });
   const signup = await fetch(`${srv.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "lab@example.com", password: "a-good-password" }) });
   cookie = signup.headers.get("set-cookie")!.split(";")[0]!;
 });

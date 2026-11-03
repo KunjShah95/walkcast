@@ -21,7 +21,7 @@ before(async () => {
   process.env.SUPABASE_ANON_KEY = gotrue.anonKey;
   root = mkdtempSync(join(tmpdir(), "sbauth-"));
   store = new FileStore(join(root, "store.json"));
-  srv = await serveDashboard(5100 + Math.floor(Math.random() * 300), { root, unref: true, store, worker: false });
+  srv = await serveDashboard(0, { root, unref: true, store, worker: false });
 });
 after(async () => {
   await srv.close(100);
@@ -169,7 +169,7 @@ test("with email confirmation off in Supabase, an old account is not linked by e
   // Settings are cached for a few minutes; a fresh server reads them now.
   const root2 = mkdtempSync(join(tmpdir(), "sbauth2-"));
   const store2 = new FileStore(join(root2, "store.json"));
-  const srv2 = await serveDashboard(5500 + Math.floor(Math.random() * 300), { root: root2, unref: true, store: store2, worker: false });
+  const srv2 = await serveDashboard(0, { root: root2, unref: true, store: store2, worker: false });
   try {
     await store2.insertUser({ id: "victim", email: "victim@example.com", password: "scrypt$1$x$y", createdAt: "2026-01-01T00:00:00.000Z" });
     const r = await fetch(`${srv2.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "victim@example.com", password: "attacker-password" }) });

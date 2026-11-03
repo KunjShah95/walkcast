@@ -100,7 +100,7 @@ test("a replay can be asked for the recorded calls instead of a live model", () 
 
 test("saving a key writes it under every name the provider reads", async () => {
   const root = mkroot();
-  const srv = await serveDashboard(6400 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false });
   const names = ["GOOGLE_TTS_API_KEY", "GOOGLE_CLOUD_API_KEY", "AZURE_TTS_KEY", "AZURE_SPEECH_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "BHASHINI_API_KEY", "ULCA_API_KEY"];
   const saved = new Map(names.map((n) => [n, process.env[n]]));
   try {

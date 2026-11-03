@@ -227,7 +227,7 @@ test("a walkthrough made before this existed is read from the trace it left behi
   writeFileSync(join(dir, "recording.json"), JSON.stringify({ ...facts, id, dir: `recordings/${id}`, media: { video: null, mp4: null, audio: null, captions: "captions.vtt", voice: "flite", note: "" } }));
   writeFileSync(join(dir, "trace.jsonl"), events.map((e) => JSON.stringify(e)).join("\n"));
 
-  const srv = await serveDashboard(6800 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false });
   try {
     const res = await fetch(`${srv.url}/api/recordings/${id}/insights`);
     assert.equal(res.status, 200, await res.clone().text());

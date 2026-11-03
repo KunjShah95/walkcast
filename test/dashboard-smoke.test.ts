@@ -26,7 +26,7 @@ before(async () => {
   const clean = await runOnce({ fault: "none", seed: 1, agent: "v0", task: createLeadTask(), outDir });
   failDir = `runs/${fail.runDir.split(/[\\/]/).pop()}`;
   cleanDir = `runs/${clean.runDir.split(/[\\/]/).pop()}`;
-  srv = await serveDashboard(5800 + Math.floor(Math.random() * 150), { root, unref: true, requireAuth: false, worker: false });
+  srv = await serveDashboard(0, { root, unref: true, requireAuth: false, worker: false });
   browser = await chromium.launch();
 });
 after(async () => {

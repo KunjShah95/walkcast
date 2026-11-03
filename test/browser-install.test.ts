@@ -29,7 +29,7 @@ test("a server that doesn't manage its browser: unmanaged, no retry, recordings 
   assert.equal(browserNotReady(), null);
 
   const root = mkdtempSync(join(tmpdir(), "lab-browser-"));
-  const srv = await serveDashboard(5300 + Math.floor(Math.random() * 200), { root, unref: true, requireAuth: false, worker: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false, worker: false });
   try {
     const status = (await (await fetch(`${srv.url}/api/browser`)).json()) as { state: string };
     assert.equal(status.state, "unmanaged");

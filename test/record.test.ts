@@ -57,7 +57,10 @@ test("signs in, browses same-origin pages, narrates, and never writes the passwo
   assert.deepEqual(filesContain(r.dir, "postData"), [], "request bodies stay out of site recordings");
 });
 
-test("a wrong password is reported as rejected, with the site's own message", { timeout: 120_000 }, async () => {
+// Runs right after a 420 s-budget test in the same file; under a loaded full-suite run that
+// neighbor alone took 165 s, so 120 s here could starve a browser launch that's merely slow, not
+// stuck. Same ceiling as the test above, for the same reason.
+test("a wrong password is reported as rejected, with the site's own message", { timeout: 420_000 }, async () => {
   const r = await recordSite({ url: app.url, username: "demo", password: "not-the-password", maxPages: 1, authorized: true, outDir: out, paceMs: 50 });
   assert.equal(r.signIn.outcome, "rejected");
   assert.match(r.signIn.detail, /Invalid username or password/);

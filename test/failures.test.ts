@@ -34,7 +34,7 @@ async function deadPort(): Promise<number> {
 test("a recording that fails lands in the Lab with its reason, and leaves no half-made recording", { timeout: 240_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), "failures-"));
   const store = new FileStore(join(root, "store.json"));
-  const srv = await serveDashboard(5100 + Math.floor(Math.random() * 200), { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
+  const srv = await serveDashboard(0, { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
   const base = srv.url;
   try {
     const signup = await fetch(`${base}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "f@example.com", password: "a-good-password" }) });
@@ -102,7 +102,7 @@ test("old half-made recording folders are swept; finished and fresh ones are kep
 test("a recording can be deleted, files and all; nothing outside recordings/ can be", async () => {
   const { mkdirSync, writeFileSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "del-"));
-  const srv = await serveDashboard(5350 + Math.floor(Math.random() * 40), { root, unref: true, requireAuth: false, worker: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false, worker: false });
   try {
     const dir = join(root, "recordings", "site.example-abc");
     mkdirSync(dir, { recursive: true });
@@ -125,7 +125,7 @@ test("cancelling a running recording stops it, keeps it out of failures, and fre
   const app = await startApp({ fault: "none", seed: 1, task: "lookup-owner", seedLeads: SEED_LEADS });
   const root = mkdtempSync(join(tmpdir(), "cancel-"));
   const store = new FileStore(join(root, "store.json"));
-  const srv = await serveDashboard(5400 + Math.floor(Math.random() * 100), { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
+  const srv = await serveDashboard(0, { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
   try {
     const signup = await fetch(`${srv.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "c@example.com", password: "a-good-password" }) });
     const cookie = signup.headers.get("set-cookie")!.split(";")[0]!;
@@ -194,7 +194,7 @@ test("refused recordings and failed agent runs are listed too; repeat refusals a
   process.env.LAB_CHROME_PATH = join(tmpdir(), "no-such-chrome.exe");
   const root = mkdtempSync(join(tmpdir(), "refused-"));
   const store = new FileStore(join(root, "store.json"));
-  const srv = await serveDashboard(5500 + Math.floor(Math.random() * 100), { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
+  const srv = await serveDashboard(0, { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
   try {
     const signup = await fetch(`${srv.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "e@example.com", password: "a-good-password" }) });
     const cookie = signup.headers.get("set-cookie")!.split(";")[0]!;

@@ -20,7 +20,7 @@ let store: FileStore;
 before(async () => {
   process.env.LAB_LLM_RUNS_PER_DAY = "0";
   store = new FileStore(join(root, ".lab", "store.json"));
-  srv = await serveDashboard(5100 + Math.floor(Math.random() * 200), { root, unref: true, store, worker: false });
+  srv = await serveDashboard(0, { root, unref: true, store, worker: false });
 });
 after(async () => {
   delete process.env.LAB_LLM_RUNS_PER_DAY;
@@ -93,7 +93,7 @@ test("a cloud provider this server has no key for is refused, not silently swapp
   // Its own server, because the refusal only applies where this process holds the worker (the
   // desktop app): a separate worker machine may hold a key this web server can't see.
   const solo = mkdtempSync(join(tmpdir(), "lab-tts-"));
-  const own = await serveDashboard(5400 + Math.floor(Math.random() * 200), { root: solo, unref: true, store: new FileStore(join(solo, ".lab", "store.json")), worker: true });
+  const own = await serveDashboard(0, { root: solo, unref: true, store: new FileStore(join(solo, ".lab", "store.json")), worker: true });
   try {
     const signup = await fetch(`${own.url}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "no-key@example.com", password: "a-good-password" }) });
     const cookie = signup.headers.get("set-cookie")!.split(";")[0]!;
@@ -203,7 +203,7 @@ describe("anonymous access, with accounts required", () => {
   const wallRoot = mkdtempSync(join(tmpdir(), "lab-wall-"));
   let wall: Awaited<ReturnType<typeof serveDashboard>>;
   before(async () => {
-    wall = await serveDashboard(5900 + Math.floor(Math.random() * 300), { root: wallRoot, unref: true, store: new FileStore(join(wallRoot, ".lab", "store.json")), worker: false, requireAuth: true });
+    wall = await serveDashboard(0, { root: wallRoot, unref: true, store: new FileStore(join(wallRoot, ".lab", "store.json")), worker: false, requireAuth: true });
   });
   after(async () => {
     await wall.close?.(100);

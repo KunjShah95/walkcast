@@ -92,7 +92,7 @@ for (const [name, open] of stores) {
     test.skip("sign up, submit twice with one idempotency key, poll the job, watch the result", { timeout: 240_000 }, async () => {
       const root = mkdtempSync(join(tmpdir(), "e2e-"));
       const store = await open();
-      const srv = await serveDashboard(4700 + Math.floor(Math.random() * 200), { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
+      const srv = await serveDashboard(0, { root, unref: true, store, media: new LocalMedia(join(root, "recordings")) });
       const base = srv.url;
       try {
         const signup = await fetch(`${base}/auth/signup`, { method: "POST", body: JSON.stringify({ email: "q@example.com", password: "a-good-password" }) });
@@ -153,7 +153,7 @@ if (process.env.TEST_DATABASE_URL) {
     const root = mkdtempSync(join(tmpdir(), "split-"));
     const web = await freshSchema(process.env.TEST_DATABASE_URL!);
     const media = new LocalMedia(join(root, "recordings"));
-    const srv = await serveDashboard(4950 + Math.floor(Math.random() * 40), { root, unref: true, store: web, media, worker: false });
+    const srv = await serveDashboard(0, { root, unref: true, store: web, media, worker: false });
     const workerStore = new PgStore(process.env.TEST_DATABASE_URL!, { schema: web.schema });
     const saved = process.env.LAB_SECRET_KEY;
     try {

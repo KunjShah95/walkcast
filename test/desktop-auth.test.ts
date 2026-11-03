@@ -20,7 +20,7 @@ before(async () => {
   process.env.SUPABASE_URL = gotrue.url;
   process.env.SUPABASE_ANON_KEY = gotrue.anonKey;
   root = mkdtempSync(join(tmpdir(), "lab-desktop-auth-"));
-  srv = await serveDashboard(5600 + Math.floor(Math.random() * 300), {
+  srv = await serveDashboard(0, {
     root,
     unref: true,
     worker: false,
@@ -119,7 +119,7 @@ describe("the desktop app with an account required", () => {
 
   before(async () => {
     gotrue.settings.autoconfirm = true;
-    locked = await serveDashboard(6200 + Math.floor(Math.random() * 300), {
+    locked = await serveDashboard(0, {
       root: lockedRoot,
       unref: true,
       worker: false,

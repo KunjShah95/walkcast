@@ -53,7 +53,7 @@ test("a share link plays the walkthrough for anyone who has it, and only for the
   const root = mkdtempSync(join(tmpdir(), "walkcast-share-"));
   roots.push(root);
   const id = aRecording(root);
-  const srv = await serveDashboard(6500 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false });
   try {
     // The link is made by the owner.
     const made = await fetch(`${srv.url}/api/recordings/${id}/share`, {
@@ -131,7 +131,7 @@ test("a share link stops working on the day it names", async () => {
   const root = mkdtempSync(join(tmpdir(), "walkcast-share-"));
   roots.push(root);
   const id = aRecording(root);
-  const srv = await serveDashboard(6900 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false });
   try {
     const made = await fetch(`${srv.url}/api/recordings/${id}/share`, {
       method: "POST",
@@ -158,7 +158,7 @@ test("the embed can sit in another site's iframe; the share page and the app can
   const root = mkdtempSync(join(tmpdir(), "walkcast-share-"));
   roots.push(root);
   const id = aRecording(root);
-  const srv = await serveDashboard(7300 + Math.floor(Math.random() * 300), { root, unref: true, requireAuth: false });
+  const srv = await serveDashboard(0, { root, unref: true, requireAuth: false });
   try {
     const made = await fetch(`${srv.url}/api/recordings/${id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: 7 }) });
     const { url } = (await made.json()) as { url: string };

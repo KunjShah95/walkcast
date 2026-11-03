@@ -344,11 +344,26 @@ async function testCredential(env: string): Promise<{ ok: boolean; message: stri
   return { ok: credentialSet(env), message: credentialSet(env) ? "Saved. This one can't be tested from here." : `No ${env} saved.` };
 }
 
+async function freePort(host: string): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen(0, host, () => resolve());
+  });
+  const { port } = probe.address() as { port: number };
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
 export async function serveDashboard(port: number, options: ServeOptions | string = {}): Promise<Running> {
   const o = typeof options === "string" ? { root: options } : options;
   await loadPlugins(o.root ?? process.cwd());
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
-  const app = createApp({ ...o, host, siteUrl: o.siteUrl ?? process.env.LAB_SITE_URL ?? `http://127.0.0.1:${port}` });
+  // 0 asks the OS for a free port instead of guessing one, which is what every caller that doesn't
+  // care which port it gets (tests, mainly) should pass — a guessed port can collide with another
+  // test's server running concurrently and the connection just refuses.
+  const resolvedPort = port === 0 ? await freePort(host) : port;
+  const app = createApp({ ...o, host, siteUrl: o.siteUrl ?? process.env.LAB_SITE_URL ?? `http://127.0.0.1:${resolvedPort}` });
   const { store, media, worker } = app;
   const server = createServer(app.handler);
   // Keep-alive longer than the ALB's idle timeout (60 s) so the balancer never reuses a closed socket.
@@ -356,9 +371,15 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   server.headersTimeout = 66_000;
   server.requestTimeout = 30_000;
 
-  await new Promise<void>((r) => server.listen(port, host, r));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(resolvedPort, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
   if (o.unref) server.unref();
-  const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
+  const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${resolvedPort}`;
   log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: app.requireAuth ? app.auth : "off" });
   return {
     url: address,
