@@ -34,6 +34,7 @@
     "desktop:stage": "node --import tsx apps/desktop/scripts/stage-sidecar.ts",
     "cli": "node --import tsx apps/desktop/cli.ts",
     "doctor": "node --import tsx apps/desktop/cli.ts doctor",
+    "kokoro:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-kokoro.ps1",
     "walkcast": "node bin/walkcast.mjs",
     "qa": "npm run typecheck && npm run ui:build",
     "lint": "eslint .",

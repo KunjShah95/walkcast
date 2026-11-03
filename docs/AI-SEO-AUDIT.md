@@ -80,7 +80,7 @@ This report documents what I audited, what I verified, and the prioritized plan 
 |---|---|---|
 | Wikipedia | AI systems draw on Wikipedia for entity pages | Not pursued (out of scope per playbook; docs kept quote-friendly instead) |
 | Review sites (G2, Capterra, TrustRadius) | AI cites these for "best tools" lists | None listed; needs account + submission |
-| Product Hunt / HN / Reddit | Launch-day AI exposure and backlink momentum | Not done |
+| Product Hunt / HN / Reddit | Launch-day AI exposure and backlink momentum | Done — Product Hunt landed; HN and Reddit pending |
 | Dev.to / Hashnode tutorials | AI-readable content that links back to the site | Not done |
 | GitHub README ↔ site links (`rel=me`) | Signals identity and provenance to crawlers | Not done |
 | Awesome lists (`awesome-browser-automation`, `awesome-ai-agents`) | AI training datasets and research reference these | Not done |
@@ -100,7 +100,7 @@ This report documents what I audited, what I verified, and the prioritized plan 
 4. **Install Google Search Console.** Register the property, verify via DNS or meta tag, submit `sitemap.xml`. This is the foundation for measuring visibility and CTR.
 5. **Publish a Dev.to or Hashnode tutorial** titled something like "Turn a login-walled website into a narrated video" that links back to the guides. This is the first off-site mention that AI systems index.
 6. **Add `rel=me` links** in the GitHub README (site ↔ repo) so crawlers see the site-website relationship.
-7. **Submit to Product Hunt** and HN "Show HN" for the launch.
+7. **Submit to Product Hunt** — *done* (producthunt.com/products/walkcast). HN "Show HN" and Reddit are pending.
 
 ### 5.3 Medium term
 

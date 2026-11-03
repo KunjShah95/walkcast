@@ -205,10 +205,13 @@ guarantees above:
   browser when configured, PKCE callback polled by the app window.
 - **Secrets**: `LAB_SECRET_KEY` is copied into the app at stage time (public by design);
   site passwords are sealed and cleared on job end, exactly as in production.
-- **Voice**: local flite (ffmpeg in the installer) or Windows SAPI; cloud providers
+- **Voice**: local Kokoro (natural, offline), flite (ffmpeg in the installer), or Windows SAPI; cloud providers
   (Sarvam, Bhashini, ElevenLabs, Google, Azure, Polly, OpenAI, Murf, Reverie, custom)
   are selectable per recording in Settings/Record, with keys read from the environment at
   launch. `LAB_TTS_PROVIDER` sets the default.
+  `npm run kokoro:setup` checks or installs Kokoro for the Python on PATH; set
+  `WALKCAST_KOKORO_PYTHON` when using a dedicated Python environment. Provider discovery checks
+  package metadata so the app never imports the model stack during startup.
 - **Browser**: Chromium downloads on first launch into `<data>/browsers`; recordings asked
   for before it finishes are refused with a clear message.
 

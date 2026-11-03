@@ -1,0 +1,45 @@
+WEBVTT
+
+1
+00:00:03.350 --> 00:00:05.700
+Opening walkcast.kunjshah.in.
+
+2
+00:00:06.020 --> 00:00:16.950
+It opens with “Paste a link. Get a video tour of your site. Nothing to film”. A real browser opens your site, signs in and clicks through your pages. The main button says “Download for Windows”.
+
+3
+00:00:17.050 --> 00:00:20.740
+It has a form asking for What a team of 5 people pays in.
+
+4
+00:00:20.840 --> 00:00:35.090
+Further down: You paste a link and it does the walking, Fast enough to re-run on every release, Loom films you and Records the pages only users see. Prices on the page include $0, $18 and $29.
+
+5
+00:00:35.190 --> 00:00:37.550
+Opening the download page.
+
+6
+00:00:37.650 --> 00:00:47.440
+The headline here reads “Download Walkcast. Free, version 0.8.1”. The installer is not code-signed yet, so Windows may show "Windows protected your PC".
+
+7
+00:00:47.540 --> 00:00:53.360
+Scroll further and you’ll find Requirements, Windows SmartScreen, Uninstall and Linux.
+
+8
+00:00:53.460 --> 00:00:55.520
+Opening the lab page.
+
+9
+00:00:55.620 --> 00:01:10.510
+This page leads with “Walkcast Lab. Why the browser agent failed, and the test that proves it”. Short answer: Walkcast Lab is browser agent testing for teams that build AI agents which drive a web browser. The button here reads “Download for Windows”.
+
+10
+00:01:10.610 --> 00:01:20.010
+Below that: The problem with testing a browser agent, The vocabulary, Browser agent evals, in one page and How a failure becomes a regression test.
+
+11
+00:01:20.110 --> 00:01:24.740
+That's the tour: 3 pages, recorded exactly as a visitor sees them.

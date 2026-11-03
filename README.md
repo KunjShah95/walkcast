@@ -146,7 +146,7 @@ GEO citation plan (the largest lever left off-site):
    `browser-automation`, `web-crawler`, `video-generation`, `ai-agents`, `test-fixtures`.
 2. Dev.to / Hashnode tutorial: "Turn a login-walled website into a narrated video", linked from
    the guides index.
-3. Product Hunt + HN "Show HN" launch, Reddit `/r/webdev`, `/r/qualityassurance`.
+3. Product Hunt + HN "Show HN" launch, Reddit `/r/webdev`, `/r/qualityassurance`. [Product Hunt: done]
 4. YouTube: hero walkthrough + a 2-minute how-to, linked from the `VideoObject` schema and the
    sitemap video entry.
 5. G2 / Capterra / TrustRadius profiles even for a free tier, so answer engines cite the site for
@@ -234,7 +234,7 @@ How it works (`packages/core/src/record/`):
 - **Narration** (`narration.ts`) is written only from recorded events; passwords are announced as
   entered but never spoken.
 - **Audio/video** (`media.ts`): each line spoken by a TTS engine — ffmpeg's built-in flite voice
-  (`LAB_VOICE`, default `slt`), Windows SAPI on Windows, or cloud providers (Sarvam, Bhashini,
+  (`LAB_VOICE`, default `slt`), Kokoro (natural, offline), Windows SAPI on Windows, or cloud providers (Sarvam, Bhashini,
   ElevenLabs, Google Cloud, Azure, AWS Polly, OpenAI, Murf, Reverie, custom/Maya) selected via
   `LAB_TTS_PROVIDER` or per recording in Settings/Record, along with which of that provider's
   voices speaks (`voices.ts` holds the catalog; a voice can be sampled before recording). Language
@@ -243,6 +243,12 @@ How it works (`packages/core/src/record/`):
   browser pauses after each action for
   exactly as long as its line takes. Without ffmpeg/flite (and no cloud key) you still get the WebM
   video and captions.
+
+For the natural offline voice, run `npm run kokoro:setup`. Add `-- --WarmModel` to load Kokoro's
+model once and save a short local warm-up sample. Walkcast checks the Python package without
+importing the heavyweight model at app startup. If Kokoro lives in a separate environment, set
+`WALKCAST_KOKORO_PYTHON` to that environment's Python executable; the same setting is read from
+the repository `.env` for local development.
 
 Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/2FA (stops and
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;

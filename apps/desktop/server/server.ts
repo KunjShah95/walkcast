@@ -15,7 +15,7 @@ import { PROVIDERS, apiKey, baseURL, configuredProviders } from "../../../packag
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio, buildSilentCopy } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders, engineFor, kokoroAvailable } from "../../../packages/core/src/record/voice.ts";
+import { configuredCloudProviders, engineFor, kokoroAvailable, kokoroReady } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -949,6 +949,9 @@ export function createApp(o: ServeOptions = {}): App {
     // The voice catalog the TTS picker renders: each provider's voices, its default, and whether
     // the server holds credentials for it. Providers with no public list (Murf, custom) are typed in.
     if (url.pathname === "/api/voices" && req.method === "GET") {
+      // Kokoro's first import is expensive, so report its package presence with the non-blocking
+      // readiness probe instead of making an installed voice disappear during app startup.
+      await kokoroReady();
       return json(200, {
         providers: TTS_PROVIDERS.map((p) => {
           const cloud = isCloudProvider(p);
@@ -1387,7 +1390,7 @@ try {
       }
       // Kokoro needs a local Python install with the kokoro package; without it the recording
       // would silently fall back to the robotic voice, which reads the same as the cloud case above.
-      if (kind === "record" && worker && input.ttsProvider === "kokoro" && !kokoroAvailable()) {
+      if (kind === "record" && worker && input.ttsProvider === "kokoro" && !(await kokoroReady())) {
         return refuse(400, "Kokoro is selected but this server has no working Python + kokoro install, so the recording would not use it. Install kokoro, or pick the basic offline voice.");
       }
       // A custom voice sample is the uploader's. Naming somebody else's id in the form would

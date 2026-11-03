@@ -6,7 +6,7 @@ import { Recorder, type TargetCheck } from "../capture/recorder.ts";
 import { registerSecret, scrub } from "../capture/secrets.ts";
 import { BrowserTools, type Observation, type ObservedElement } from "../capture/tools.ts";
 import { buildMedia, localVoice, pickEngine, speechMsMany, type MediaResult, type Voice } from "./media.ts";
-import { engineFor, type VoiceEngine } from "./voice.ts";
+import { engineFor, kokoroReady, type VoiceEngine } from "./voice.ts";
 import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser, warmBrowserEnabled } from "./browser.ts";
 import { captionsFor, type Caption, type NarrationStyle } from "./narration.ts";
@@ -163,6 +163,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   // asks each person once: a cloud voice (their own key), "flite" (the offline voice, chosen on
   // purpose) or "none" (captions only). With no choice at all (the CLI), pickEngine decides.
   const picked = options.ttsProvider;
+  if (picked === "kokoro") await kokoroReady();
   const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
   const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
   const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));

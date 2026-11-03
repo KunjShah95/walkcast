@@ -178,19 +178,17 @@ export type FliteVoice = "slt" | "awb" | "kal" | "rms";
 let kokoroPython: boolean | undefined;
 
 /**
- * Checks (once, in the background) whether Python can import kokoro. A machine that actually has
- * it installed pays a real cost to prove it: importing kokoro loads TensorFlow, which alone took
- * 15+ seconds in testing. `spawnSync` paid that as a synchronous block of the whole process —
- * including the worker's own heartbeat timer, which then saw no heartbeat for long enough to
- * trip its lease-margin watchdog and kill the very recording that triggered the check. Checking
- * asynchronously, once, keeps that cost off the event loop; a recording that starts before the
- * first check finishes just doesn't get Kokoro's voice, exactly as if it weren't installed.
+ * Check the local install without importing the model stack. Importing Kokoro can take tens of
+ * seconds (TensorFlow is loaded on this machine), and must never block the server or make an
+ * installed voice look missing just because its first import is still warming up. The synthesis
+ * process does the real import when it speaks.
  */
 function probeKokoro(bin: string): Promise<boolean> {
   return new Promise((resolve) => {
     let proc: ReturnType<typeof spawn>;
     try {
-      proc = spawn(bin, ["-c", "import kokoro; print('ok')"], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+      const check = "import importlib.util as u; print('ok' if all(u.find_spec(m) for m in ('kokoro','numpy','soundfile')) else '')";
+      proc = spawn(bin, ["-c", check], { windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       resolve(false);
       return;
@@ -217,18 +215,26 @@ let kokoroProbe: Promise<void> | null = null;
 function warmKokoroCheck(): void {
   if (kokoroProbe) return;
   kokoroProbe = (async () => {
-    const first = process.platform === "win32" ? "python" : "python3";
+    const configured = process.env.WALKCAST_KOKORO_PYTHON?.trim();
+    const first = configured || (process.platform === "win32" ? "python" : "python3");
     kokoroPython = await probeKokoro(first);
     // Fall back to `python` on non-Windows too, in case python3 isn't on PATH.
-    if (!kokoroPython && first !== "python") kokoroPython = await probeKokoro("python");
+    if (!kokoroPython && !configured && first !== "python") kokoroPython = await probeKokoro("python");
   })();
 }
 
-/** Whether Python can import kokoro on this machine. False until the background check resolves. */
+/** Whether the configured Python has Kokoro and its runtime audio dependencies available. */
 export function kokoroAvailable(): boolean {
   if (kokoroPython !== undefined) return kokoroPython;
   warmKokoroCheck();
   return false;
+}
+
+/** Wait for the quick local dependency probe when an API response must report a final state. */
+export async function kokoroReady(): Promise<boolean> {
+  warmKokoroCheck();
+  await kokoroProbe;
+  return kokoroPython === true;
 }
 
 /** Kokoro's one-liner as valid Python: real newlines, so a loop is a statement and not a `;`-joined clause. */
@@ -276,7 +282,7 @@ export function kokoroScriptMany(): string {
 export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
   if (!kokoroAvailable()) return null;
   const voice = cloudVoice?.trim() || process.env.KOKORO_VOICE?.trim() || "af_heart";
-  const py = process.platform === "win32" ? "python" : (spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true }).status === 0 ? "python3" : "python");
+  const py = process.env.WALKCAST_KOKORO_PYTHON?.trim() || (process.platform === "win32" ? "python" : (spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true }).status === 0 ? "python3" : "python"));
   /** One Python process for `lines`: the model loads once. */
   const speakMany = async (lines: { text: string; file: string }[], cwd: string, onLine?: (done: number, total: number) => void): Promise<void> => {
     if (lines.length === 0) return;
