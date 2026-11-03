@@ -698,6 +698,9 @@ body:has(#root .landing-hero) { background: #fff; color: #1d241e; }
 #root:has(.landing-hero) .foot h4, #root:has(.landing-hero) .foot .brand { color: var(--ink); }
 #root:has(.landing-hero) .word { color: #edf1eb; }
 #root:has(.landing-hero) .word-fill { color: #dce7d8; -webkit-text-stroke-color: #dce7d8; }
+.previous-releases { display: grid; gap: 12px; padding-left: 20px; }
+.previous-releases li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.previous-releases li > span { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; }
 
 @media (max-width: 700px) {
   #root:has(.landing-hero) .sec { padding-top: 72px; }

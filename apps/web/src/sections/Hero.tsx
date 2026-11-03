@@ -4,10 +4,6 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { LINUX_APPIMAGE_URL, RELEASES_URL, VERSION, WINDOWS_EXE_URL } from "../site.ts";
 import { BrandMark, DownloadButton } from "../ui.tsx";
 
-/** major.minor of the running build, so the announcement tag can't go stale the way a typed-in
- * "New in 0.5" did across three releases. */
-const MINOR_VERSION = VERSION.split(".").slice(0, 2).join(".");
-
 interface Cue {
   start: number;
   end: number;
@@ -362,7 +358,7 @@ export function Hero() {
       <div className="wrap">
         <div className="hero-copy">
           <motion.a className="announce" href={RELEASES_URL} target="_blank" rel="noopener" {...line(0)}>
-            <span className="announce-tag">New in {MINOR_VERSION}</span>
+            <span className="announce-tag">Latest release · {VERSION}</span>
             <span>A live preview while the recording still runs</span>
             <ArrowRight size={14} />
           </motion.a>

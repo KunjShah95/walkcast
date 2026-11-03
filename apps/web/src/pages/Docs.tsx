@@ -1,7 +1,7 @@
 import { Check, Minus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { FAQ, GUIDE_STEPS, MORE_FAQ } from "../content.ts";
-import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
+import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, PREVIOUS_RELEASES, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { LinuxIcon, WindowsIcon } from "../ui.tsx";
 import { trackSiteEvent } from "../analytics.ts";
 import { Doc } from "./Doc.tsx";
@@ -227,7 +227,7 @@ export function DownloadPage() {
         Download Walkcast. <span className="dim">Free, version {VERSION}.</span>
       </h1>
       <p className="answer" id="download-options">
-        Walkcast is a desktop app for Windows and Linux. It does not install on iPhone or Android; use this page to choose an installer when you are at your computer.
+        The latest published installer is Walkcast {VERSION}. Walkcast is a desktop app for Windows and Linux; it does not install on iPhone or Android. This page keeps older released installers available too.
       </p>
       <div className="dl-row">
         <a className="dl-tile" href={WINDOWS_EXE_URL} onClick={() => trackSiteEvent("installer_download_click", { placement: "download_page", platform: "windows_exe" })}>
@@ -259,6 +259,22 @@ export function DownloadPage() {
           </span>
         </a>
       </div>
+
+      <h2>Previous releases</h2>
+      <ul className="previous-releases">
+        {PREVIOUS_RELEASES.filter((release) => release.version !== VERSION).map((release) => (
+          <li key={release.version}>
+            <strong>Walkcast {release.version}</strong>
+            <span>
+              <a href={release.windowsExe}>Windows .exe</a>
+              <a href={release.windowsMsi}>Windows .msi</a>
+              <a href={release.linuxAppImage}>Linux AppImage</a>
+              <a href={release.linuxDeb}>Linux .deb</a>
+              <a href={release.releaseUrl}>Release notes</a>
+            </span>
+          </li>
+        ))}
+      </ul>
 
       <h2>Requirements</h2>
       <ul>
