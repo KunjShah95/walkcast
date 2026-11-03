@@ -786,11 +786,11 @@ body:has(#root .landing-hero) { background: #fff; color: #1d241e; }
   .landing-hero-wrap { width: min(100% - 28px, 1440px); }
   .landing-release { max-width: 100%; gap: 7px; margin-bottom: 23px; font-size: 9.5px; }
   .landing-hero .landing-title { max-width: 12ch; font-size: clamp(40px, 11vw, 52px); letter-spacing: -.06em; }
-  .landing-lede { margin-top: 17px; font-size: 14px; line-height: 1.6; }
+  .landing-lede { margin-top: 17px; font-size: 16px; line-height: 1.55; }
   .landing-actions { display: grid; justify-items: stretch; gap: 5px; margin-top: 21px; }
   .landing-hero .pill.dl { width: 100%; min-height: 49px; }
   .landing-watch { justify-content: center; min-height: 44px; }
-  .landing-trust { gap: 8px 13px; margin-top: 14px; font-size: 10px; }
+  .landing-trust { gap: 8px 13px; margin-top: 14px; font-size: 11px; }
   .landing-note { font-size: 10px; }
   .landing-hero-visual { margin-top: 31px; }
   .landing-browser { border-radius: 13px; }

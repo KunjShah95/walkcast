@@ -98,7 +98,7 @@ export function Nav() {
           ))}
         </nav>
         <div className="nav-end">
-          <DownloadButton label="Download" className="nav-cta" />
+          <DownloadButton label="Download" className="nav-cta" placement="nav" />
           <button
             className="nav-burger"
             type="button"
@@ -381,7 +381,7 @@ export function Hero() {
           </motion.p>
           <motion.div className="hero-dl" {...line(4)}>
             <div className="hero-ctas">
-              <DownloadButton big />
+              <DownloadButton big placement="hero" />
               <a className="pill ghost big" href="#demo">
                 <Play size={15} fill="currentColor" /> Watch a real recording
               </a>

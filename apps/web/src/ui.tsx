@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, Download, EyeOff, Film, Captions, FileText, Globe, Play, type LucideIcon } from "lucide-react";
 import { type ComponentProps, type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { LINUX_APPIMAGE_URL, WINDOWS_EXE_URL } from "./site.ts";
+import { trackSiteEvent } from "./analytics.ts";
 
 export function iconsOf(icons: LucideIcon[]) {
   return icons.map((I) => <I key={I === Check ? "check" : I === Download ? "download" : I === EyeOff ? "eye-off" : I === Film ? "film" : I === Captions ? "captions" : I === FileText ? "file-text" : I === Globe ? "globe" : I === Play ? "play" : null} />);
@@ -131,15 +132,18 @@ const PLATFORM_ICON: Record<Platform, ComponentType<ComponentProps<"svg">>> = {
 };
 
 /**
- * The visitor's desktop OS. Prerendered pages say Windows (most visitors, and what crawlers see);
- * after hydration a Linux visitor gets their own installer instead of a Windows .exe.
+ * The visitor's platform. Prerendered pages show a safe options link; after hydration desktops
+ * get their matching installer while phones are directed to the supported-platform details.
  */
-function usePlatform(): Platform {
-  const [p, setP] = useState<Platform>("windows");
+function usePlatform(): Platform | "mobile" | "unknown" {
+  const [p, setP] = useState<Platform | "mobile" | "unknown">("unknown");
   useEffect(() => {
     const ua = `${navigator.userAgent} ${(navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? ""}`;
-    if (/Android|iPhone|iPad/i.test(ua)) return; // a phone can't install it; keep the default link
-    if (/Linux|X11/i.test(ua)) setP("linux");
+    if (/Android|iPhone|iPad|Mobile/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) {
+      setP("mobile");
+      return;
+    }
+    setP(/Linux|X11/i.test(ua) ? "linux" : "windows");
   }, []);
   return p;
 }
@@ -152,23 +156,37 @@ export function DownloadButton({
   big = false,
   label,
   className = "",
+  placement = "content",
 }: {
   big?: boolean;
   label?: string;
   className?: string;
+  placement?: string;
 }) {
   const platform = usePlatform();
-  const meta = PLATFORMS[platform];
-  const Icon = PLATFORM_ICON[platform];
+  const mobile = platform === "mobile";
+  const directDownload = platform === "windows" || platform === "linux";
+  const Icon = directDownload ? PLATFORM_ICON[platform] : Download;
+  const href = directDownload ? PLATFORMS[platform].url : "/download#download-options";
+  const buttonLabel = mobile
+    ? (placement === "nav" ? "Desktop app" : "See desktop app options")
+    : directDownload ? label ?? `Download for ${PLATFORMS[platform].name}` : label ?? "Get Walkcast";
   return (
     <motion.a
       className={`pill dl ${big ? "big" : ""} ${className}`}
-      href={meta.url}
-      onClick={() => announceDownload(meta.url)}
+      href={href}
+      onClick={() => {
+        if (!directDownload) {
+          trackSiteEvent(mobile ? "desktop_download_options" : "download_options_open", { placement });
+          return;
+        }
+        announceDownload(PLATFORMS[platform].url);
+        trackSiteEvent("installer_download_click", { placement, platform });
+      }}
       whileTap={{ scale: 0.97 }}
     >
       <Icon width={big ? 18 : 16} height={big ? 18 : 16} />
-      <span>{label ?? `Download for ${meta.name}`}</span>
+      <span>{buttonLabel}</span>
       <Download size={big ? 17 : 15} strokeWidth={2.2} />
     </motion.a>
   );

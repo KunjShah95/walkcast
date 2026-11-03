@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { FAQ, GUIDE_STEPS, MORE_FAQ } from "../content.ts";
 import { LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
 import { LinuxIcon, WindowsIcon } from "../ui.tsx";
+import { trackSiteEvent } from "../analytics.ts";
 import { Doc } from "./Doc.tsx";
 import { GuidesIndexPage, ProductDemoPage, WebsiteTutorialPage } from "./Guides.tsx";
 import { LoomComparePage, ScribeComparePage, ScreenStudioComparePage } from "./Compare.tsx";
@@ -225,29 +226,32 @@ export function DownloadPage() {
       <h1>
         Download Walkcast. <span className="dim">Free, version {VERSION}.</span>
       </h1>
+      <p className="answer" id="download-options">
+        Walkcast is a desktop app for Windows and Linux. It does not install on iPhone or Android; use this page to choose an installer when you are at your computer.
+      </p>
       <div className="dl-row">
-        <a className="dl-tile" href={WINDOWS_EXE_URL}>
+        <a className="dl-tile" href={WINDOWS_EXE_URL} onClick={() => trackSiteEvent("installer_download_click", { placement: "download_page", platform: "windows_exe" })}>
           <WindowsIcon width={22} height={22} />
           <span>
             <b>Windows installer (.exe)</b>
             <small>Recommended · installs for your account, no admin rights · about 56 MB</small>
           </span>
         </a>
-        <a className="dl-tile" href={WINDOWS_MSI_URL}>
+        <a className="dl-tile" href={WINDOWS_MSI_URL} onClick={() => trackSiteEvent("installer_download_click", { placement: "download_page", platform: "windows_msi" })}>
           <WindowsIcon width={22} height={22} />
           <span>
             <b>Windows package (.msi)</b>
             <small>For IT: installs for every user · about 87 MB</small>
           </span>
         </a>
-        <a className="dl-tile" href={LINUX_APPIMAGE_URL}>
+        <a className="dl-tile" href={LINUX_APPIMAGE_URL} onClick={() => trackSiteEvent("installer_download_click", { placement: "download_page", platform: "linux_appimage" })}>
           <LinuxIcon width={22} height={22} />
           <span>
             <b>Linux AppImage</b>
             <small>Most x86_64 distributions, no install step · about 161 MB</small>
           </span>
         </a>
-        <a className="dl-tile" href={LINUX_DEB_URL}>
+        <a className="dl-tile" href={LINUX_DEB_URL} onClick={() => trackSiteEvent("installer_download_click", { placement: "download_page", platform: "linux_deb" })}>
           <LinuxIcon width={22} height={22} />
           <span>
             <b>Linux package (.deb)</b>
@@ -329,8 +333,7 @@ export function PrivacyPage() {
 
       <h2>This website</h2>
       <p>
-        walkcast.kunjshah.in is a static page served by Vercel. It sets no cookies and loads no trackers; Vercel keeps standard server logs. Fonts load from Google
-        Fonts.
+        walkcast.kunjshah.in is a static site served by Vercel. It uses Vercel Web Analytics for aggregate page views and basic interaction events, such as demo playback and download clicks. Vercel says its analytics does not use third-party cookies or collect personal identifiers; its temporary hashed visitor identifier is discarded after 24 hours, and reports are aggregated. The desktop app itself has no analytics or telemetry. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel's Web Analytics privacy details</a>. Fonts are served by Google Fonts.
       </p>
 
       <h2>Source</h2>

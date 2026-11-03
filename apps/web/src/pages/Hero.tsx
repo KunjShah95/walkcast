@@ -1,12 +1,29 @@
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowDown, ArrowRight, Check, EyeOff, FileText, Film, Sparkles, Volume2 } from "lucide-react";
-import { type CSSProperties } from "react";
+import { type CSSProperties, useEffect } from "react";
 import { DownloadButton, Reveal } from "../ui.tsx";
 import { VERSION } from "../site.ts";
+import { trackSiteEvent } from "../analytics.ts";
 
 /** The homepage hero makes the product promise first and lets a real walkthrough prove it. */
 export function Hero() {
   const still = useReducedMotion();
+  useEffect(() => {
+    const sections = ["what", "compare", "pricing", "faq"]
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => !!section);
+    if (!("IntersectionObserver" in window)) return;
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || seen.has(entry.target.id)) continue;
+        seen.add(entry.target.id);
+        trackSiteEvent("homepage_section_view", { section: entry.target.id });
+      }
+    }, { threshold: 0.25 });
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
   const enter = (delay = 0) => ({
     initial: still ? false : { opacity: 0, y: 14 },
     animate: { opacity: 1, y: 0 },
@@ -44,8 +61,8 @@ export function Hero() {
               Walkcast visits your website in a real browser and gives you a narrated walkthrough, captions, transcript and step-by-step guide. Paste a link; there is nothing to film.
             </motion.p>
             <motion.div className="landing-actions" {...enter(0.2)}>
-              <DownloadButton big />
-              <a className="landing-watch" href="#demo"><span><ArrowDown size={14} /></span> Watch a real walkthrough</a>
+              <DownloadButton big placement="hero" />
+              <a className="landing-watch" href="#demo" onClick={() => trackSiteEvent("demo_anchor_click", { placement: "hero" })}><span><ArrowDown size={14} /></span> Watch a real walkthrough</a>
             </motion.div>
             <motion.ul className="landing-trust" aria-label="Included with Walkcast" {...enter(0.26)}>
               {trust.map((item, i) => (
@@ -53,7 +70,7 @@ export function Hero() {
               ))}
             </motion.ul>
             <motion.p className="landing-note" {...enter(0.3)}>
-              <span className="landing-note-dot" /> Runs on your computer. Recordings are never uploaded.
+              <span className="landing-note-dot" /> Windows and Linux desktop app. Recordings stay on your computer.
             </motion.p>
           </Reveal>
 
@@ -64,7 +81,15 @@ export function Hero() {
                 <span className="landing-browser-address">agentic-crm-henna.vercel.app</span>
                 <span className="landing-rec"><i /> REAL RECORDING</span>
               </div>
-              <video className="landing-demo" poster="/assets/demo-poster.jpg" controls playsInline preload="metadata">
+              <video
+                className="landing-demo"
+                poster="/assets/demo-poster.jpg"
+                controls
+                playsInline
+                preload="none"
+                onPlay={() => trackSiteEvent("demo_play", { placement: "homepage_hero" })}
+                onEnded={() => trackSiteEvent("demo_complete", { placement: "homepage_hero" })}
+              >
                 <source src="/assets/demo.mp4" type="video/mp4" />
                 <source src="/assets/demo.webm" type="video/webm" />
                 <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="English" default />

@@ -578,7 +578,7 @@ export function Closing() {
             onFocus={() => setHot(true)}
             onBlur={() => setHot(false)}
           >
-            <DownloadButton big />
+            <DownloadButton big placement="homepage_closing" />
           </span>
           <p className="fineprint">Free. Windows and Linux. Version {VERSION}.</p>
           <p className="fineprint">
@@ -608,7 +608,7 @@ export function Footer() {
               A free desktop app that opens your website in a real browser, signs in, walks your pages and records
               the whole visit as a video.
             </p>
-            <DownloadButton />
+            <DownloadButton placement="footer" />
             <span className="ver mono"><a href={RELEASES_URL} target="_blank" rel="noopener">v{VERSION}</a> · Windows 10/11 · x64</span>
           </div>
           <div>

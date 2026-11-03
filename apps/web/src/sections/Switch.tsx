@@ -165,7 +165,7 @@ export function Savings() {
               ))}
             </ul>
             <div className="save-cta">
-              <DownloadButton big label="Download free" />
+              <DownloadButton big label="Download free" placement="pricing" />
               <a className="pill ghost big" href="/pricing">Pricing details</a>
             </div>
           </Reveal>

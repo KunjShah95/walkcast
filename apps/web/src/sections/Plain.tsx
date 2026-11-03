@@ -132,7 +132,7 @@ export function Agents() {
                 </li>
               ))}
             </ul>
-            <DownloadButton label="Download free" />
+            <DownloadButton label="Download free" placement="agent_recorder" />
           </Reveal>
 
           <Reveal className="agent-card dark" delay={0.08}>
