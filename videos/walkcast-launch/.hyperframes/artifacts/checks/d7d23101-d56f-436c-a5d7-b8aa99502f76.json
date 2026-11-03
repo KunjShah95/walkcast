@@ -1,0 +1,1133 @@
+{
+  "ok": false,
+  "strict": false,
+  "browserSkipped": false,
+  "lint": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 21,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"f01hook-bg\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\01-hook.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"f01hook-stage\" data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\01-hook.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"02-pain-bg\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\02-pain.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"02-pain-kicker\" data-start=\"0\" data-track-index=\"2\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\02-pain.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"02-pain-stage\" data-start=\"0\" data-track-index=\"3\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\02-pain.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"ground\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\03-product-intro.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\03-product-intro.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"04-demo-walk-ground\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\04-demo-walk.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"04-demo-walk-kicker\" data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\04-demo-walk.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"04-demo-walk-sub\" data-start=\"0\" data-track-index=\"2\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\04-demo-walk.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"04-demo-walk-stage\" data-start=\"0\" data-track-index=\"3\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\04-demo-walk.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"f05-bg\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"0\" data-track-index=\"2\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"2.3\" data-track-index=\"3\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"3.6\" data-track-index=\"4\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div data-start=\"5.4\" data-track-index=\"5\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\05-demo-output.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"bg-06\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\06-benefits.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"text-stage-06\" data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\06-benefits.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"cta-07-bg\" data-start=\"0\" data-track-index=\"0\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\07-cta.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      },
+      {
+        "code": "studio_missing_editable_id",
+        "severity": "warning",
+        "message": "<div class=\"cta-07-stage\" data-start=\"0\" data-track-index=\"1\"> has no id, so Studio cannot use a stable edit target for its timeline and canvas controls.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "C:\\browser-user\\videos\\walkcast-launch\\compositions\\frames\\07-cta.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0,
+        "fixHint": "Add a stable, human-readable id such as id=\"hero-title\" or id=\"scene-1-card\" to every timeline-visible element you want agents or Studio to edit."
+      }
+    ],
+    "filesScanned": 9
+  },
+  "runtime": {
+    "ok": false,
+    "errorCount": 2,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "console_error",
+        "severity": "error",
+        "message": "[HyperFrames] composition script error: 02-pain TypeError: Cannot read properties of null (reading 'querySelector')",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "31.53",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0,
+        "url": "",
+        "line": 1135
+      },
+      {
+        "code": "console_error",
+        "severity": "error",
+        "message": "[HyperFrames] composition script error: 04-demo-walk SyntaxError: Failed to execute 'querySelector' on 'Element': '.04-demo-walk-kicker' is not a valid selector.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {
+          "data-composition-id": "main",
+          "data-start": "0",
+          "data-duration": "31.53",
+          "data-width": "1920",
+          "data-height": "1080"
+        },
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1080
+        },
+        "time": 0,
+        "url": "",
+        "line": 2319
+      }
+    ]
+  },
+  "layout": {
+    "ok": false,
+    "errorCount": 2,
+    "warningCount": 0,
+    "infoCount": 13,
+    "findings": [
+      {
+        "code": "content_overlap",
+        "severity": "error",
+        "time": 19.268,
+        "selector": "#f05-chip-transcript > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 764.85,
+          "top": 521.05,
+          "right": 917.55,
+          "bottom": 560.05,
+          "width": 152.7,
+          "height": 39
+        },
+        "containerSelector": "#f05-chip-transcript > div:nth-of-type(2) > div:nth-of-type(3)",
+        "text": "Transcript",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 764.85,
+          "y": 521.05,
+          "width": 152.7,
+          "height": 39
+        },
+        "firstSeen": 18.495,
+        "lastSeen": 19.376,
+        "occurrences": 7,
+        "heldMs": 881.0000000000002,
+        "times": [
+          18.495,
+          18.671,
+          18.848,
+          19.024,
+          19.2,
+          19.268,
+          19.376
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "error",
+        "time": 19.268,
+        "selector": "#f05-chip-captions > div:nth-of-type(2) > div:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 1055.84,
+          "top": 521.05,
+          "right": 1189.77,
+          "bottom": 560.05,
+          "width": 133.93,
+          "height": 39
+        },
+        "containerSelector": "#f05-chip-captions > div:nth-of-type(2) > div:nth-of-type(3)",
+        "text": "Captions",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 1055.84,
+          "y": 521.05,
+          "width": 133.93,
+          "height": 39
+        },
+        "firstSeen": 18.671,
+        "lastSeen": 19.376,
+        "occurrences": 6,
+        "heldMs": 705.0000000000018,
+        "times": [
+          18.671,
+          18.848,
+          19.024,
+          19.2,
+          19.268,
+          19.376
+        ]
+      },
+      {
+        "code": "escaped_container",
+        "severity": "info",
+        "time": 22.772,
+        "selector": "#f05-pill-glow",
+        "message": "Positioned element renders far outside its offset parent — its coordinates were likely computed in a different frame (canvas/viewport pixels).",
+        "rect": {
+          "left": 681.31,
+          "top": 631.94,
+          "right": 1238.69,
+          "bottom": 836.84,
+          "width": 557.38,
+          "height": 204.91
+        },
+        "containerSelector": "div.f05-pill-wrap",
+        "text": "",
+        "fixHint": "Compute left/top in the offset parent's frame (subtract its rect), or mark intentional placement with data-layout-allow-overflow.",
+        "containerRect": {
+          "left": 748.5,
+          "top": 699.13,
+          "right": 1171.5,
+          "bottom": 769.66,
+          "width": 423,
+          "height": 70.53
+        },
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 681.31,
+          "y": 631.94,
+          "width": 557.38,
+          "height": 204.91
+        },
+        "firstSeen": 22.772,
+        "lastSeen": 22.772,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          22.772
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(2)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 552.23,
+          "top": 455.52,
+          "right": 623.99,
+          "bottom": 623.52,
+          "width": 71.76,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "n",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 552.23,
+          "y": 455.52,
+          "width": 71.76,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(3)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 623.99,
+          "top": 455.52,
+          "right": 694.65,
+          "bottom": 623.52,
+          "width": 70.66,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "e",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 623.99,
+          "y": 455.52,
+          "width": 70.66,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(5)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 721.15,
+          "top": 455.52,
+          "right": 765.73,
+          "bottom": 623.52,
+          "width": 44.58,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "f",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 721.15,
+          "y": 455.52,
+          "width": 44.58,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(6)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 765.73,
+          "top": 455.52,
+          "right": 790.26,
+          "bottom": 623.52,
+          "width": 24.53,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "i",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 765.73,
+          "y": 455.52,
+          "width": 24.53,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(7)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 790.26,
+          "top": 455.52,
+          "right": 862.02,
+          "bottom": 623.52,
+          "width": 71.76,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "n",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 790.26,
+          "y": 455.52,
+          "width": 71.76,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(8)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 862.02,
+          "top": 455.52,
+          "right": 886.55,
+          "bottom": 623.52,
+          "width": 24.53,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "i",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 862.02,
+          "y": 455.52,
+          "width": 24.53,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(9)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 886.55,
+          "top": 455.52,
+          "right": 953.13,
+          "bottom": 623.52,
+          "width": 66.58,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "s",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 886.55,
+          "y": 455.52,
+          "width": 66.58,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(10)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 953.13,
+          "top": 455.52,
+          "right": 1024.9,
+          "bottom": 623.52,
+          "width": 71.77,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "h",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 953.13,
+          "y": 455.52,
+          "width": 71.77,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(11)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 1024.9,
+          "top": 455.52,
+          "right": 1095.55,
+          "bottom": 623.52,
+          "width": 70.65,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "e",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 1024.9,
+          "y": 455.52,
+          "width": 70.65,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(12)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 1095.55,
+          "top": 455.52,
+          "right": 1170.13,
+          "bottom": 623.52,
+          "width": 74.58,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "d",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 1095.55,
+          "y": 455.52,
+          "width": 74.58,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 23.427,
+        "selector": "#f05-kinetic-line > span:nth-of-type(14)",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 1196.63,
+          "top": 455.52,
+          "right": 1303.45,
+          "bottom": 623.52,
+          "width": 106.82,
+          "height": 168
+        },
+        "containerSelector": "#line1-06",
+        "text": "M",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/05-demo-output.html",
+        "bbox": {
+          "x": 1196.63,
+          "y": 455.52,
+          "width": 106.82,
+          "height": 168
+        },
+        "firstSeen": 23.427,
+        "lastSeen": 23.427,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          23.427
+        ]
+      },
+      {
+        "code": "content_overlap",
+        "severity": "info",
+        "time": 24.836,
+        "selector": "#line1-06",
+        "message": "Two text blocks overlap and may render unreadable.",
+        "rect": {
+          "left": 592.66,
+          "top": 457.51,
+          "right": 1327.34,
+          "bottom": 577.51,
+          "width": 734.68,
+          "height": 120
+        },
+        "containerSelector": "#line2-06",
+        "text": "Free. MIT licensed.",
+        "fixHint": "Give each block its own zone, or put data-layout-allow-overlap on the text or on a container inside the scene. A marker on the scene root does not apply.",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/06-benefits.html",
+        "bbox": {
+          "x": 592.66,
+          "y": 457.51,
+          "width": 734.68,
+          "height": 120
+        },
+        "firstSeen": 24.836,
+        "lastSeen": 24.836,
+        "occurrences": 1,
+        "heldMs": 0,
+        "times": [
+          24.836
+        ]
+      }
+    ],
+    "duration": 31.53,
+    "samples": [
+      1.752,
+      5.255,
+      8.758,
+      12.262,
+      15.765,
+      19.268,
+      22.772,
+      26.275,
+      29.778
+    ],
+    "transitionSamples": [],
+    "transitionSamplesDropped": 0,
+    "tolerance": 2,
+    "totalIssueCount": 15,
+    "truncated": false
+  },
+  "motion": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [],
+    "enabled": false,
+    "samples": 0
+  },
+  "contrast": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": [],
+    "enabled": true,
+    "samples": [
+      1.752,
+      8.758,
+      15.765,
+      22.772,
+      29.778
+    ],
+    "checked": 40,
+    "passed": 40
+  },
+  "craft": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 4,
+    "infoCount": 0,
+    "findings": [
+      {
+        "code": "first_frame_empty",
+        "severity": "warning",
+        "message": "Frame 0 shows only the background, and the first frame is the thumbnail on social players: have the title or key image already on screen at 0 s instead of entering from nothing; see references/review.md.",
+        "selector": "[data-composition-id]",
+        "dataAttributes": {},
+        "sourceFile": "index.html",
+        "bbox": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "time": 0
+      },
+      {
+        "code": "text_below_floor",
+        "severity": "warning",
+        "message": "Type floor is 28 px (2.6% of the 1080 px short side, what a phone can read) and 5 text elements stay under it for 0.5 s or more, the smallest \"the old way\" at 16 px: set reading text to at least 28 px, or put data-layout-ignore on text that is texture rather than reading; see references/look.md.",
+        "text": "the old way",
+        "selector": "span.\\30 2-pain-kicker-text",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/02-pain.html",
+        "bbox": {
+          "x": 14.22,
+          "y": 2,
+          "width": 87.8,
+          "height": 19
+        },
+        "time": 2.243,
+        "times": [
+          2.243,
+          2.243,
+          2.243,
+          2.243,
+          2.243
+        ],
+        "fontPx": 16,
+        "floorPx": 28,
+        "seconds": 4.113,
+        "elements": [
+          {
+            "selector": "span.\\30 2-pain-kicker-text",
+            "text": "the old way",
+            "fontPx": 16,
+            "time": 2.243,
+            "seconds": 4.113
+          },
+          {
+            "selector": "#f02-pain-line1",
+            "text": "Record the screen.",
+            "fontPx": 16,
+            "time": 2.243,
+            "seconds": 4.113
+          },
+          {
+            "selector": "#f02-pain-line2",
+            "text": "Fumble a .",
+            "fontPx": 16,
+            "time": 2.243,
+            "seconds": 4.113
+          },
+          {
+            "selector": "span.\\30 2-pain-word",
+            "text": "click",
+            "fontPx": 16,
+            "time": 2.243,
+            "seconds": 4.113
+          },
+          {
+            "selector": "#f02-pain-line3",
+            "text": "Cut it togetherby hand.",
+            "fontPx": 16,
+            "time": 2.243,
+            "seconds": 4.113
+          }
+        ]
+      },
+      {
+        "code": "text_below_floor",
+        "severity": "warning",
+        "message": "Type floor is 28 px (2.6% of the 1080 px short side, what a phone can read) and 2 text elements stay under it for 0.5 s or more, the smallest \"the walk\" at 16 px: set reading text to at least 28 px, or put data-layout-ignore on text that is texture rather than reading; see references/look.md.",
+        "text": "the walk",
+        "selector": "#el-04-demo-walk > div:nth-of-type(1) > div:nth-of-type(2) > span:nth-of-type(2)",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/04-demo-walk.html",
+        "bbox": {
+          "x": 14.22,
+          "y": 2,
+          "width": 64.01,
+          "height": 19
+        },
+        "time": 11.715,
+        "times": [
+          11.715,
+          11.715
+        ],
+        "fontPx": 16,
+        "floorPx": 28,
+        "seconds": 4.611,
+        "elements": [
+          {
+            "selector": "#el-04-demo-walk > div:nth-of-type(1) > div:nth-of-type(2) > span:nth-of-type(2)",
+            "text": "the walk",
+            "fontPx": 16,
+            "time": 11.715,
+            "seconds": 4.611
+          },
+          {
+            "selector": "#el-04-demo-walk > div:nth-of-type(1) > div:nth-of-type(3)",
+            "text": "Signs in. Clicks through your pages. Narrates every step.",
+            "fontPx": 16,
+            "time": 11.715,
+            "seconds": 4.611
+          }
+        ]
+      },
+      {
+        "code": "line_unread",
+        "severity": "warning",
+        "message": "The film's last line \"walkcast.kunjshah.in\" (3 words) is on screen 1.69 s (±0.01 s), under the 2.00 s a closing line needs: hold it about 0.5 s + 0.3 s a word and at least 2 s before the film ends; see references/motion.md.",
+        "text": "walkcast.kunjshah.in",
+        "selector": "span.cta-07-url",
+        "dataAttributes": {},
+        "sourceFile": "compositions/frames/07-cta.html",
+        "bbox": {
+          "x": 737.81,
+          "y": 760.94,
+          "width": 444.3800000000001,
+          "height": 47.67999999999995
+        },
+        "time": 29.84,
+        "words": 3,
+        "seconds": 1.694,
+        "floorSeconds": 2
+      }
+    ],
+    "enabled": true,
+    "step": 0.125,
+    "samples": 253
+  },
+  "audio": {
+    "ok": true,
+    "errorCount": 0,
+    "warningCount": 0,
+    "infoCount": 0,
+    "findings": []
+  },
+  "hdr": {
+    "autoPromotion": null,
+    "inspection": "available"
+  },
+  "snapshots": {
+    "enabled": false,
+    "files": [],
+    "times": [],
+    "findingFiles": []
+  }
+}

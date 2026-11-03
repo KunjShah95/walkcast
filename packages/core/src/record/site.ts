@@ -511,6 +511,9 @@ async function followJourney(
     }
     if (step.kind === "goto") {
       const url = new URL(step.path, start.origin).toString();
+      // Already there: a journey that opens with the page the recording already started on
+      // should not reload it and spend a page out of the person's limit on nothing.
+      if (normalize(page.url()) === normalize(url)) continue;
       const went = await tools.goto(url).then(
         () => true,
         () => false,
@@ -542,10 +545,12 @@ async function followJourney(
     }
     if (step.kind === "waitFor" || step.kind === "expect") {
       // Waiting is how a journey reaches a page that loads late; expecting is how it says what
-      // the page should show. Neither one ends the walk when it fails: it is said out loud.
+      // the page should show. Neither one ends the walk when it fails: it is said out loud -
+      // once, by the waitForText/expectText trace step itself, so a failure here only updates
+      // progress rather than calling misfire() and narrating the same thing a second time.
       const found = step.kind === "waitFor" ? await tools.waitForText(step.text) : await tools.expectText(step.text);
       if (!found) {
-        await misfire(step.kind, step.text, step.kind === "waitFor" ? `“${step.text}” never appeared` : `The page does not say “${step.text}”`);
+        options.onProgress?.(step.kind === "waitFor" ? `“${step.text}” never appeared` : `The page does not say “${step.text}”`);
       }
       await tools.waitForQuiet(400, 8000);
       await notePage();
@@ -590,13 +595,20 @@ async function followJourney(
   return { done, stopped: null };
 }
 
-/** The control a journey step names, matched the way a person would match it. */
+/**
+ * The control a journey step names, matched the way a person would match it.
+ *
+ * A person names a control by what they read on screen, which is its visible text, not
+ * necessarily its accessible name - a button can read "Tap to Enter" while its aria-label says
+ * something longer for a screen reader. `name` carries the accessible name; `text`, when it
+ * differs, carries what is actually printed on the control. Either one is a fair match.
+ */
 function findControl(obs: Observation, name: string): ObservedElement | undefined {
   const wanted = name.trim().toLowerCase();
-  const byName = (e: ObservedElement) => e.name.trim().toLowerCase();
+  const labels = (e: ObservedElement) => [e.name, e.text].filter((s): s is string => !!s).map((s) => s.trim().toLowerCase());
   return (
-    obs.elements.find((e) => byName(e) === wanted) ??
-    obs.elements.find((e) => byName(e).includes(wanted)) ??
+    obs.elements.find((e) => labels(e).some((l) => l === wanted)) ??
+    obs.elements.find((e) => labels(e).some((l) => l.includes(wanted))) ??
     obs.elements.find((e) => e.selector.toLowerCase().includes(wanted))
   );
 }

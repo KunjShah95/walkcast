@@ -1,0 +1,424 @@
+[a] walkcast
+[a] How it works
+[a] Use cases
+[span] Download
+[span] New in
+[span] 0.8
+[span] A live preview while the recording still runs
+[span] Paste a link. Get a
+[em] video tour
+[span] of your site.
+[span] Nothing to film.
+[p] Every launch needs a walkthrough. Nobody enjoys making it. Walkcast is a free desktop app: a real browser opens your site, signs in and clicks through your pages. You get the visit as an MP4 with captions, a transcript and an optional voice-over.
+[span] Download for Windows
+[a] Watch a real recording
+[li] Free, MIT licensed
+[li] No account needed
+[li] No watermark on the video
+[li] Every seat included
+[p] Installers for
+[a] Windows
+[p] and
+[a] Linux
+[a] All downloads
+[span] agentic-crm-henna.vercel.app
+[span] REC
+[p] Opening agentic-crm-henna.vercel.app.
+[span] Visit log
+[span] click to seek
+[time] 0:00
+[span] Opening agentic-crm-henna.vercel.app.
+[time] 0:10
+[span] Scrolling through "Real Estate CRM for Indian Sales Teams — Estate360".
+[time] 0:16
+[span] Opening the product page.
+[time] 0:21
+[span] Scrolling through "Product — Inventory, Bookings, Site Visits, WhatsApp | Estate360".
+[time] 0:28
+[span] Opening the pricing page.
+[time] 0:33
+[span] Scrolling through "Pricing — Plans from ₹1,499/month | Estate360".
+[time] 0:39
+[span] Opening the contact page.
+[time] 0:44
+[span] Scrolling through "Contact — Talk to the Estate360 Team".
+[time] 0:49
+[span] Opening the login page.
+[time] 0:53
+[span] Scrolling through "Sign in | Estate360".
+[time] 0:57
+[span] Opening the signup page.
+[time] 1:02
+[span] Scrolling through "Start Free — 14-Day Trial | Estate360".
+[time] 1:07
+[span] Recording finished. 6 pages visited.
+[span] walkthrough.mp4
+[span] captions.vtt
+[span] transcript.txt
+[span] 6 pages
+[b] 200 OK
+[span] A real recording · unedited
+[span] Records with
+[li] Chromium
+[li] Playwright
+[li] ffmpeg
+[span] Speaks with
+[li] ElevenLabs
+[li] OpenAI
+[li] Offline voices
+[span] Tests agents built on
+[li] Stagehand
+[li] browser-use
+[li] OpenRouter
+[p] How it works
+[h2] You paste a link and
+[span] it does the walking.
+[p] Walkcast opens your website in a real browser, signs in, clicks through your pages and records the whole visit as a video file you can share.
+[span] The old way
+[p] Write the script, record the screen, retake it, record the voice, sync the captions. Then you ship one update, and it is already out of date.
+[h3] Paste a link
+[p] Give it the address of a site you own or may test, and the sign-in details if the site needs one.
+[h3] It signs in and walks the site
+[p] A real Chromium browser opens the page, signs in like a first-time user, and visits up to 30 pages, scrolling each one. It never submits a form.
+[h3] You get the files
+[p] An MP4 of the whole visit, WebVTT captions, a transcript and the page list with HTTP status. A voice-over too, if you asked for one.
+[span] One recording leaves you with
+[b] walkthrough.mp4
+[small] The whole visit, H.264
+[b] walkthrough.webm
+[small] The same take, VP8
+[b] captions.vtt
+[small] Every step, timed
+[b] transcript.txt
+[small] The narration, plain text
+[b] pages.json
+[small] Every URL and its status
+[b] Not a screen recorder
+[p] A screen recorder films your screen while you drive it. Walkcast drives its own browser, so there is nothing to perform.
+[b] Not a mockup generator
+[p] Every frame is your live site loaded in a real browser, with the content your visitors actually see.
+[b] Not a video editor
+[p] It records one continuous visit and hands it over as it is. There is no timeline to work in.
+[p] By the numbers
+[h2] Fast enough to re-run on every release.
+[span] Strict enough to point at production.
+[small] min
+[p] to record and encode a six-page site on an ordinary laptop
+[small] pages
+[p] walked in one recording, on one site, paced and polite
+[small] passwords
+[p] written to disk. Held in memory for the run, then dropped
+[small] per seat
+[p] for every feature, on every machine, with no trial clock
+[span] Password never on disk
+[span] Stops at CAPTCHA and 2FA
+[span] Never submits a form
+[span] No analytics in the app
+[span] Recordings stay on your PC
+[p] Compared
+[h2] Loom films you.
+[span] Walkcast films your site.
+[p] Screen recorders need someone at the keyboard, a microphone and an edit. Walkcast drives its own browser, so the tour comes out the same every time you re-run it. Here is the honest version, including where the others are better.
+[caption] Walkcast compared with Loom, Screen Studio and Scribe
+[span] Walkcast
+[a] Loom
+[a] Screen Studio
+[a] Scribe
+[th] Price for one person
+[small] MIT, forever
+[b] $18
+[small] per month
+[b] $29
+[small] a month, or $108 a year
+[b] $23
+[small] per month
+[th] Where Walkcast is built for the job
+[th] The whole visit recorded with nobody on camera
+[span] Yes
+[th] Signs in and walks the site on its own
+[span] Yes
+[th] Narration written from what the browser actually did
+[span] Yes
+[th] The video and the written steps from one visit
+[span] Yes
+[span] Partly
+[th] The same take again after every release, in one click
+[span] Yes
+[th] Runs on Windows and Linux
+[span] Yes
+[span] Yes
+[span] Yes
+[th] Free for every seat, with no watermark on the video
+[span] Yes
+[span] Partly
+[span] Partly
+[th] Where the others are better
+[th] Films your face and your own commentary
+[span] Yes
+[span] Yes
+[th] Automatic zoom and cursor smoothing
+[span] Partly
+[span] Yes
+[th] Annotated screenshot guides
+[span] Partly
+[span] Yes
+[th] Hosted share links with comments
+[span] Partly
+[span] Yes
+[span] Yes
+[p] Paid plan for one person, checked 20 October 2026 on each tool's own pricing page. Loom and Scribe also have limited free tiers.
+[span] Partly
+[span] means partly, or only on a paid plan.
+[a] Screen Studio
+[p] Behind the login
+[h2] Records the pages
+[h2] only users see.
+[span] Your password
+[span] never hits disk.
+[p] Walkcast finds the sign-in form, including two-step email-then-password flows, signs in with what you give it, and walks the signed-in site.
+[span] Held in memory only
+[span] Stops at CAPTCHA and 2FA
+[span] Read-only after sign-in
+[span] Same site, respects robots.txt
+[span] Walkcast · Record
+[span] Ready
+[span] Site link
+[b] app.estate360.in/login
+[span] Username
+[b] you@estate360.i
+[span] Password
+[span] I own this site or may test it
+[span] Record
+[div] estate360.in
+[div] Run log
+[span] steps
+[span] password
+[b] [hidden]
+[h3] You confirm the site
+[p] Every recording asks you to say you own the site or may test it. Leave it unticked and there is no recording.
+[h3] A placeholder, not a password
+[p] Traces, captions and files show a placeholder. The narration says a password was entered and never reads it out.
+[h3] No bot-check games
+[p] It never tries to get past a CAPTCHA, bot check or second-factor prompt. It stops and tells you.
+[h3] Looks, never touches
+[p] No form submissions. Sign-out, delete, cancel and unsubscribe links are skipped.
+[p] The app
+[h2] One run,
+[h2] five files.
+[span] Every page visited, with its status.
+[h3] Walks the whole site in one go.
+[p] Visits your site the way a first-time user would, page by page, and records all of it.
+[span] /product
+[span] /pricing
+[span] /contact
+[span] /login
+[span] /signup
+[span] /dashboard
+[span] /leads
+[b] pages per recording
+[small] 8 by default, 30 at most. Same site only. Paced, and robots.txt is respected.
+[h3] Every format. Same take.
+[span] .mp4
+[span] .webm
+[h3] files per run
+[p] MP4, WebM, captions, a transcript and the page list.
+[span] REC
+[h3] The whole visit
+[p] H.264 video with captions on, ready to share.
+[h3] Works with your setup.
+[p] Install on Windows, sign in to the site you test, and press Record. Nothing to configure first.
+[span] Windows 10 / 11
+[span] Chromium
+[span] ffmpeg encoder
+[span] Open source
+[span] Optional account
+[h3] A voice, if you want one
+[p] Pick it before your first recording: your own ElevenLabs or OpenAI key, a basic offline voice, or captions only.
+[span] password
+[span] [hidden]
+[h3] Never saves a password
+[p] Held in memory for the run, then dropped.
+[h3] Pick up any run in the Library.
+[h3] Always know where it is.
+[span] Recording
+[span] Signing in
+[span] Stopped safely
+[span] Done
+[h3] Put the walk on a schedule.
+[p] Every morning, every Monday at nine, or any five-field cron. Each visit lands in the Library, where the what-changed panel can line it up against an earlier visit.
+[b] 09:00
+[h3] Send it into your stack.
+[code] job.completed
+[p] webhook posts to Slack, Zapier or your own server when a walkthrough or Lab run finishes. Deliveries retry, and the app logs every attempt.
+[span] POST /hooks/walkcast
+[b] 200 OK
+[h3] The same visit, as a written guide.
+[p] Every page and every click as numbered steps, each with the picture the recorder took. Read it in the app, send it with a share link, or copy the Markdown into your docs.
+[b] Private by design.
+[small] Recordings, the browser and your passwords stay on your PC. Nothing is uploaded unless you share it.
+[h2] One recorder.
+[span] Six ways to use the same visit.
+[button] Pause animations
+[span] Step 1 of 4
+[h3] Onboarding
+[p] Show new users around before their first login.
+[span] Opening the product page.
+[h3] Product demos
+[p] A full product tour for sales calls, from one link.
+[span] captions.vtt
+[h3] Help articles
+[p] Drop the video and its transcript into a support doc.
+[span] /pricing 200
+[span] /product 200
+[span] /billing 500
+[h3] QA evidence
+[p] A recorded pass over the site, with every status.
+[h3] Client handover
+[p] Walk the client through the site you built, no call.
+[span] v2.4 → v2.5
+[h3] Release notes
+[p] Record what changed after every deploy.
+[span] Step 1 of 4
+[h3] Onboarding
+[p] Show new users around before their first login.
+[span] Opening the product page.
+[h3] Product demos
+[p] A full product tour for sales calls, from one link.
+[span] captions.vtt
+[h3] Help articles
+[p] Drop the video and its transcript into a support doc.
+[span] /pricing 200
+[span] /product 200
+[span] /billing 500
+[h3] QA evidence
+[p] A recorded pass over the site, with every status.
+[h3] Client handover
+[p] Walk the client through the site you built, no call.
+[span] v2.4 → v2.5
+[h3] Release notes
+[p] Record what changed after every deploy.
+[p] Pricing
+[h2] Free to
+[h2] use.
+[span] For the whole team.
+[p] Every feature is in the free download. Walkcast is MIT licensed and runs on your own machine, so there is no server bill to pass on to you and nothing to sign up for.
+[li] Unlimited recordings and seats
+[li] Up to 30 pages per recording
+[li] MP4, WebM, captions, transcript
+[li] Voice-over with your own key, or offline
+[span] Download free
+[a] Pricing details
+[label] What a team of
+[label] people
+[label] pays in a year
+[b] Loom
+[span] $1,080
+[small] Business, $18 per user a month
+[b] Screen Studio
+[span] $540
+[small] Yearly, $108 per person
+[b] Scribe
+[span] $708
+[small] Team, $59 a month for 5, then $12 each
+[b] Walkcast
+[small] Every feature, every seat
+[p] Prices from each tool's pricing page, 20 October 2026. They do different jobs; see the comparison above.
+[p] Also in the app: Walkcast Lab
+[h2] Building a browser
+[h2] AI agent?
+[span] The Lab shows why it
+[span] failed.
+[p] Most people only need the video recorder above. If you build AI agents that use a browser, the same app has a Lab. When an agent fails a task, it shows the cause and the evidence, and turns the failure into a test you can rerun on the next version. It is in the sidebar under Lab.
+[span] The recorder · for everyone
+[h3] A video tour of your site, without a script
+[p] Founders, marketers and PMs paste one link and get the whole visit as an MP4 with captions, a transcript and a voice-over. Pages behind a login are included.
+[span] One link in, one video out. The browser signs in, walks the site and records the visit.
+[span] Records behind a login, so demos and onboarding work.
+[span] The narration is written from what the browser did, so it cannot invent a feature.
+[span] Download free
+[span] The Lab · for AI agent teams
+[h3] A failed agent run, turned into a test
+[p] Teams building browser AI agents use the same recorder to turn a failed run into a classified, reproducible regression test. You get a cause, the evidence behind it, and a fixture that holds.
+[span] A cause, the evidence it points at, and a fixture you can replay.
+[span] Compare a base agent against a candidate over repeated trials.
+[span] A cause the rules cannot explain stays marked ‘unexplained’ instead of being guessed.
+[a] Read the Lab docs
+[p] Both halves read the same evidence: what the browser actually did, not what an agent claimed. No LLM judge scores either, and every cause is traceable to the trace.
+[h2] Before you
+[span] press record.
+[p] Everything you might want to know before your first recording.
+[b] Still have a question?
+[p] Open an issue and we will help you get set up.
+[a] Ask on GitHub
+[span] What is Walkcast?
+[p] Walkcast is a free, open-source desktop app (Windows and Linux) that makes a video tour of your website from one link. A real browser signs in, visits up to 30 pages the way a first-time user would (8 by default) and returns the complete recording as an MP4 with WebVTT captions and a transcript. A voice-over is included when you add a voice key. Every caption comes from what the browser actually did.
+[span] Is Walkcast a screen recorder?
+[span] What is Walkcast Lab?
+[span] Which computers does Walkcast run on?
+[span] How do I make a narrated video walkthrough of my website?
+[span] Can it record pages behind a login?
+[span] Is my password stored?
+[span] Will it change anything on my site?
+[span] What happens with CAPTCHAs or two-factor?
+[span] Does the narration make things up?
+[span] Can Walkcast record my site on a schedule?
+[span] Can it tell another tool when a recording finishes?
+[span] Is Walkcast free?
+[h2] Your site has
+[h2] pages.
+[span] Now it has a
+[span] video tour.
+[span] REC
+[span] 00:00:02
+[b] walkthrough.mp4
+[small] 1:11 · H.264
+[b] captions.vtt
+[small] 13 lines
+[b] transcript.txt
+[small] 6 pages
+[b] narration.wav
+[small] optional voice
+[span] Download for Windows
+[p] Free. Windows and Linux. Version
+[p] 0.8.1
+[p] The installers are not code-signed yet, so Windows may show "Windows protected your PC". That is expected, and the
+[a] download page
+[p] has the steps to get past it.
+[p] Built by
+[a] Kunj Shah
+[p] . If it does not do what you need,
+[a] open an issue
+[p] and tell us what you were trying to do.
+[a] walkcast
+[p] A free desktop app that opens your website in a real browser, signs in, walks your pages and records the whole visit as a video.
+[span] Download for Windows
+[span] · Windows 10/11 · x64
+[a] How it works
+[a] Walkcast Lab
+[a] Use cases
+[a] Pricing details
+[a] All downloads
+[h4] Download
+[a] Windows .exe
+[a] Windows .msi
+[a] Linux .AppImage
+[a] Linux .deb
+[a] All releases
+[a] All guides
+[a] Product demo video
+[a] Website tutorial video
+[a] Loom alternative
+[a] Scribe alternative
+[a] Screen Studio alternative
+[a] vs screen recording
+[a] All questions
+[a] Source on GitHub
+[a] Walkcast Lab
+[a] MIT License
+[span] © 2026 Walkcast. Open source under MIT. Updated
+[time] 22 October 2026
+[a] Download details
+[a] pricing.md
+[a] llms.txt
+[div] walkcast
+[span] walkcast

@@ -1,15 +1,16 @@
-// node frames.mjs video.html out.mp4|--stills t1,t2,... [fps] [from] [to]
+// node render.mjs video.html out.mp4 [fps] [from] [to] [width] [height]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
-const [,, html, out, fpsArg='30', fromArg='0', toArg='88'] = process.argv;
+const [,, html, out, fpsArg='30', fromArg='0', toArg='88', wArg='1920', hArg='1080'] = process.argv;
+const width = +wArg, height = +hArg;
 const b = await chromium.launch();
-const p = await b.newPage({ viewport:{width:1920,height:1080} });
+const p = await b.newPage({ viewport:{width,height} });
 await p.goto('file://'+html); await p.evaluate(()=>document.fonts.ready);
 // warm image cache for the demo frames
 await p.waitForTimeout(500);
 if (out.startsWith('--stills')) {
   const ts = out.split('=')[1].split(',').map(Number);
-  for (const t of ts) { await p.evaluate(t=>window.render(t), t); await p.screenshot({ path: `${process.env.SD}/still-${t}.jpg`, type:'jpeg', quality:85 }); }
+  for (const t of ts) { await p.evaluate(t=>window.render(t), t); await p.screenshot({ path: `${process.env.SD || '.'}/still-${t}.jpg`, type:'jpeg', quality:85 }); }
 } else {
   const fps=+fpsArg, from=+fromArg, to=+toArg;
   const ff = spawn('ffmpeg',['-v','error','-y','-f','image2pipe','-framerate',String(fps),'-c:v','mjpeg','-i','-','-c:v','libx264','-preset','medium','-crf','16','-pix_fmt','yuv420p',out],{stdio:['pipe','inherit','inherit']});

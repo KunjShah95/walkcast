@@ -6,7 +6,7 @@ import { LengthPicker, VoicePicker, hostOf } from "../components/Studio.tsx";
 import { TtsPicker } from "../components/TtsPicker.tsx";
 import { VoiceChooser } from "../components/VoiceChooser.tsx";
 import { Button, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, type JobStatus, JobCancelled, SignInRequired, cancelJob, isSnapshot, loadCapabilities, loadMe, startRecording } from "../lib/api.ts";
+import { type Capabilities, type JobStatus, JobCancelled, SignInRequired, cancelJob, findMyActiveJob, isSnapshot, loadCapabilities, loadMe, resumeRecording, startRecording } from "../lib/api.ts";
 import { ago, cn, formatElapsed } from "../lib/format.ts";
 import { journeyAsPlaywright, parseJourney } from "../../../../../packages/core/src/record/journey.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
@@ -96,21 +96,13 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     void record(p, v, l);
   };
 
-  const record = async (ttsProvider: TtsProvider, ttsVoice: string, ttsLanguage: string) => {
-    if (!target) return;
-    setError(null);
-    const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
-    setAttempts((a) => [attempt, ...a]);
+  /**
+   * What happens once a recording is under way, whether this page just started it or picked it
+   * back up after losing track of it: wait for the directory, and report however it ends.
+   */
+  const follow = async (dirPromise: Promise<string>, attempt: Attempt) => {
     try {
-      const length = maxSeconds > 0 ? { maxSeconds } : {};
-      // A journey, when there is one, replaces the crawl: the recorder follows the path
-      // instead of the site's links.
-      const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
-      // Off is said out loud; on is the recorder's default.
-      const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }) };
-      // The sample site records with the same voice as a real one, so what you hear in the demo is
-      // the voice you picked.
-      const dir = await startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...motion } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path, ...motion }, (s) => setJob(s));
+      const dir = await dirPromise;
       setPassword("");
       setAttempts((a) => a.filter((x) => x !== attempt));
       await refresh();
@@ -132,6 +124,45 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
       void loadCapabilities().then(setCaps);
     }
   };
+
+  const record = async (ttsProvider: TtsProvider, ttsVoice: string, ttsLanguage: string) => {
+    if (!target) return;
+    setError(null);
+    const attempt: Attempt = { url: target, status: "running", message: "Starting", at: Date.now() };
+    setAttempts((a) => [attempt, ...a]);
+    const length = maxSeconds > 0 ? { maxSeconds } : {};
+    // A journey, when there is one, replaces the crawl: the recorder follows the path
+    // instead of the site's links.
+    const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
+    // Off is said out loud; on is the recorder's default.
+    const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }) };
+    // The sample site records with the same voice as a real one, so what you hear in the demo is
+    // the voice you picked.
+    const dir = startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...motion } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path, ...motion }, (s) => setJob(s));
+    await follow(dir, attempt);
+  };
+
+  // A recording keeps going on the server no matter what this page does - the job is queued and
+  // polled by id, not tied to this component staying mounted. But `job` above is plain component
+  // state: leave this view (a route change, not a reload) and come back, and it has forgotten
+  // that id, showing the blank form as if nothing were running even though a recording is still
+  // going. On mount, with no job already tracked, ask the server for this account's own active
+  // recording and pick its polling back up if there is one.
+  useEffect(() => {
+    if (isSnapshot || job) return;
+    let live = true;
+    void findMyActiveJob("record").then((found) => {
+      if (!live || !found) return;
+      setJob(found);
+      const url = typeof found.result?.url === "string" ? found.result.url : target || "";
+      const attempt: Attempt = { url, status: "running", message: "Resuming", at: Date.now() };
+      setAttempts((a) => [attempt, ...a]);
+      void follow(resumeRecording(found.id, (s) => setJob(s)), attempt);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const recent = (index.recordings ?? []).slice(0, 4);
   // The journey, read as the person writes it: the steps, and the lines that could not be read.

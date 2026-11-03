@@ -86,6 +86,60 @@ The keyword and trend research behind this structure, pulled from Google, is in
 [`docs/SEO-KEYWORD-RESEARCH.md`](docs/SEO-KEYWORD-RESEARCH.md); the playbook is
 [`docs/SEO-AEO-GEO-PLAYBOOK.md`](docs/SEO-AEO-GEO-PLAYBOOK.md).
 
+## AI search & citations
+
+Worked example of what crawlers and agents read on `walkcast.kunjshah.in` — the same files are
+generated for every page at build time.
+
+- Page HTML: `<canonical>`, `og:image` with `og:image:alt`, `twitter:image:alt`, `robots`,
+  `<title>`, `<meta name="description">`.
+- JSON-LD `@graph`: `Organization`, `Person` (the author), `WebSite`, `WebPage`,
+  `SoftwareApplication` (named as an entity, with `sameAs` to the repo), `VideoObject`
+  (`contentUrl` → the demo MP4, `transcript` → the caption text), `HowTo`, and `FAQPage` on every
+  page that has questions.
+- `speakable`: the page's first answer paragraph is marked as the passage voice assistants read
+  out.
+- `robots.txt`: allows every real consumer AI crawler (GPTBot, ChatGPT-User, ClaudeBot,
+  PerplexityBot, YouBot, DuckAssistBot, Google-Extended, AnthropicAI, Meta-ExternalAgent, …),
+  none are blocked.
+- Sitemap: `/sitemap.xml` (all pages, demo as a `<video:video>` entry) and
+  `/sitemap-agents.xml` (machine-readable files only, advertised in robots.txt).
+- Machine-readable files: `llms.txt` (short quotable summary), `llms-full.txt` (every FAQ answer),
+  `pricing.md` (the price, parsable by an agent that cannot scrape a rendered page).
+
+Verification:
+
+- `npm run web:build` writes all of the above to `dist/web`; `npm test` asserts the JSON-LD types,
+  the FAQ visibility, the robots allow rules, the sitemap video entry, the `llms.txt` / `llms-full.txt`
+  presence, and that the IndexNow key is served.
+- IndexNow is automated: `npm run web:indexnow` announces changed pages to Bing, Yandex and Naver
+  (with the key served at `https://walkcast.kunjshah.in/4c0c276234846f5ee9ee59b6c145139b.txt`).
+
+Citation baseline (2026-11-03):
+
+- Walkcast is #1 where it asks its own question (`/` for its own name, `/pricing` for its price).
+- It appears on the 2nd–3rd page for comparison queries it is meant to answer
+  (`/compare/loom`, `/compare/screen-studio`, `/compare/scribe`) but not in a search engine's first
+  page, and not in the competitor listicles that dominate them (Cap, Tango, Vibrantsnap, Firecrawl,
+  Stagehand `.dev`).
+- The gap to close is third-party citations: the Geo plan below, not more on-site pages.
+
+GEO citation plan (the largest lever left off-site):
+
+1. GitHub README + topics: add `rel=me` links in the site↔repo relationship, topics
+   `browser-automation`, `web-crawler`, `video-generation`, `ai-agents`, `test-fixtures`.
+2. Dev.to / Hashnode tutorial: "Turn a login-walled website into a narrated video", linked from
+   the guides index.
+3. Product Hunt + HN "Show HN" launch, Reddit `/r/webdev`, `/r/qualityassurance`.
+4. YouTube: hero walkthrough + a 2-minute how-to, linked from the `VideoObject` schema and the
+   sitemap video entry.
+5. G2 / Capterra / TrustRadius profiles even for a free tier, so answer engines cite the site for
+   "best X alternatives" queries.
+6. Awesome lists: `awesome-browser-automation` and `awesome-ai-agents`.
+
+Measurement: Search Console for impressions and clicks on the target queries; monthly manual
+citation checks in ChatGPT, Perplexity and Google AI Overviews (`docs/AI-SEO-AUDIT.md`).
+
 ---
 
 ## Tech stack

@@ -60,9 +60,21 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
           {latestRec ? (
             <Studio recording={latestRec} caps={caps} compact />
           ) : (
-            <Empty title="Your first walkthrough lands here" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none" /></svg>} tone="signal">
-              Paste a link in the bar above. You get the video, a transcript and captions.
-            </Empty>
+            <>
+              <Empty title="Your first walkthrough lands here" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none" /></svg>} tone="signal">
+                Paste a link in the bar above. You get the video, a transcript and captions.
+              </Empty>
+              <section className="border border-line rounded-2xl bg-panel p-1 shadow-card">
+                <div className="px-4 py-3 border-b border-line">
+                  <h2 className="text-[15px] font-semibold">Watch the product walkthrough</h2>
+                  <p className="mt-1 text-[12.5px] text-ink-2">60 seconds — narrated by Kokoro (female voice), with captions.</p>
+                </div>
+                <div className="p-4">
+                  <video src="/walkthrough.mp4" poster="https://walkcast.kunjshah.in/favicon.svg" controls className="w-full h-[420px] rounded-xl bg-black" />
+                  <track kind="captions" src="/walkthrough.vtt" srclang="en" label="Narration" default />
+                </div>
+              </section>
+            </>
           )}
         </section>
 

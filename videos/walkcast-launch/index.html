@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #F3EEE6;
+      }
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="31.53"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div
+        id="el-01-hook"
+        class="scene"
+        data-composition-id="01-hook"
+        data-composition-src="compositions/frames/01-hook.html"
+        data-start="0"
+        data-duration="2.133"
+        data-track-index="0"
+      ></div>
+      <audio
+        id="el-01-hook-voice"
+        src="assets/voice/01.wav"
+        data-start="0"
+        data-duration="2.133"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <div
+        id="el-02-pain"
+        class="scene"
+        data-composition-id="02-pain"
+        data-composition-src="compositions/frames/02-pain.html"
+        data-start="2.133"
+        data-duration="4.319"
+        data-track-index="1"
+      ></div>
+      <audio
+        id="el-02-pain-voice"
+        src="assets/voice/02.wav"
+        data-start="2.133"
+        data-duration="3.819"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <div
+        id="el-03-product-intro"
+        class="scene"
+        data-composition-id="03-product-intro"
+        data-composition-src="compositions/frames/03-product-intro.html"
+        data-start="5.952"
+        data-duration="5.897"
+        data-track-index="0"
+      ></div>
+      <audio
+        id="el-03-product-intro-voice"
+        src="assets/voice/03.wav"
+        data-start="5.952"
+        data-duration="5.397"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <div
+        id="el-04-demo-walk"
+        class="scene"
+        data-composition-id="04-demo-walk"
+        data-composition-src="compositions/frames/04-demo-walk.html"
+        data-start="11.349"
+        data-duration="5.193"
+        data-track-index="1"
+      ></div>
+      <audio
+        id="el-04-demo-walk-voice"
+        src="assets/voice/04.wav"
+        data-start="11.349"
+        data-duration="4.693"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <div
+        id="el-05-demo-output"
+        class="scene"
+        data-composition-id="05-demo-output"
+        data-composition-src="compositions/frames/05-demo-output.html"
+        data-start="16.042"
+        data-duration="7.625"
+        data-track-index="0"
+      ></div>
+      <audio
+        id="el-05-demo-output-voice"
+        src="assets/voice/05.wav"
+        data-start="16.042"
+        data-duration="7.125"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <!--
+        Real demo.mp4 footage, Archetype B (composition-patterns.md): host-root
+        media positioned over the 04/05 sub-comps, motion authored on the MAIN
+        timeline below (a sub-comp timeline cannot reach a host-root element).
+        Explicit z-index (not DOM order) decides stacking against each sub-
+        comp's content: z-index:1 puts the video above a frame's own full-bleed
+        background regardless of DOM order; frame 05's chip/kinetic-text
+        elements carry z-index:2 in their own stylesheet so they stay above
+        the video as it slides out from under them. Two elements, not one
+        continuous clip, because the frame changes shape between the "browser
+        window" (04) and "large centered, then yields left" (05) treatments.
+      -->
+      <video
+        id="demo-video-a"
+        class="clip"
+        src="assets/demo.mp4"
+        poster="assets/demo-poster.jpg"
+        data-start="11.349"
+        data-duration="5.193"
+        data-track-index="30"
+        muted
+        playsinline
+        style="position:absolute; left:784px; top:124px; width:1056px; height:660px; object-fit:cover; border-radius:12px; border:1px solid rgba(30,26,22,0.14); box-shadow:0 1px 3px rgba(30,26,22,0.08), 0 4px 16px rgba(30,26,22,0.08); transform-origin:50% 50%; z-index:1;"
+      ></video>
+      <video
+        id="demo-video-b"
+        class="clip"
+        src="assets/demo.mp4"
+        poster="assets/demo-poster.jpg"
+        data-start="16.042"
+        data-duration="3.55"
+        data-track-index="31"
+        muted
+        playsinline
+        style="position:absolute; left:320px; top:84px; width:1280px; height:720px; object-fit:cover; border-radius:12px; border:1px solid rgba(30,26,22,0.14); box-shadow:0 1px 3px rgba(30,26,22,0.08), 0 4px 16px rgba(30,26,22,0.08); transform-origin:0% 50%; z-index:1;"
+      ></video>
+
+      <div
+        id="el-06-benefits"
+        class="scene"
+        data-composition-id="06-benefits"
+        data-composition-src="compositions/frames/06-benefits.html"
+        data-start="23.167"
+        data-duration="3.264"
+        data-track-index="1"
+      ></div>
+      <audio
+        id="el-06-benefits-voice"
+        src="assets/voice/06.wav"
+        data-start="23.167"
+        data-duration="3.264"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <div
+        id="el-07-cta"
+        class="scene"
+        data-composition-id="07-cta"
+        data-composition-src="compositions/frames/07-cta.html"
+        data-start="26.431"
+        data-duration="5.099"
+        data-track-index="0"
+      ></div>
+      <audio
+        id="el-07-cta-voice"
+        src="assets/voice/07.wav"
+        data-start="26.431"
+        data-duration="5.099"
+        data-track-index="10"
+        data-volume="1"
+      ></audio>
+
+      <!-- captions -->
+      <div
+        id="el-captions"
+        class="scene"
+        data-composition-id="captions"
+        data-composition-src="compositions/captions.html"
+        data-start="0"
+        data-duration="31.53"
+        data-track-index="2"
+        data-track-kind="captions"
+      ></div>
+
+      <!-- SFX -->
+      <audio
+        id="el-sfx-0"
+        src="assets/sfx/impact-bass-1.mp3"
+        data-start="0"
+        data-duration="2.12"
+        data-track-index="20"
+        data-volume="0.35"
+      ></audio>
+      <audio
+        id="el-sfx-1"
+        src="assets/sfx/click-soft.mp3"
+        data-start="2.133"
+        data-duration="0.37"
+        data-track-index="21"
+        data-volume="0.35"
+      ></audio>
+      <audio
+        id="el-sfx-2"
+        src="assets/sfx/pop.mp3"
+        data-start="5.952"
+        data-duration="0.72"
+        data-track-index="22"
+        data-volume="0.35"
+      ></audio>
+      <audio
+        id="el-sfx-3"
+        src="assets/sfx/whoosh.mp3"
+        data-start="11.349"
+        data-duration="0.57"
+        data-track-index="23"
+        data-volume="0.35"
+      ></audio>
+      <audio
+        id="el-sfx-4"
+        src="assets/sfx/impact-bass-2.mp3"
+        data-start="16.042"
+        data-duration="2.59"
+        data-track-index="24"
+        data-volume="0.35"
+      ></audio>
+      <audio
+        id="el-sfx-5"
+        src="assets/sfx/chime.mp3"
+        data-start="26.431"
+        data-duration="2.5"
+        data-track-index="25"
+        data-volume="0.35"
+      ></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+      // ── frame transitions (injected by transitions.mjs) ──
+      (function () { var tl = window.__timelines["main"];
+        tl.to("#el-02-pain", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 5.952);
+        tl.fromTo("#el-03-product-intro", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 5.952);
+        tl.to("#el-03-product-intro", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 11.349);
+        tl.fromTo("#el-04-demo-walk", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 11.349);
+        tl.to("#el-04-demo-walk", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 16.042);
+        tl.fromTo("#el-05-demo-output", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 16.042);
+        tl.to("#el-05-demo-output", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 23.167);
+        tl.fromTo("#el-06-benefits", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 23.167);
+        tl.to({}, { duration: 31.53 }, 0); // full-span anchor — main.duration() == composition total (Studio master duration)
+      })();
+
+      // ── demo.mp4 motion (Archetype B host-media, composition-patterns.md) ──
+      (function () { var tl = window.__timelines["main"];
+        // Video A — the "browser window" over Frame 4: settle in, then one
+        // continuous gentle push-in for the rest of its window, then fade out
+        // in step with the 04→05 crossfade already tweened above.
+        tl.fromTo("#demo-video-a", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 11.349);
+        tl.fromTo("#demo-video-a", { scale: 1 }, { scale: 1.05, duration: 4.693, ease: "power1.inOut", immediateRender: false }, 11.849);
+        tl.to("#demo-video-a", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 16.042);
+
+        // Video B — large and centered over Frame 5 (continuing the handoff),
+        // then yields left (the weight-transfer slide the chips/text fill
+        // behind), then clears before the kinetic text pivot takes the center.
+        tl.fromTo("#demo-video-b", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 16.042);
+        tl.to("#demo-video-b", { x: -260, scale: 0.64, duration: 1.3, ease: "power3.out" }, 17.642);
+        tl.to("#demo-video-b", { opacity: 0, duration: 0.35, ease: "power2.in" }, 19.242);
+      })();
+    </script>
+  </body>
+</html>

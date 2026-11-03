@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>walkcast-launch — storyboard v1</title>
+<style>
+  :root {
+    --ink: #1E1A16; --cream: #F3EEE6; --tile: #FCF2D1; --tile-strong: #F6D776;
+    --accent: #1D5E58; --navy: #151818;
+    --sans: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0f0e0c; color: var(--cream); font-family: var(--sans); padding: 40px; }
+  header { max-width: 1200px; margin: 0 auto 32px; }
+  header h1 { font-size: 28px; margin: 0 0 6px; }
+  header .dek { color: #b8b2a6; font-size: 15px; margin: 0 0 10px; }
+  header .tag { display: inline-flex; gap: 14px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; color: var(--tile-strong); background: #1c1a16; border: 1px solid #332e26; border-radius: 999px; padding: 6px 14px; }
+  .grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .cell { container-type: inline-size; aspect-ratio: 16/9; background: var(--cream); color: var(--ink); border-radius: 10px; overflow: hidden; position: relative; border: 1px solid #000; }
+  .cell.navy { background: var(--navy); color: var(--cream); }
+  .frame-inner { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: 6cqw; gap: 1.2cqw; }
+  .kicker { font-family: var(--mono); font-size: 2.6cqw; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  .cell.navy .kicker { color: var(--tile-strong); }
+  .headline { font-size: 6.5cqw; line-height: 1.05; font-weight: 400; max-width: 90%; }
+  .sub { font-size: 2.4cqw; color: #5a534a; max-width: 85%; }
+  .cell.navy .sub { color: #a9a39a; }
+  .chip { position: absolute; bottom: 5cqw; left: 6cqw; font-family: var(--mono); font-size: 1.9cqw; background: var(--accent); color: var(--cream); padding: 0.6cqw 1.6cqw; border-radius: 999px; }
+  .devicebox { position: absolute; right: 5cqw; top: 50%; transform: translateY(-50%); width: 38cqw; aspect-ratio: 16/10; background: var(--navy); border-radius: 8px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; }
+  .devicebox span { font-family: var(--mono); font-size: 1.7cqw; color: var(--tile-strong); }
+  .label-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #141210; font-family: var(--mono); font-size: 12px; color: #c9c2b5; }
+  .note { max-width: 1200px; margin: 6px auto 0; font-size: 13px; color: #9b948a; padding: 0 2px; }
+  .seam-map { grid-column: span 3; background: #16140f; border: 1px solid #2c2820; border-radius: 10px; padding: 24px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--tile-strong); }
+  .seam-map .hop { display: flex; align-items: center; gap: 8px; }
+  .seam-map .arrow { color: #5a534a; }
+  .tokens-cell { grid-column: span 3; background: #16140f; border: 1px solid #2c2820; border-radius: 10px; padding: 24px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .swatch { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; color: #c9c2b5; }
+  .swatch .sq { width: 22px; height: 22px; border-radius: 4px; border: 1px solid #000; }
+  .tokens-cell .type-roles { font-family: var(--sans); font-size: 13px; color: #c9c2b5; }
+  .tokens-cell .bans { font-family: var(--sans); font-size: 13px; color: #c9c2b5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>walkcast-launch — storyboard <span style="color:#7a736a;">v1</span></h1>
+  <p class="dek">Paste a link. Get a narrated video walkthrough of your site — free, no filming, nothing to edit.</p>
+  <span class="tag">1920×1080 · ~46s · 7 beats · code-editorial</span>
+</header>
+
+<div class="grid">
+
+  <!-- Frame 1 — Hook -->
+  <div>
+    <div class="cell" id="frame-01">
+      <div class="frame-inner">
+        <div class="headline">Still filming your own<br/>demo video?</div>
+        <div class="chip">cut →</div>
+      </div>
+    </div>
+    <div class="label-row"><span>01 · HOOK</span><span>0.0–4.0s</span></div>
+    <p class="note"><b>Type punches in word by word, no entrance delay.</b> Bare cream canvas, no product, no logo yet. Seam: hard cut, leftward.</p>
+  </div>
+
+  <!-- Frame 2 — Pain -->
+  <div>
+    <div class="cell navy" id="frame-02">
+      <div class="frame-inner">
+        <div class="kicker">✱ the old way</div>
+        <div class="headline" style="font-size:5cqw;">Record the screen.<br/>Fumble a click.<br/>Cut it by hand.</div>
+      </div>
+    </div>
+    <div class="label-row"><span>02 · PAIN</span><span>4.0–9.0s</span></div>
+    <p class="note"><b>Each line lands solo, clears before the next.</b> Navy surface — the dark "old way" register. Seam: crossfade, leftward.</p>
+  </div>
+
+  <!-- Frame 3 — Product intro -->
+  <div>
+    <div class="cell" id="frame-03">
+      <div class="frame-inner" style="align-items:center; text-align:center; width:100%;">
+        <div class="kicker">✱ introducing</div>
+        <div class="headline" style="font-size:7cqw;">Walkcast</div>
+        <div class="sub">paste a link — a real browser does the walk</div>
+      </div>
+    </div>
+    <div class="label-row"><span>03 · PRODUCT INTRO</span><span>9.0–14.0s</span></div>
+    <p class="note"><b>Relief beat — back to cream, brighter.</b> The brand name is the hero prop that returns at the CTA. Seam: crossfade, leftward.</p>
+  </div>
+
+  <!-- Frame 4 — Demo: the walk -->
+  <div>
+    <div class="cell" id="frame-04">
+      <div class="frame-inner">
+        <div class="kicker">✱ the walk</div>
+        <div class="sub" style="font-size:2.6cqw; max-width:45%;">Signs in. Clicks through your pages. Narrates every step.</div>
+      </div>
+      <div class="devicebox"><span>demo.mp4</span></div>
+    </div>
+    <div class="label-row"><span>04 · DEMO: THE WALK</span><span>14.0–24.0s</span></div>
+    <p class="note"><b>Real captured footage, not a recreation.</b> demo.mp4 plays inside a browser-device frame, cursorless. No fake UI. Seam: crossfade, leftward.</p>
+  </div>
+
+  <!-- Frame 5 — Demo: the output -->
+  <div>
+    <div class="cell" id="frame-05">
+      <div class="frame-inner">
+        <div class="devicebox" style="right:auto; left:5cqw; width:30cqw;"><span>demo.mp4</span></div>
+        <div class="headline" style="position:absolute; right:5cqw; top:50%; transform:translateY(-50%); font-size:3.6cqw; text-align:right; max-width:36%;">Captions.<br/>Transcript.<br/>Voice-over.</div>
+      </div>
+      <div class="chip" style="right:5cqw; left:auto;">no editing · no watermark</div>
+    </div>
+    <div class="label-row"><span>05 · DEMO: THE OUTPUT</span><span>24.0–33.0s</span></div>
+    <p class="note"><b>Clip slides aside, hands off to the artifact list.</b> Each item lands on its own word cue. Seam: crossfade, leftward.</p>
+  </div>
+
+  <!-- Frame 6 — Benefits -->
+  <div>
+    <div class="cell navy" id="frame-06">
+      <div class="frame-inner" style="align-items:center; text-align:center; width:100%;">
+        <div class="headline" style="font-size:5.2cqw;">Free. MIT licensed.<br/>Every seat included.</div>
+      </div>
+    </div>
+    <div class="label-row"><span>06 · BENEFITS</span><span>33.0–39.0s</span></div>
+    <p class="note"><b>Held frame — nothing moves.</b> The one deliberate quiet beat after five fast cuts. Seam: crossfade, leftward.</p>
+  </div>
+
+  <!-- Frame 7 — CTA -->
+  <div>
+    <div class="cell" id="frame-07">
+      <div class="frame-inner" style="align-items:center; text-align:center; width:100%;">
+        <div class="headline" style="font-size:6cqw;">Walkcast</div>
+        <div class="sub">Free for Windows and Linux</div>
+        <div class="chip" style="position:static; margin-top:1cqw;">walkcast.kunjshah.in</div>
+      </div>
+    </div>
+    <div class="label-row"><span>07 · CTA</span><span>39.0–46.0s</span></div>
+    <p class="note"><b>Brand name returns (callback to frame 3), holds with URL.</b> Calm end-card, no further motion. Terminal frame.</p>
+  </div>
+
+  <!-- Seam map -->
+  <div class="seam-map">
+    <div class="hop">01 hook</div><div class="arrow">— cut →</div>
+    <div class="hop">02 pain</div><div class="arrow">— crossfade →</div>
+    <div class="hop">03 intro</div><div class="arrow">— crossfade →</div>
+    <div class="hop">04 demo/walk</div><div class="arrow">— crossfade →</div>
+    <div class="hop">05 demo/output</div><div class="arrow">— crossfade →</div>
+    <div class="hop">06 benefits</div><div class="arrow">— crossfade →</div>
+    <div class="hop">07 cta</div>
+    <span style="margin-left:auto; color:#7a736a;">one direction rule: every seam moves leftward</span>
+  </div>
+
+  <!-- Tokens -->
+  <div class="tokens-cell">
+    <div>
+      <div class="swatch"><span class="sq" style="background:#1E1A16;"></span>ink #1E1A16</div>
+      <div class="swatch"><span class="sq" style="background:#F3EEE6;"></span>cream #F3EEE6</div>
+      <div class="swatch"><span class="sq" style="background:#F6D776;"></span>tile-strong #F6D776</div>
+      <div class="swatch"><span class="sq" style="background:#1D5E58;"></span>accent (voltage) #1D5E58</div>
+      <div class="swatch"><span class="sq" style="background:#151818;"></span>navy #151818</div>
+    </div>
+    <div class="type-roles">
+      <b>Type</b><br/>
+      display: Bricolage Grotesque, sentence case<br/>
+      body: Bricolage Grotesque<br/>
+      mono/kicker: JetBrains Mono, uppercase
+    </div>
+    <div class="bans">
+      <b>Bans</b><br/>
+      no glow · no fake product UI (real demo.mp4 only) ·<br/>
+      no static slideshow cards · no two corals in one frame
+    </div>
+    <div class="bans">
+      <b>Held frame</b><br/>
+      Frame 6 (Benefits) — the one beat on purpose where nothing moves.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+[
+  {
+    "index": 0,
+    "url": "https://walkcast.kunjshah.in/assets/demo.mp4",
+    "filename": "demo.mp4",
+    "width": 823,
+    "height": 492,
+    "sourceWidth": 1280,
+    "sourceHeight": 800,
+    "heading": "Paste a link. Get a video tour of your site. Nothing to film.",
+    "caption": "Opening the signup page.",
+    "ariaLabel": "",
+    "preview": "assets/videos/previews/video-0-preview.png",
+    "localPath": "assets/videos/demo.mp4"
+  }
+]

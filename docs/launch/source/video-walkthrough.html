@@ -1,0 +1,205 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{--ink:#1b1a17;--ink2:#4c4841;--muted:#6b665d;--dim:#8a847a;--line:#e7e3db;--panel:#f5f4f1;--panel3:#eae8e3;--signal:#9c5700;--signal2:#874b00;--soft:#f4e7d2;--rec:#c0321c;--night:#12110f;--e:cubic-bezier(.16,1,.3,1)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
+body{font-family:'Schibsted Grotesk';color:var(--ink)}
+#stage{position:absolute;inset:0;overflow:hidden}
+.scene{position:absolute;inset:0;display:none}
+.dark{background:#12110f;color:#f3efe8}
+.light{background:#fff}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.a{animation-duration:.8s;animation-timing-function:var(--e);animation-fill-mode:both;animation-play-state:paused}
+.rise{animation-name:rise}@keyframes rise{from{opacity:0;transform:translateY(60px)}to{opacity:1;transform:none}}
+.fade{animation-name:fade}@keyframes fade{from{opacity:0}to{opacity:1}}
+.slam{animation-name:slam;animation-duration:.45s}@keyframes slam{from{opacity:0;transform:scale(1.9)}to{opacity:1;transform:scale(1)}}
+.left-in{animation-name:leftin}@keyframes leftin{from{opacity:0;transform:translateX(-120px)}to{opacity:1;transform:none}}
+.right-in{animation-name:rightin}@keyframes rightin{from{opacity:0;transform:translateX(120px)}to{opacity:1;transform:none}}
+.win{background:#fff;border-radius:24px;box-shadow:0 40px 80px -30px rgba(0,0,0,.35);overflow:hidden;border:1px solid var(--line)}
+.dark .win{background:#24221e;border-color:#3a3731}
+.chrome{display:flex;gap:10px;padding:10px 14px;background:var(--panel3);border-bottom:1px solid var(--line)}
+.dark .chrome{background:#1c1a17;border-color:#3a3731}
+.chrome b{width:12px;height:12px;border-radius:6px;background:var(--line)}
+.chrome b:nth-child(2){background:#ff5f56}.chrome b:nth-child(3){background:#ffbd2e}.chrome b:nth-child(4){background:#27c93f}
+.url{font:500 15px 'JetBrains Mono';color:var(--muted);margin-left:auto}
+.shot{width:100%;height:420px;background:#000}
+.timer{display:flex;flex-direction:column;align-items:center;gap:4px}
+.k{font:500 14px 'JetBrains Mono';color:var(--dim)}
+.v{font:700 34px 'JetBrains Mono';letter-spacing:-.04em;color:var(--ink)}
+.num{width:64px;height:64px;border-radius:50%;background:var(--signal);color:#fff;display:grid;place-items:center;font:700 28px 'JetBrains Mono'}
+.word{font:700 40px 'Schibsted Grotesk';color:var(--ink2)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;text-align:left}
+.dark .card{background:#24221e;border-color:#3a3731;color:#d9d3c8}
+.file{width:280px;height:300px;border-radius:20px;background:#fff;display:flex;flex-direction:column;justify-content:space-between;padding:24px}
+.dark .file{background:#24221e;border:1px solid var(--line)}
+.file .ic{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;font:700 18px 'JetBrains Mono';background:var(--signal2);color:#fff}
+.file .nm{font:600 20px 'JetBrains Mono';color:var(--ink)}
+.file .ds{font-size:17px;color:var(--muted);margin-top:4px}
+.h-m{font-size:76px;font-weight:800;letter-spacing:-.045em;line-height:1.04}
+.h-l{font-size:112px;font-weight:800;letter-spacing:-.05em;line-height:1}
+.label{font:600 22px 'JetBrains Mono';letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
+.dark .label{color:#9a9286}
+.dimtxt{color:var(--dim)} .dark .dimtxt{color:#7d766b}
+.o{color:#e0962e}
+.steps{display:grid;gap:16px}
+.step{display:flex;gap:18px;align-items:flex-start;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:16px}
+<!-- S1 · cold open -->
+<section class="scene dark" data-s="0" data-e="5"><div class="center">
+  <div class="label a fade" data-d=".4">Walkcast desktop app</div>
+  <div class="h-l a rise" data-d=".9" style="margin-top:30px">One URL.<span class="o"> A narrated video.</span></div>
+  <div class="a fade" data-d="2.2" style="margin-top:46px;font-size:30px;color:#9a9286">Free. MIT licensed. No account. No watermark.</div>
+</div></section>
+
+<!-- S2 · open the app -->
+<section class="scene dark" data-s="5" data-e="10"><div class="timer"><div class="k">TIME SPENT</div><div class="v" id="timer">00:00:00</div></div>
+  <div class="center sub" data-s="5" data-e="7"><div class="num">01</div><div class="word a slam" data-d="5">Open the app.</div><div class="a fade" data-d="5.6" style="margin-top:34px;font:500 30px 'JetBrains Mono';color:#7d766b">Tauri shell · local Node server · your data stays on your machine</div></div>
+  <div class="center sub" data-s="7" data-e="10"><div class="num">02</div><div class="word a slam" data-d="7">Paste your link.</div></div>
+</section>
+
+<!-- S3 · recording -->
+<section class="scene light" data-s="10" data-e="17"><div class="center">
+    <div class="win" style="width:1260px;position:relative">
+      <div class="chrome"><b></b><b></b><b></b><div class="url">example.com/dashboard</div></div>
+      <div class="shot" id="rec-shot"></div>
+      <div style="position:absolute;right:-60px;top:120px;background:#fff;border-radius:16px;padding:16px 22px;box-shadow:0 30px 60px -20px rgba(0,0,0,.4);display:flex;gap:14px;align-items:center;text-align:left;color:var(--ink)">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--rec);color:#fff;display:flex;align-items:center;justify-content:center;font:700 20px 'JetBrains Mono'">●</div>
+        <div><div style="font:700 22px 'Schibsted Grotesk'">Recording…</div><div style="font:500 16px 'JetBrains Mono';color:var(--muted)">real browser · real state</div></div>
+      </div>
+    </div>
+    <div class="h-m a rise" data-d="12.2" style="margin-top:56px;font-size:60px">Signs in. Follows links. Scrolls every page.</div>
+  </div></section>
+
+.dark .step{background:#24221e;border-color:#3a3731}
+.step .n{width:34px;height:34px;border-radius:50%;background:var(--signal);color:#fff;display:grid;place-items:center;font:700 15px 'JetBrains Mono';flex:none}
+.step .b{font:16px 'Schibsted Grotesk';color:var(--ink2)}
+.end-card{display:flex;flex-direction:column;align-items:center;gap:24px;text-align:center}
+.brand-mark{width:56px;height:56px;border-radius:16px;background:var(--signal2);display:grid;place-items:center}
+.voice-pick{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.voice-opt{display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 26px;border-radius:18px;border:1px solid var(--line);background:var(--panel);min-width:150px}
+.dark .voice-opt{background:#24221e;border-color:#3a3731;color:#d9d3c8}
+.voice-opt .ic{width:44px;height:44px;border-radius:12px;background:var(--signal2);color:#fff;display:grid;place-items:center;font:700 16px 'JetBrains Mono'}
+.voice-opt.on{border-color:var(--signal);background:var(--soft)}
+</style></head><body><div id="stage">
+<!-- S4 · output -->
+<section class="scene dark" data-s="17" data-e="25"><div class="center">
+    <div class="label a fade" data-d="17.1">What you get back</div>
+    <div style="display:flex;gap:26px;margin-top:56px;justify-content:center">
+      <div class="file" style="width:300px">
+        <div class="ic">MP4</div><div class="nm">walkthrough.mp4</div><div class="ds">Narrated video · captions · chapters</div>
+      </div>
+      <div class="file" style="width:300px">
+        <div class="ic">VTT</div><div class="nm">captions.vtt</div><div class="ds">WebVTT subtitles for upload</div>
+      </div>
+      <div class="file" style="width:300px">
+        <div class="ic">TXT</div><div class="nm">transcript.txt</div><div class="ds">Plain-text transcript</div>
+      </div>
+    </div>
+    <div class="h-m a rise" data-d="18.4" style="margin-top:56px;font-size:60px">One link in. A finished video out.</div>
+  </div></section>
+
+<!-- S5 · studio -->
+<section class="scene light" data-s="25" data-e="33"><div class="center">
+    <div class="label a fade" data-d="25.1">The studio</div>
+    <div class="win" style="width:1340px;position:relative;margin-top:40px">
+      <div class="chrome"><b></b><b></b><b></b><div class="url">localhost:8787/app#library</div></div>
+      <div class="shot" id="studio-shot" style="height:500px;background:#000"></div>
+    </div>
+    <div class="steps" style="margin-top:44px;max-width:1100px">
+      <div class="step"><div class="n">1</div><div class="b">Watch the walkthrough video with captions and chapters</div></div>
+      <div class="step"><div class="n">2</div><div class="b">Read the full transcript, search any moment</div></div>
+      <div class="step"><div class="n">3</div><div class="b">See every page visited with HTTP status</div></div>
+      <div class="step"><div class="n">4</div><div class="b">Share one link — nothing leaves your machine</div></div>
+    </div>
+  </div></section>
+
+<!-- S6 · lab -->
+<section class="scene dark" data-s="33" data-e="42"><div class="center">
+    <div class="label a fade" data-d="33.1">Walkcast Lab — for browser agents</div>
+    <div style="display:flex;gap:26px;margin-top:56px;justify-content:center">
+      <div class="card" style="width:340px">
+        <div style="font:700 20px 'Schibsted Grotesk';margin-bottom:10px">Failed run</div>
+        <div style="font:15px 'JetBrains Mono';color:var(--muted);margin-bottom:14px">Agent said done. The app disagreed.</div>
+      </div>
+      <div class="card" style="width:340px">
+        <div style="font:700 20px 'Schibsted Grotesk';margin-bottom:10px">Replay fixture</div>
+        <div style="font:15px 'JetBrains Mono';color:var(--muted);margin-bottom:14px">Cause + evidence → frozen test</div>
+      </div>
+      <div class="card" style="width:340px">
+        <div style="font:700 20px 'Schibsted Grotesk';margin-bottom:10px">Regressions caught</div>
+        <div style="font:15px 'JetBrains Mono';color:var(--muted);margin-bottom:14px">Did the next version fix it?</div>
+      </div>
+    </div>
+    <div class="h-m a rise" data-d="34.2" style="margin-top:56px;font-size:60px">Same recorder. Second job.</div>
+  </div></section>
+
+<!-- S7 · voice -->
+<section class="scene light" data-s="42" data-e="49"><div class="center">
+    <div class="label a fade" data-d="42.1">Choose your voice</div>
+    <div class="voice-pick" style="margin-top:44px">
+      <div class="voice-opt on"><div class="ic">K</div><div style="font:600 17px 'Schibsted Grotesk'">Kokoro</div><div style="font:14px 'JetBrains Mono';color:var(--dim)">Free · offline · natural</div></div>
+      <div class="voice-opt"><div class="ic">E</div><div style="font:600 17px 'Schibsted Grotesk'">ElevenLabs</div><div style="font:14px 'JetBrains Mono';color:var(--dim)">Your API key</div></div>
+      <div class="voice-opt"><div class="ic">O</div><div style="font:600 17px 'Schibsted Grotesk'">OpenAI</div><div style="font:14px 'JetBrains Mono';color:var(--dim)">Your API key</div></div>
+    </div>
+    <div class="h-m a rise" data-d="43.2" style="margin-top:56px;font-size:60px">Narration that sounds like a person.</div>
+  </div></section>
+</div>
+<div id="vig"></div><div id="grain"></div><div id="flash"></div><div id="bar"></div>
+<!-- S8 · end card -->
+<section class="scene dark" data-s="49" data-e="60"><div class="end-card">
+    <div class="brand-mark"><svg width="28" height="28" viewBox="0 0 26 26" aria-hidden="true"><rect x=".5" y=".5" width="25" height="25" rx="7.5" fill="#874b00"/><path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff"/><circle cx="20.4" cy="5.6" r="2.6" fill="#c0321c" stroke="#ffffff" stroke-width="1.2"/></svg></div>
+    <div class="h-m a rise" data-d="49.4" style="font-size:64px">Show what actually happened.</div>
+    <div class="a fade" data-d="50.6" style="font-size:28px;color:#9a9286">Walkcast · Free and open source</div>
+    <div class="a rise" data-d="52" style="display:flex;align-items:center;gap:16px;font:600 34px 'JetBrains Mono';letter-spacing:-.01em;color:#fff;background:var(--ink);padding:20px 36px;border-radius:999px;box-shadow:0 30px 60px -25px rgba(27,26,23,.6)"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#e0962e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>walkcast.kunjshah.in<span style="color:#e0962e">→</span></div>
+  </div></section>
+
+</div>
+<div id="vig"></div><div id="grain"></div><div id="flash"></div><div id="bar"></div>
+
+<script>
+const MARK=id=>`<svg viewBox="0 0 64 64"><defs><linearGradient id="G${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c5700"/><stop offset="1" stop-color="#7a4100"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#G${id})"/></svg>`;
+document.querySelectorAll('.a').forEach(el=>{
+  el.style.animationDelay=(+el.dataset.d||0)+'s';
+  if(el.dataset.dur) el.style.animationDuration=el.dataset.dur+'s';
+});
+const scenes=[...document.querySelectorAll('.scene,.sub')];
+const CUTS=[5,7,10,17,25,33,42,49];
+const BIG=new Set([17,33,49]);
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>1-Math.pow(1-x,3);
+const $=id=>document.getElementById(id);
+
+async function render(t){
+  for(const s of scenes){ s.style.display=(t>=+s.dataset.s && t<+s.dataset.e)?(s.classList.contains('sub')?'flex':'block'):'none'; }
+  for(const a of document.getAnimations()){ a.currentTime=t*1000; }
+  let flash=0,punch=0,shake=0;
+  for(const c of CUTS){ const d=t-c; if(d>=0&&d<.35){ const big=BIG.has(c);
+      flash=Math.max(flash,(big?.85:.35)*(1-d/(big?.3:.12)));
+      punch=Math.max(punch,(big?.06:.03)*(1-ease(d/.35)));
+      shake=Math.max(shake,(big?14:6)*(1-d/.2)); } }
+  $('flash').style.opacity=clamp(flash);
+  const vis=scenes.find(s=>s.classList.contains('scene')&&s.style.display!=='none'); $('vig').style.opacity=vis&&vis.classList.contains('light')?.12:1;
+  const sx=shake>0?Math.sin(t*173)*shake:0, sy=shake>0?Math.cos(t*131)*shake*.6:0;
+  $('stage').style.transform=`translate(${sx}px,${sy}px) scale(${1+punch})`;
+  $('grain').style.transform=`translate(${(t*997%100)-50}px,${(t*613%100)-50}px)`;
+  const shot=$('rec-shot');
+  if(shot && t>=10 && t<17){
+    const seg=Math.floor((t-10)/2.33)%3;
+    const fr=Math.floor(((t-10)%2.33)/2.33*120);
+    shot.style.backgroundImage=`url(frames/${['a','b','c'][seg]}/${String(fr%120+1).padStart(3,'0')}.jpg)`;
+    shot.style.backgroundSize='cover';
+    shot.style.backgroundPosition='center';
+  }
+  const sshot=$('studio-shot');
+  if(sshot && t>=25 && t<33){
+    const seg=Math.floor((t-25)/2.66)%3;
+    const fr=Math.floor(((t-25)%2.66)/2.66*120);
+    sshot.style.backgroundImage=`url(frames/${['a','b','c'][seg]}/${String(fr%120+1).padStart(3,'0')}.jpg)`;
+    sshot.style.backgroundSize='cover';
+    sshot.style.backgroundPosition='center';
+  }
+}
+</script>
+</body></html>
+

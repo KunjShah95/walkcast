@@ -1,0 +1,46 @@
+WEBVTT
+
+1
+00:00:00.500 --> 00:00:05.453
+This is Walkcast. A free desktop app that turns one URL into a narrated walkthrough video.
+
+2
+00:00:05.800 --> 00:00:08.203
+Open the app. Paste your link. Press record.
+
+3
+00:00:09.200 --> 00:00:12.900
+A real browser walks your site - signs in, follows links, scrolls each page.
+
+4
+00:00:13.200 --> 00:00:17.138
+You get the whole visit as an MP4, with captions, chapters and a transcript.
+
+5
+00:00:17.500 --> 00:00:22.413
+Every line of narration comes from what actually happened - real browser, real state, real evidence.
+
+6
+00:00:21.800 --> 00:00:26.365
+When a page changes, you don't re-film anything. Paste the link again and Walkcast re-records.
+
+7
+00:00:26.200 --> 00:00:30.434
+The studio shows your video, transcript and page list side by side - share one link.
+
+8
+00:00:30.800 --> 00:00:35.897
+And when your browser agents fail, Walkcast Lab turns the failed run into a replayable regression test.
+
+9
+00:00:35.800 --> 00:00:40.454
+Capture the failure, classify the cause, freeze it, replay it - and know if the next version fixed it.
+
+10
+00:00:40.800 --> 00:00:46.033
+Pick your voice in settings - Kokoro is free and offline, or bring your own ElevenLabs or OpenAI key.
+
+11
+00:00:45.800 --> 00:00:52.451
+One URL. A finished video. Walkcast. Show what actually happened. Free and open source, at walkcast.kunjshah.in.
+

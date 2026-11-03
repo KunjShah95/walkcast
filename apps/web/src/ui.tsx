@@ -1,7 +1,68 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Check, Download, type LucideIcon } from "lucide-react";
+import { Check, Download, EyeOff, Film, Captions, FileText, Globe, Play, type LucideIcon } from "lucide-react";
 import { type ComponentProps, type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { LINUX_APPIMAGE_URL, WINDOWS_EXE_URL } from "./site.ts";
+
+export function iconsOf(icons: LucideIcon[]) {
+  return icons.map((I) => <I key={I === Check ? "check" : I === Download ? "download" : I === EyeOff ? "eye-off" : I === Film ? "film" : I === Captions ? "captions" : I === FileText ? "file-text" : I === Globe ? "globe" : I === Play ? "play" : null} />);
+}
+
+/** The hero: a dark theatre card on a warm paper ground. Single focal, one CTA in the copy, one CTA in the button. */
+
+export function HeroBlock({ className = "" }: { className?: string }) {
+  return (
+    <section className={`hero-block ${className ?? ""}`} aria-label="Walkcast hero">
+      <div className="hero-block-media">
+        <div className="hero-block-stage">
+          <div className="hero-block-card">
+            <div className="hero-block-bar">
+              <span className="hero-block-lights" aria-hidden="true"><i /><i /><i /></span>
+              <span className="hero-block-url mono">agentic-crm-henna.vercel.app</span>
+              <span className="hero-block-live">REC</span>
+            </div>
+            <div className="hero-block-screen">
+              <div className="hero-block-poster" />
+              <div className="hero-block-cap">A real browser signs in, walks the pages and narrates what it did.</div>
+              <button className="hero-block-play" aria-label="Play the recording"><Play size={14} /></button>
+            </div>
+            <div className="hero-block-side">
+              <div className="hero-block-side-head">
+                <span className="hero-block-title">Visit log</span>
+                <span className="mono">click to seek</span>
+              </div>
+              <ol className="hero-block-cues">
+                <li><button aria-current="true"><time>0:11</time><span>A real browser signs in, walks the pages and narrates what it did.</span></button></li>
+                <li><button aria-current="false"><time>0:23</time><span>It signs in and walks the site, page by page.</span></button></li>
+                <li><button aria-current="false"><time>0:35</time><span>One continuous visit, no timeline to work in.</span></button></li>
+                <li><button aria-current="false"><time>0:47</time><span>H.264 with captions, a transcript, the page list.</span></button></li>
+              </ol>
+            </div>
+            <div className="hero-block-foot">
+              <span className="chip"><Film size={13} /> walkthrough.mp4</span>
+              <span className="chip"><Captions size={13} /> captions.vtt</span>
+              <span className="chip"><FileText size={13} /> transcript.txt</span>
+              <span className="chip"><Globe size={13} /> 6 pages <b>200 OK</b></span>
+            </div>
+          </div>
+          <span className="hero-block-tab">A real recording · unedited</span>
+        </div>
+      </div>
+      <div className="hero-block-copy">
+        <div className="hero-block-ctas">
+          <a className="hero-block-download" href="/#demo"><Download size={15} /> Watch a real recording</a>
+          <a className="hero-block-cta" href="/download"><Download size={15} /> Download for Windows &amp; Linux</a>
+        </div>
+        <ul className="hero-block-trust" aria-label="What it costs and includes">
+          <li><Check size={14} strokeWidth={2.8} /> Free, MIT licensed</li>
+          <li><Check size={14} strokeWidth={2.8} /> No account needed</li>
+          <li><Check size={14} strokeWidth={2.8} /> No watermark on the video</li>
+          <li><Check size={14} strokeWidth={2.8} /> Every seat included</li>
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 
 export type Tone = "ink" | "ochre" | "rec" | "yellow" | "blue" | "violet" | "pink" | "green" | "orange";
 
@@ -255,6 +316,154 @@ export function DownloadToast() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/** A small review card: an initials avatar, a one-line quote, the author and the link to the post. */
+
+export function ReviewCard({ name, handle, quote, avatar }: { name: string; handle: string; quote: string; avatar?: string }) {
+  const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("");
+  return (
+    <figure className="review-card">
+      <blockquote cite={`https://example.com/${handle}`}><q>{quote}</q></blockquote>
+      <figcaption className="review-card-foot">
+        {avatar ? <img className="review-card-av" src={avatar} alt="" /> : <span className="review-card-av" aria-hidden="true">{initials}</span>}
+        <span className="review-card-name"><b>{name}</b> <span className="mono">@{handle}</span></span>
+        <a className="review-card-link" href={`https://example.com/${handle}`}>Read on X</a>
+      </figcaption>
+    </figure>
+  );
+}
+
+/** One step of an install flow: a numbered chip, a short title and a 15px description. */
+
+export function InstallStep({ number, title, text, icon }: { number: number; title: string; text: string; icon: LucideIcon }) {
+  const still = useReducedMotion();
+  return (
+    <div className="install-step">
+      <span className="install-step-number">{String(number).padStart(2, "0")}</span>
+      <span className="install-step-icon"><icon size={15} /></span>
+      <div className="install-step-copy">
+        <b className="install-step-title">{title}</b>
+        <small className="install-step-text">{text}</small>
+      </div>
+    </div>
+  );
+}
+
+/** A head with one clear focal, a supporting picture of the product, and one large CTA. */
+
+export function HeroSection({ headline, subhead, picture, cta, children, className = "" }: {
+  headline: string;
+  subhead: string;
+  picture?: ReactNode;
+  cta?: string;
+  children?: ReactNode;
+  className?: string;
+}) {
+  const still = useReducedMotion();
+  return (
+    <section className={`hero-section ${className ?? ""}`}>
+      <div className="hero-section-copy">
+        <span className="hero-section-eyebrow">{eyebrow}</span>
+        <h1 className="hero-section-headline">{headline}</h1>
+        <p className="hero-section-subhead">{subhead}</p>
+        {children}
+        {cta && <a className="hero-section-cta">{cta}</a>}
+      </div>
+      {picture}
+    </section>
+  );
+}
+
+/** A counter beaten out in the sheet metal of the card: the headline number, then the label below. */
+
+export function Beaten({ children, className = "", value }: { children: ReactNode; className?: string; value: string }) {
+  const still = useReducedMotion();
+  return (
+    <div className={`beaten ${className ?? ""}`}>
+      <div className="beaten-inner">
+        <span className="beaten-value mono">{value}</span>
+        <span className="beaten-label">{children}</span>
+      </div>
+    </div>
+  );
+}
+
+/** One row of a feature list: a small icon chip, an 18px headline, a muted 15px description. */
+
+export function FeatureRow({ icon, title, text, className = "" }: { icon: LucideIcon; title: string; text: string; className?: string }) {
+  const still = useReducedMotion();
+  return (
+    <div className={`feature-row ${className ?? ""}`}>
+      <span className="feature-row-icon"><icon size={15} /></span>
+      <div className="feature-row-copy">
+        <b className="feature-row-title">{title}</b>
+        <small className="feature-row-text">{text}</small>
+      </div>
+    </div>
+  );
+}
+
+/** One product card: punch-out relief at the top, a halo wrap-around, full width, and one large CTA. */
+
+export function ProductCard({ title, eyebrow, children, className = "", href, cta }: {
+  title: string;
+  eyebrow: string;
+  children: ReactNode;
+  className?: string;
+  href?: string;
+  cta?: string;
+}) {
+  const still = useReducedMotion();
+  return (
+    <div className={`product-card ${className ?? ""}`}>
+      <div className="product-card-top">
+        <span className="product-card-relief"><i /><i /><i /><i /><i /></span>
+        <span className="product-card-halo" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+        <span className="product-card-eyebrow">{eyebrow}</span>
+        <h3 className="product-card-title">{title}</h3>
+      </div>
+      <div className="product-card-body">
+        {children}
+      </div>
+      {href && cta && (
+        <a className="product-card-cta" href={href}>
+          {cta}
+        </a>
+      )}
+    </div>
+  );
+}
+
+/** A small circle that turns from placeholding blue to a warm signal on reveal, for turntable-style number cards. */
+
+export function Turntable({ children, className = "", value }: { children: ReactNode; className?: string; value: string }) {
+  const still = useReducedMotion();
+  return (
+    <div className={`turntable ${className ?? ""}`}>
+      <div className="turntable-ring">
+        <div className={`turntable-disk ${still ? "" : "turntable-rotate"}`}>
+          <div className="turntable-inner">
+            <span className="turntable-value mono">{value}</span>
+            <span className="turntable-label">{children}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Three numbered milestones: all children are in view at once, one at the top of the card. */
+
+export function Milestones({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`milestones ${className ?? ""}`}>
+      <div className="milestones-track">
+        {iconsOf(children as LucideIcon[])}
+      </div>
+      {children}
     </div>
   );
 }

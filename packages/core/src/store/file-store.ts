@@ -350,6 +350,12 @@ export class FileStore implements Store {
   async activeJobs(owner: string | null) {
     return this.data.jobs.filter((j) => j.owner === owner && (j.status === "queued" || j.status === "running")).length;
   }
+  async activeJob(owner: string | null, kind: JobKind) {
+    const active = this.data.jobs
+      .filter((j) => j.owner === owner && j.kind === kind && (j.status === "queued" || j.status === "running"))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return active[0] ? strip(active[0]) : null;
+  }
   async queueDepth() {
     return (await this.queueStats()).depth;
   }

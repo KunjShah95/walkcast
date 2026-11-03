@@ -1,0 +1,445 @@
+{
+  "summary": {
+    "webAnimations": 28,
+    "cssDeclarations": 115,
+    "scrollTargets": 74,
+    "cdpAnimations": 321,
+    "canvases": 0
+  },
+  "namedAnimations": [
+    "hl-draw",
+    "tick-draw",
+    "blink",
+    "marquee",
+    "floatA",
+    "pulse"
+  ],
+  "scrollTriggeredElements": 74,
+  "representativeAnimations": [
+    {
+      "type": "CSSAnimation",
+      "playState": "finished",
+      "animationName": "hl-draw",
+      "targetSelector": "em.serif.hl.hero-hl",
+      "targetRect": {
+        "x": 1094.75,
+        "y": -13117.40625,
+        "width": 306.671875,
+        "height": 108,
+        "top": -13117.40625,
+        "right": 1401.421875,
+        "bottom": -13009.40625,
+        "left": 1094.75
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "auto",
+          "backgroundSize": "0% 31.68px",
+          "computedOffset": 0
+        },
+        {
+          "offset": 1,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "replace",
+          "backgroundSize": "100% 31.68px",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 900,
+        "delay": 1150,
+        "iterations": 1,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "finished",
+      "animationName": "tick-draw",
+      "targetSelector": "path",
+      "targetRect": {
+        "x": 620.4270629882812,
+        "y": -12671.15625,
+        "width": 9.3333740234375,
+        "height": 6.4169921875,
+        "top": -12671.15625,
+        "right": 629.7604370117188,
+        "bottom": -12664.7392578125,
+        "left": 620.4270629882812
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "replace",
+          "strokeDashoffset": "26px",
+          "computedOffset": 0
+        },
+        {
+          "offset": 1,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "auto",
+          "strokeDashoffset": "0px",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 450,
+        "delay": 1050,
+        "iterations": 1,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "finished",
+      "animationName": "tick-draw",
+      "targetSelector": "path",
+      "targetRect": {
+        "x": 778.6614379882812,
+        "y": -12671.15625,
+        "width": 9.3333740234375,
+        "height": 6.4169921875,
+        "top": -12671.15625,
+        "right": 787.9948120117188,
+        "bottom": -12664.7392578125,
+        "left": 778.6614379882812
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "replace",
+          "strokeDashoffset": "26px",
+          "computedOffset": 0
+        },
+        {
+          "offset": 1,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "auto",
+          "strokeDashoffset": "0px",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 450,
+        "delay": 1170,
+        "iterations": 1,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "finished",
+      "animationName": "tick-draw",
+      "targetSelector": "path",
+      "targetRect": {
+        "x": 944.1458129882812,
+        "y": -12671.15625,
+        "width": 9.3333740234375,
+        "height": 6.4169921875,
+        "top": -12671.15625,
+        "right": 953.4791870117188,
+        "bottom": -12664.7392578125,
+        "left": 944.1458129882812
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "replace",
+          "strokeDashoffset": "26px",
+          "computedOffset": 0
+        },
+        {
+          "offset": 1,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "auto",
+          "strokeDashoffset": "0px",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 450,
+        "delay": 1290,
+        "iterations": 1,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "finished",
+      "animationName": "tick-draw",
+      "targetSelector": "path",
+      "targetRect": {
+        "x": 1157.4271240234375,
+        "y": -12671.15625,
+        "width": 9.333251953125,
+        "height": 6.4169921875,
+        "top": -12671.15625,
+        "right": 1166.7603759765625,
+        "bottom": -12664.7392578125,
+        "left": 1157.4271240234375
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "replace",
+          "strokeDashoffset": "26px",
+          "computedOffset": 0
+        },
+        {
+          "offset": 1,
+          "easing": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+          "composite": "auto",
+          "strokeDashoffset": "0px",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 450,
+        "delay": 1410.0000000000002,
+        "iterations": 1,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "running",
+      "animationName": "blink",
+      "targetSelector": "span.live",
+      "targetRect": {
+        "x": 1468.875,
+        "y": -12513.859375,
+        "width": 49.125,
+        "height": 21,
+        "top": -12513.859375,
+        "right": 1518,
+        "bottom": -12492.859375,
+        "left": 1468.875
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "ease",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 0
+        },
+        {
+          "offset": 0.5,
+          "easing": "ease",
+          "composite": "auto",
+          "opacity": "0.25",
+          "computedOffset": 0.5
+        },
+        {
+          "offset": 1,
+          "easing": "ease",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 1400,
+        "delay": 0,
+        "iterations": null,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "running",
+      "animationName": "blink",
+      "targetSelector": "i.caret",
+      "targetRect": {
+        "x": 584.5,
+        "y": -7482.25,
+        "width": 1.5,
+        "height": 15,
+        "top": -7482.25,
+        "right": 586,
+        "bottom": -7467.25,
+        "left": 584.5
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 0
+        },
+        {
+          "offset": 0.5,
+          "easing": "steps(1)",
+          "composite": "auto",
+          "opacity": "0.25",
+          "computedOffset": 0.5
+        },
+        {
+          "offset": 1,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 1000,
+        "delay": 0,
+        "iterations": null,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "running",
+      "animationName": "blink",
+      "targetSelector": "i.caret",
+      "targetRect": {
+        "x": 463,
+        "y": -7405.265625,
+        "width": 1.5,
+        "height": 15,
+        "top": -7405.265625,
+        "right": 464.5,
+        "bottom": -7390.265625,
+        "left": 463
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 0
+        },
+        {
+          "offset": 0.5,
+          "easing": "steps(1)",
+          "composite": "auto",
+          "opacity": "0.25",
+          "computedOffset": 0.5
+        },
+        {
+          "offset": 1,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 1000,
+        "delay": 0,
+        "iterations": null,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "running",
+      "animationName": "blink",
+      "targetSelector": "i.caret",
+      "targetRect": {
+        "x": 859,
+        "y": -7405.265625,
+        "width": 1.5,
+        "height": 15,
+        "top": -7405.265625,
+        "right": 860.5,
+        "bottom": -7390.265625,
+        "left": 859
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 0
+        },
+        {
+          "offset": 0.5,
+          "easing": "steps(1)",
+          "composite": "auto",
+          "opacity": "0.25",
+          "computedOffset": 0.5
+        },
+        {
+          "offset": 1,
+          "easing": "steps(1)",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 1000,
+        "delay": 0,
+        "iterations": null,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    },
+    {
+      "type": "CSSAnimation",
+      "playState": "running",
+      "animationName": "blink",
+      "targetSelector": "span.rec-tag",
+      "targetRect": {
+        "x": 1515.09375,
+        "y": -6049.0625,
+        "width": 46.90625,
+        "height": 22.5,
+        "top": -6049.0625,
+        "right": 1562,
+        "bottom": -6026.5625,
+        "left": 1515.09375
+      },
+      "keyframes": [
+        {
+          "offset": 0,
+          "easing": "ease",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 0
+        },
+        {
+          "offset": 0.5,
+          "easing": "ease",
+          "composite": "auto",
+          "opacity": "0.25",
+          "computedOffset": 0.5
+        },
+        {
+          "offset": 1,
+          "easing": "ease",
+          "composite": "replace",
+          "opacity": "1",
+          "computedOffset": 1
+        }
+      ],
+      "timing": {
+        "duration": 1400,
+        "delay": 0,
+        "iterations": null,
+        "easing": "linear",
+        "direction": "normal"
+      }
+    }
+  ]
+}

@@ -797,7 +797,9 @@ footer { margin-top: clamp(100px, 12vw, 160px); overflow: hidden; }
   background: rgb(255 255 255 / 0.7); box-shadow: inset 0 0 0 1px var(--line), 0 6px 18px -12px rgb(30 26 22 / 0.3);
   font-size: 13.5px; color: var(--ink-2); text-decoration: none; backdrop-filter: blur(8px); transition: box-shadow 0.2s;
 }
-.announce:hover { box-shadow: inset 0 0 0 1px var(--panel-2), 0 10px 24px -12px rgb(30 26 22 / 0.35); }
+
+/* ---------------------------------------------------------------- premium hero: CTA cards
+   Three large panels beneath the hero, each with one clear focal point and one button. */
 .announce-tag { flex: none; padding: 4px 9px; border-radius: 999px; background: var(--signal); color: #fff; font: 600 11.5px/1 var(--sans); }
 .announce svg { flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
 .announce:hover svg { transform: translateX(3px); }
@@ -818,9 +820,12 @@ footer { margin-top: clamp(100px, 12vw, 160px); overflow: hidden; }
 .stack-label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
 .stack-group ul { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 20px; }
 .stack-group li { font: 600 16px/1.5 var(--sans); letter-spacing: -0.02em; color: var(--muted); transition: color 0.2s; }
-.stack-group li:hover { color: var(--ink); }
 
-/* ---------------------------------------------------------------- proof band (dark) */
+
+/* ---------------------------------------------------------------- premium hero: components
+   The premium hero sits beneath the title line. Everything is a paper card with a soft shadow.
+   Buttons are the only place the visitor is asked to act. */
+
 .proof-wrap { padding: clamp(96px, 12vw, 160px) 0 0; }
 .proof {
   position: relative; overflow: hidden; isolation: isolate; border-radius: 32px; background: #12110f; color: #f3efe8;

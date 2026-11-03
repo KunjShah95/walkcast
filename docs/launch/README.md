@@ -25,17 +25,21 @@ subtitle track. `walkcast-launch.vtt` holds the same captions for YouTube or Lin
 
 Every number is taken from `results/` or from the Lab dashboard screenshots in `docs/screenshots/`. None are made up.
 
-## What this cut predates
+## Re-cut plan (v2)
 
-The film is 88 s and every scene has an absolute cue, so a new beat is a re-time of everything
-after it plus a re-voiced `voiceover.py` — it is a re-cut, not an edit. These shipped after this
-cut and are not in it:
+The 88 s cut above is shipped. It predates two features that have since landed
+(`record/live-view.ts` live preview, and `record/journey.ts` journey-as-test).
+v2 re-cuts the film to include them and tightens pacing to 78 s, plus 45 s and
+15 s social cuts. Full spec: `docs/launch/INSPIRATION.md`. Machine-readable shot
+list: `docs/launch/source/scenes.json`. Inspiration patterns that drive the
+decisions come from filmagic.app, recent.design, raylight.app, remotion.dev/showcase,
+screenlane.com, godly.website, motionographer.com, vimeo.com/channels/staffpicks
+and saasframe.io.
 
-- **Live preview while it records** (`record/live-view.ts`): the pages appear as a slideshow while the browser is still walking.
-- **A journey that becomes a test** (`record/journey.ts`): `press`, `select`, `check`, `hover`, `waitFor`, `expect`, and the flow copied out as a runnable Playwright script.
-
-A re-cut needs the Kokoro model files (`kokoro-v1.0.onnx`, `voices-v1.0.bin`) and the full
-`Rebuilding` pipeline below; `video.html` alone is not the deliverable.
+A re-cut needs the Kokoro model files (`kokoro-v1.0.onnx`, `voices-v1.0.bin`) and
+the full `Rebuilding` pipeline below; `video.html` alone is not the deliverable.
+The v2 re-cut also requires new narration lines in `source/voiceover.py` for the
+live-preview and journey beats (cues 0:34-0:46 and 1:00-1:06).
 
 ## Voice-over
 

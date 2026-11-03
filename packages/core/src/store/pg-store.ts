@@ -261,6 +261,11 @@ export class PgStore implements Store {
     const [r] = await this.sql`select count(*)::int as n from jobs where owner is not distinct from ${owner} and status in ('queued', 'running')`;
     return Number(r!.n);
   }
+  async activeJob(owner: string | null, kind: JobKind) {
+    const [r] = await this
+      .sql`select * from jobs where owner is not distinct from ${owner} and kind = ${kind} and status in ('queued', 'running') order by created_at desc limit 1`;
+    return r ? toJob(r) : null;
+  }
   async queueDepth() {
     return (await this.queueStats()).depth;
   }

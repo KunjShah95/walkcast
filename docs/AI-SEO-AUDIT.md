@@ -140,3 +140,32 @@ Walkcast's AI SEO foundation is strong and needs minimal on-site work. The immed
 
 The highest-priority next step is establishing the **AI citation baseline** (Step 3 in §5.1) so that future optimization efforts can be measured against a concrete starting point.
 
+
+---
+
+## 9. AI citation baseline (recorded 2026-11-03)
+
+Eight target queries pulled from Google on 2026-11-03. Walkcast's own site is already #1 where it
+asks its own question; it does not appear in the comparison results the competitors' listicles
+dominate. That is the gap to close.
+
+| Query | Page to win | Walkcast position | Competitor / listicle positions |
+|---|---|---|---|
+| "Walkcast" product demo video walkthrough site | `/` | 1 | (Walkcast is the subject) |
+| "Loom alternative" free open source | `/compare/loom` | 3rd page (not in first 10) | Cap `.so` (1), Cap GitHub (2), Reddit (3), getclypp (4), Tella (5), YouTube (6), screensnap (7), usevelo (8), zight (9), govideolink (10) |
+| "Screen Studio alternative" Windows Linux | `/compare/screen-studio` | Not in first 10 | (Walkcast is not cited) |
+| "Scribe alternative" video narrated | `/compare/scribe` | Not in first 10 | (Walkcast is not cited) |
+| "website tutorial video maker" | `/guides/website-tutorial-video` | 2nd page | Tango (1), Vibrantsnap (2), Siena (3), Conecny (4), ngram (5), supademo (6), Techsmith (8), tutorial.ai (9), smoothcapture (10) |
+| "browser agent testing" / "stagehand evals" | `/lab` | Not in first 10 | Stagehand `.dev` (1), browserbase (2), Reddit (3), agent-browser (4), YouTube (5), stagehand evals (6), firecrawl (7), medium (8), digitalapplied (9), qaskills (10) |
+| "walkcast pricing" / "is walkcast free" | `/pricing` | 2nd | (Walkcast is cited) |
+| "screen recording software" | `/compare/screen-recording` | Not our job (head term) | (left alone per playbook) |
+
+**What this means.** Walkcast is already the best answer when someone searches for Walkcast. It is
+not the best answer when someone searches for "Loom alternative", "Screen Studio alternative",
+"Scribe alternative", or "browser agent testing". The comparison pages (`/compare/loom`,
+`/compare/screen-studio`, `/compare/scribe`) are fully built and crawlable, but they have not been
+pushed into the listicles and answer engines that dominate those queries.
+
+**Next lever (per playbook).** Third-party citations from the Geo plan: dev.to / Hashnode tutorial,
+GitHub README `rel=me`, awesome lists, Reddit `/r/webdev`, Product Hunt + HN "Show HN". None of these
+exist yet.

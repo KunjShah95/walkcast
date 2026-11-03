@@ -1,0 +1,718 @@
+{
+  "total_duration_s": 31.53,
+  "width": 1920,
+  "height": 1080,
+  "groups": [
+    {
+      "id": "caption-group-0",
+      "frame": 1,
+      "start": 0.06,
+      "end": 1.12,
+      "text": "Still filming your",
+      "words": [
+        {
+          "id": "caption-word-0-0",
+          "text": "Still",
+          "start": 0.06,
+          "end": 0.28
+        },
+        {
+          "id": "caption-word-0-1",
+          "text": "filming",
+          "start": 0.43,
+          "end": 0.81
+        },
+        {
+          "id": "caption-word-0-2",
+          "text": "your",
+          "start": 0.88,
+          "end": 1.12
+        }
+      ]
+    },
+    {
+      "id": "caption-group-1",
+      "frame": 1,
+      "start": 1.12,
+      "end": 2.12,
+      "text": "own demo video.",
+      "words": [
+        {
+          "id": "caption-word-1-0",
+          "text": "own",
+          "start": 1.12,
+          "end": 1.33
+        },
+        {
+          "id": "caption-word-1-1",
+          "text": "demo",
+          "start": 1.33,
+          "end": 1.56
+        },
+        {
+          "id": "caption-word-1-2",
+          "text": "video.",
+          "start": 1.6,
+          "end": 2
+        }
+      ]
+    },
+    {
+      "id": "caption-group-2",
+      "frame": 2,
+      "start": 2.183,
+      "end": 3.523,
+      "text": "Record the screen,",
+      "words": [
+        {
+          "id": "caption-word-2-0",
+          "text": "Record",
+          "start": 2.183,
+          "end": 2.593
+        },
+        {
+          "id": "caption-word-2-1",
+          "text": "the",
+          "start": 2.593,
+          "end": 2.823
+        },
+        {
+          "id": "caption-word-2-2",
+          "text": "screen,",
+          "start": 2.823,
+          "end": 3.433
+        }
+      ]
+    },
+    {
+      "id": "caption-group-3",
+      "frame": 2,
+      "start": 3.523,
+      "end": 4.463,
+      "text": "fumble a click,",
+      "words": [
+        {
+          "id": "caption-word-3-0",
+          "text": "fumble",
+          "start": 3.523,
+          "end": 3.893
+        },
+        {
+          "id": "caption-word-3-1",
+          "text": "a",
+          "start": 3.893,
+          "end": 3.913
+        },
+        {
+          "id": "caption-word-3-2",
+          "text": "click,",
+          "start": 3.983,
+          "end": 4.343
+        }
+      ]
+    },
+    {
+      "id": "caption-group-4",
+      "frame": 2,
+      "start": 4.553,
+      "end": 4.863,
+      "text": "cut it",
+      "words": [
+        {
+          "id": "caption-word-4-0",
+          "text": "cut",
+          "start": 4.553,
+          "end": 4.723
+        },
+        {
+          "id": "caption-word-4-1",
+          "text": "it",
+          "start": 4.723,
+          "end": 4.863
+        }
+      ]
+    },
+    {
+      "id": "caption-group-5",
+      "frame": 2,
+      "start": 4.863,
+      "end": 5.982,
+      "text": "together by hand.",
+      "words": [
+        {
+          "id": "caption-word-5-0",
+          "text": "together",
+          "start": 4.863,
+          "end": 5.443
+        },
+        {
+          "id": "caption-word-5-1",
+          "text": "by",
+          "start": 5.443,
+          "end": 5.583
+        },
+        {
+          "id": "caption-word-5-2",
+          "text": "hand.",
+          "start": 5.583,
+          "end": 5.943
+        }
+      ]
+    },
+    {
+      "id": "caption-group-6",
+      "frame": 3,
+      "start": 5.982,
+      "end": 7.612,
+      "text": "Introducing Walkcast,",
+      "words": [
+        {
+          "id": "caption-word-6-0",
+          "text": "Introducing",
+          "start": 5.982,
+          "end": 6.782
+        },
+        {
+          "id": "caption-word-6-1",
+          "text": "Walkcast,",
+          "start": 6.902,
+          "end": 7.572
+        }
+      ]
+    },
+    {
+      "id": "caption-group-7",
+      "frame": 3,
+      "start": 7.612,
+      "end": 8.742,
+      "text": "paste a link,",
+      "words": [
+        {
+          "id": "caption-word-7-0",
+          "text": "paste",
+          "start": 7.612,
+          "end": 8.132
+        },
+        {
+          "id": "caption-word-7-1",
+          "text": "a",
+          "start": 8.132,
+          "end": 8.202
+        },
+        {
+          "id": "caption-word-7-2",
+          "text": "link,",
+          "start": 8.292,
+          "end": 8.712
+        }
+      ]
+    },
+    {
+      "id": "caption-group-8",
+      "frame": 3,
+      "start": 8.742,
+      "end": 8.982,
+      "text": "and a",
+      "words": [
+        {
+          "id": "caption-word-8-0",
+          "text": "and",
+          "start": 8.742,
+          "end": 8.902
+        },
+        {
+          "id": "caption-word-8-1",
+          "text": "a",
+          "start": 8.902,
+          "end": 8.952
+        }
+      ]
+    },
+    {
+      "id": "caption-group-9",
+      "frame": 3,
+      "start": 8.982,
+      "end": 9.662,
+      "text": "real browser",
+      "words": [
+        {
+          "id": "caption-word-9-0",
+          "text": "real",
+          "start": 8.982,
+          "end": 9.222
+        },
+        {
+          "id": "caption-word-9-1",
+          "text": "browser",
+          "start": 9.222,
+          "end": 9.542
+        }
+      ]
+    },
+    {
+      "id": "caption-group-10",
+      "frame": 3,
+      "start": 9.682,
+      "end": 10.192,
+      "text": "does the",
+      "words": [
+        {
+          "id": "caption-word-10-0",
+          "text": "does",
+          "start": 9.682,
+          "end": 9.942
+        },
+        {
+          "id": "caption-word-10-1",
+          "text": "the",
+          "start": 9.942,
+          "end": 10.072
+        }
+      ]
+    },
+    {
+      "id": "caption-group-11",
+      "frame": 3,
+      "start": 10.362,
+      "end": 11.409,
+      "text": "walkthrough for you.",
+      "words": [
+        {
+          "id": "caption-word-11-0",
+          "text": "walkthrough",
+          "start": 10.362,
+          "end": 10.852
+        },
+        {
+          "id": "caption-word-11-1",
+          "text": "for",
+          "start": 10.852,
+          "end": 10.962
+        },
+        {
+          "id": "caption-word-11-2",
+          "text": "you.",
+          "start": 11.052,
+          "end": 11.492
+        }
+      ]
+    },
+    {
+      "id": "caption-group-12",
+      "frame": 4,
+      "start": 11.409,
+      "end": 11.869,
+      "text": "It signs",
+      "words": [
+        {
+          "id": "caption-word-12-0",
+          "text": "It",
+          "start": 11.409,
+          "end": 11.479
+        },
+        {
+          "id": "caption-word-12-1",
+          "text": "signs",
+          "start": 11.519,
+          "end": 11.869
+        }
+      ]
+    },
+    {
+      "id": "caption-group-13",
+      "frame": 4,
+      "start": 11.869,
+      "end": 12.159,
+      "text": "in,",
+      "words": [
+        {
+          "id": "caption-word-13-0",
+          "text": "in,",
+          "start": 11.869,
+          "end": 12.159
+        }
+      ]
+    },
+    {
+      "id": "caption-group-14",
+      "frame": 4,
+      "start": 12.159,
+      "end": 13.439,
+      "text": "clicks through your",
+      "words": [
+        {
+          "id": "caption-word-14-0",
+          "text": "clicks",
+          "start": 12.159,
+          "end": 12.619
+        },
+        {
+          "id": "caption-word-14-1",
+          "text": "through",
+          "start": 12.619,
+          "end": 13.069
+        },
+        {
+          "id": "caption-word-14-2",
+          "text": "your",
+          "start": 13.139,
+          "end": 13.419
+        }
+      ]
+    },
+    {
+      "id": "caption-group-15",
+      "frame": 4,
+      "start": 13.439,
+      "end": 13.949,
+      "text": "pages,",
+      "words": [
+        {
+          "id": "caption-word-15-0",
+          "text": "pages,",
+          "start": 13.439,
+          "end": 13.949
+        }
+      ]
+    },
+    {
+      "id": "caption-group-16",
+      "frame": 4,
+      "start": 13.949,
+      "end": 14.949,
+      "text": "and narrates every",
+      "words": [
+        {
+          "id": "caption-word-16-0",
+          "text": "and",
+          "start": 13.949,
+          "end": 14.099
+        },
+        {
+          "id": "caption-word-16-1",
+          "text": "narrates",
+          "start": 14.099,
+          "end": 14.449
+        },
+        {
+          "id": "caption-word-16-2",
+          "text": "every",
+          "start": 14.539,
+          "end": 14.889
+        }
+      ]
+    },
+    {
+      "id": "caption-group-17",
+      "frame": 4,
+      "start": 14.949,
+      "end": 15.459,
+      "text": "step as",
+      "words": [
+        {
+          "id": "caption-word-17-0",
+          "text": "step",
+          "start": 14.949,
+          "end": 15.279
+        },
+        {
+          "id": "caption-word-17-1",
+          "text": "as",
+          "start": 15.279,
+          "end": 15.439
+        }
+      ]
+    },
+    {
+      "id": "caption-group-18",
+      "frame": 4,
+      "start": 15.459,
+      "end": 16.109,
+      "text": "it goes.",
+      "words": [
+        {
+          "id": "caption-word-18-0",
+          "text": "it",
+          "start": 15.459,
+          "end": 15.619
+        },
+        {
+          "id": "caption-word-18-1",
+          "text": "goes.",
+          "start": 15.619,
+          "end": 15.989
+        }
+      ]
+    },
+    {
+      "id": "caption-group-19",
+      "frame": 5,
+      "start": 16.122,
+      "end": 16.822,
+      "text": "Captions,",
+      "words": [
+        {
+          "id": "caption-word-19-0",
+          "text": "Captions,",
+          "start": 16.122,
+          "end": 16.822
+        }
+      ]
+    },
+    {
+      "id": "caption-group-20",
+      "frame": 5,
+      "start": 16.822,
+      "end": 17.932,
+      "text": "a transcript,",
+      "words": [
+        {
+          "id": "caption-word-20-0",
+          "text": "a",
+          "start": 16.822,
+          "end": 16.862
+        },
+        {
+          "id": "caption-word-20-1",
+          "text": "transcript,",
+          "start": 16.902,
+          "end": 17.882
+        }
+      ]
+    },
+    {
+      "id": "caption-group-21",
+      "frame": 5,
+      "start": 17.932,
+      "end": 19.862,
+      "text": "a spoken voiceover.",
+      "words": [
+        {
+          "id": "caption-word-21-0",
+          "text": "a",
+          "start": 17.932,
+          "end": 17.992
+        },
+        {
+          "id": "caption-word-21-1",
+          "text": "spoken",
+          "start": 17.992,
+          "end": 18.702
+        },
+        {
+          "id": "caption-word-21-2",
+          "text": "voiceover.",
+          "start": 18.702,
+          "end": 19.782
+        }
+      ]
+    },
+    {
+      "id": "caption-group-22",
+      "frame": 5,
+      "start": 19.862,
+      "end": 21.392,
+      "text": "One finished MP4,",
+      "words": [
+        {
+          "id": "caption-word-22-0",
+          "text": "One",
+          "start": 19.862,
+          "end": 19.982
+        },
+        {
+          "id": "caption-word-22-1",
+          "text": "finished",
+          "start": 20.042,
+          "end": 20.732
+        },
+        {
+          "id": "caption-word-22-2",
+          "text": "MP4,",
+          "start": 20.732,
+          "end": 21.282
+        }
+      ]
+    },
+    {
+      "id": "caption-group-23",
+      "frame": 5,
+      "start": 21.392,
+      "end": 22.192,
+      "text": "no editing,",
+      "words": [
+        {
+          "id": "caption-word-23-0",
+          "text": "no",
+          "start": 21.392,
+          "end": 21.492
+        },
+        {
+          "id": "caption-word-23-1",
+          "text": "editing,",
+          "start": 21.672,
+          "end": 22.192
+        }
+      ]
+    },
+    {
+      "id": "caption-group-24",
+      "frame": 5,
+      "start": 22.192,
+      "end": 23.202,
+      "text": "no watermark.",
+      "words": [
+        {
+          "id": "caption-word-24-0",
+          "text": "no",
+          "start": 22.192,
+          "end": 22.342
+        },
+        {
+          "id": "caption-word-24-1",
+          "text": "watermark.",
+          "start": 22.342,
+          "end": 23.082
+        }
+      ]
+    },
+    {
+      "id": "caption-group-25",
+      "frame": 6,
+      "start": 23.297,
+      "end": 25.207,
+      "text": "free MIT licensed,",
+      "words": [
+        {
+          "id": "caption-word-25-0",
+          "text": "free",
+          "start": 23.297,
+          "end": 23.557
+        },
+        {
+          "id": "caption-word-25-1",
+          "text": "MIT",
+          "start": 23.627,
+          "end": 23.927
+        },
+        {
+          "id": "caption-word-25-2",
+          "text": "licensed,",
+          "start": 23.987,
+          "end": 25.087
+        }
+      ]
+    },
+    {
+      "id": "caption-group-26",
+      "frame": 6,
+      "start": 25.207,
+      "end": 26.481,
+      "text": "every seat included.",
+      "words": [
+        {
+          "id": "caption-word-26-0",
+          "text": "every",
+          "start": 25.207,
+          "end": 25.657
+        },
+        {
+          "id": "caption-word-26-1",
+          "text": "seat",
+          "start": 25.657,
+          "end": 26.097
+        },
+        {
+          "id": "caption-word-26-2",
+          "text": "included.",
+          "start": 26.097,
+          "end": 26.427
+        }
+      ]
+    },
+    {
+      "id": "caption-group-27",
+      "frame": 7,
+      "start": 26.481,
+      "end": 27.291,
+      "text": "WalkCast,",
+      "words": [
+        {
+          "id": "caption-word-27-0",
+          "text": "WalkCast,",
+          "start": 26.481,
+          "end": 27.171
+        }
+      ]
+    },
+    {
+      "id": "caption-group-28",
+      "frame": 7,
+      "start": 27.481,
+      "end": 28.531,
+      "text": "free for Windows",
+      "words": [
+        {
+          "id": "caption-word-28-0",
+          "text": "free",
+          "start": 27.481,
+          "end": 27.651
+        },
+        {
+          "id": "caption-word-28-1",
+          "text": "for",
+          "start": 27.651,
+          "end": 27.911
+        },
+        {
+          "id": "caption-word-28-2",
+          "text": "Windows",
+          "start": 27.911,
+          "end": 28.531
+        }
+      ]
+    },
+    {
+      "id": "caption-group-29",
+      "frame": 7,
+      "start": 28.531,
+      "end": 29.341,
+      "text": "and Linux,",
+      "words": [
+        {
+          "id": "caption-word-29-0",
+          "text": "and",
+          "start": 28.531,
+          "end": 28.691
+        },
+        {
+          "id": "caption-word-29-1",
+          "text": "Linux,",
+          "start": 28.811,
+          "end": 29.341
+        }
+      ]
+    },
+    {
+      "id": "caption-group-30",
+      "frame": 7,
+      "start": 29.341,
+      "end": 31.551,
+      "text": "at walkcast.kunjshah.in.",
+      "words": [
+        {
+          "id": "caption-word-30-0",
+          "text": "at",
+          "start": 29.341,
+          "end": 29.431
+        },
+        {
+          "id": "caption-word-30-1",
+          "text": "walkcast.kunjshah.in.",
+          "start": 29.441,
+          "end": 31.431
+        }
+      ]
+    }
+  ]
+}

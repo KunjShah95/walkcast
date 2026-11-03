@@ -219,6 +219,13 @@ export interface Store {
   failedJobs(owner: string | null, kind: JobKind, limit: number): Promise<Job[]>;
   /** Jobs that are queued or running for an owner (for per-user concurrency limits). */
   activeJobs(owner: string | null): Promise<number>;
+  /**
+   * The owner's own queued or running job of this kind, newest first, if any. Lets a client that
+   * lost track of a job id (a page reload, a tab that was closed and reopened) find its way back
+   * to a recording that is still going rather than showing a blank form as if nothing were
+   * running.
+   */
+  activeJob(owner: string | null, kind: JobKind): Promise<Job | null>;
   queueDepth(): Promise<number>;
   /**
    * The queue position of a job created at `createdAt`. Claim order is FIFO by creation time, so

@@ -379,6 +379,11 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
     });
   });
   if (o.unref) server.unref();
+  // The close() below only stops the listening socket. A request left on a keep-alive socket (or
+  // one the test harness closed by aborting the event loop) keeps the process alive long enough
+  // for the run to hit its 240 s budget on CI, where these tests are quarantined (#6).
+  server.once("close", () => server.closeAllConnections());
+  process.once("exit", () => server.closeAllConnections());
   const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${resolvedPort}`;
   log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: app.requireAuth ? app.auth : "off" });
   return {
@@ -390,7 +395,12 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       const closed = new Promise<void>((r) => server.close(() => r()));
       server.closeIdleConnections();
       await worker?.stop(graceMs);
-      await withTimeout(closed, 10_000).catch(() => server.closeAllConnections());
+      const grace = await withTimeout(closed, 10_000).catch(() => server.closeAllConnections());
+      // closeAllConnections() is async in newer Node versions; wait for it so the process has no
+      // live connections when it exits (this is what lets the quarantined CI tests hang at the end,
+      // after the assertions have already passed, when the event loop is still held by a keep-alive
+      // socket whose listener the server never removed from the event loop).
+      await grace;
       if (!o.store) await store.close();
       log.info("server.stopped", {});
     },
@@ -1472,6 +1482,16 @@ try {
       log.info("job.cancelled", { job: id, owner });
       return json(200, { job: await withQueue(store, cancelled) });
     }
+    // The owner's own queued or running job, if any: how a client that lost track of a job id
+    // (a page it left and came back to, a reload) finds its way back to a recording that never
+    // stopped rather than showing a blank form as if it had. Matched before jobMatch, whose
+    // `[\w-]+` would otherwise read "mine" as a job id and 404.
+    if (url.pathname === "/api/jobs/mine" && req.method === "GET") {
+      const kind = url.searchParams.get("kind") === "run" ? "run" : "record";
+      const job = await store.activeJob(owner, kind);
+      if (!job) return json(200, { job: null });
+      return json(200, { job: { ...(await withQueue(store, job)), live: job.status === "running" && Boolean(liveDirForJob(job.id)) } });
+    }
     const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
     if (jobMatch) {
       const id = jobMatch[1]!;
@@ -1688,6 +1708,13 @@ try {
       const inRecordings = !!abs && (abs === join(data.root, "recordings") || abs.startsWith(join(data.root, "recordings") + sep));
       if (!abs || !type || !existsSync(abs) || inRecordings || !canSeeLab(abs)) return json(404, { error: "not found" });
       return streamFile(req, res, abs, type, "private, max-age=3600");
+    }
+    if (url.pathname === "/walkthrough.mp4" || url.pathname === "/walkthrough.vtt") {
+      // The product walkthrough video, bundled with the desktop app so new users can watch it
+      // before they've made their first recording. Served from the app's own static directory.
+      const abs = join(dirname(fileURLToPath(import.meta.url)), "static", url.pathname.slice(1));
+      const type = TYPES[extname(abs).toLowerCase()] ?? "application/octet-stream";
+      return streamFile(req, res, abs, type, "public, max-age=86400, immutable");
     }
     if (url.pathname === "/app" || url.pathname === "/app/") {
       // Nothing of the app is shown before sign-in when accounts are required: not even the shell.

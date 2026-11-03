@@ -282,13 +282,61 @@ export function mediaUrl(dir: string, file: string): string | undefined {
   return `/files/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-/** Records a site on the local server; resolves with the recording's directory when done. */
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
   input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain" },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
+}
+
+/**
+ * The caller's own queued or running job of this kind, if any. A page that left this job
+ * mid-recording and came back - a route change, a reload - calls this to find it again instead
+ * of showing a blank form as if nothing were running: the job itself never depended on that
+ * page staying mounted, only the page's own memory of its id did.
+ */
+export async function findMyActiveJob(kind: "record" | "run"): Promise<JobStatus | null> {
+  if (baked) return null;
+  const res = await fetch(`/api/jobs/mine?kind=${kind}`);
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => ({}))) as { job?: JobStatus | null };
+  return body.job ?? null;
+}
+
+/** Picks back up polling a job already in flight, resolving with its result like submitForResult. */
+function waitForJob(id: string, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
+  return (async () => {
+    let poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`);
+    if (!poll.ok) throw new Error(`Could not reach this job (${poll.status}).`);
+    let job = ((await poll.json()) as { job: JobStatus }).job;
+    onProgress?.(job);
+    for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
+      await new Promise((r) => setTimeout(r, delay));
+      try {
+        poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`);
+      } catch {
+        continue;
+      }
+      if (poll.status === 401) throw new SignInRequired("Your session ended. Sign in again.");
+      if (poll.status === 404 || poll.status === 410) throw new Error("This job is no longer available. It belongs to a different account, or the server restarted.");
+      if (!poll.ok) continue;
+      const next = (await poll.json().catch(() => null)) as { job?: JobStatus } | null;
+      if (!next?.job) continue;
+      job = next.job;
+      onProgress?.(job);
+    }
+    if (job.status === "cancelled") throw new JobCancelled("Cancelled.");
+    if (job.status !== "succeeded" || !job.result) throw new Error(job.error ?? `The job ${job.status}.`);
+    return job.result;
+  })();
+}
+
+/** Picks back up a recording already running on the server; resolves with its directory. */
+export async function resumeRecording(id: string, onProgress?: (s: JobStatus) => void): Promise<string> {
+  const result = await waitForJob(id, onProgress);
+  if (typeof result.dir !== "string") throw new Error("The job finished without a result.");
+  return result.dir;
 }
 
 export class SignInRequired extends Error {}

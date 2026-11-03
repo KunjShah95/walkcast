@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "title": "Walkcast launch video v2",
+  "duration": 78,
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "safeZone": { "width": 1080, "height": 1080 },
+  "aspectRatios": ["16:9", "1:1", "9:16"],
+  "cuts": [4, 6, 7, 8, 9, 10, 14, 18, 22, 28, 30, 34, 36, 46, 48, 50, 54, 60, 66, 70, 74, 76, 78],
+  "beats": [
+    { "id": "history", "start": 0, "end": 4, "copy": "A short history of the product walkthrough.", "motion": "title-card-fade", "sound": "pad+tick" },
+    { "id": "old-way", "start": 4, "end": 10, "copy": "Write the script. Record the screen. Retake. Retake. Record the voice. Sync the captions.", "motion": "punch-in-per-cut", "sound": "impact+riser", "counter": "4h 12m" },
+    { "id": "stale", "start": 10, "end": 14, "copy": "Deployed v1.5", "motion": "stamp-slam", "sound": "impact", "badge": "OUT OF DATE" },
+    { "id": "second-problem", "start": 14, "end": 18, "copy": "Agent: Done. App: the owner is wrong.", "motion": "split-screen-red-underline", "sound": "bass-hit", "source": "stale-owners run" },
+    { "id": "scale", "start": 18, "end": 22, "copy": "76 of 378 said success. The app disagreed. No repro. Just flaky.", "motion": "counter-tick", "sound": "whoosh" },
+    { "id": "drop", "start": 22, "end": 28, "copy": "Paste a link. Get a narrated walkthrough.", "motion": "logo-assembly+glow", "sound": "four-on-floor-drop" },
+    { "id": "one-url", "start": 28, "end": 34, "copy": "One URL is the whole brief.", "motion": "typing+cursor+button-press", "sound": "tick+click" },
+    { "id": "recording", "start": 34, "end": 46, "copy": "Real footage: captions, chapters, transcript, four features.", "motion": "parallax-device-frame+live-preview-slideshow", "sound": "narration", "asset": "apps/web/public/assets/demo.mp4", "newInV2": true },
+    { "id": "output", "start": 46, "end": 50, "copy": "recording.mp4, captions.vtt, narration.wav, transcript, trace.jsonl", "motion": "files-stack-in+marquee", "sound": "whoosh", "marquee": ["Kokoro", "OpenAI", "ElevenLabs", "Piper", "Edge TTS"] },
+    { "id": "breakdown", "start": 50, "end": 54, "copy": "Same recorder. Second job.", "motion": "wipe-transition", "sound": "impact", "product": "Walkcast Lab" },
+    { "id": "pipeline", "start": 54, "end": 60, "copy": "Failed run -> cause + evidence -> fixture -> replay x k. unexplained stays unexplained.", "motion": "flow-diagram-left-to-right", "sound": "arp" },
+    { "id": "journey", "start": 60, "end": 66, "copy": "A journey becomes a test: press, select, check, hover, waitFor, expect -> Playwright.", "motion": "code-block-types-in-then-runs-green", "sound": "tick", "newInV2": true },
+    { "id": "results", "start": 66, "end": 70, "copy": "v0 0/5, v1 5/5, v2 4/5 (regression caught).", "motion": "numbers-count-up", "sound": "impact-on-regression", "source": "results/summary.md" },
+    { "id": "power-cuts", "start": 70, "end": 74, "copy": "Real browser. Real state. Real evidence.", "motion": "three-punch-cuts", "sound": "three-impacts" },
+    { "id": "end-card", "start": 74, "end": 78, "copy": "Show what actually happened.", "motion": "logo-hold+url-fade", "sound": "ring-out", "footer": ["MIT licensed", "The price is zero", "walkcast.kunjshah.in"] }
+  ]
+}

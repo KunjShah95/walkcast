@@ -9,6 +9,10 @@ export interface ObservedElement {
   tag: string;
   role: string;
   name: string;
+  /** The element's own visible text, only when it differs from `name` (an aria-label can say
+   * more than the label on the control) — a journey step can name a control by what it reads
+   * on screen even when that is not its accessible name. */
+  text?: string;
   selector: string;
   type?: string;
   value?: string;
@@ -413,11 +417,14 @@ function observeInPage(): { elements: ObservedElement[]; text: string } {
     document.querySelectorAll("a[href], button, input:not([type=hidden]), select, textarea"),
   ).filter(visible);
   const elements = nodes.map((el, index) => {
+    const name = nameOf(el);
+    const visibleText = (el.textContent ?? "").trim().replace(/\s+/g, " ");
     const base = {
       index,
       tag: el.tagName.toLowerCase(),
       role: roleOf(el),
-      name: nameOf(el),
+      name,
+      ...(visibleText && visibleText !== name ? { text: visibleText } : {}),
       selector: selectorOf(el),
     } as ObservedElement;
     if (el instanceof HTMLInputElement) {
