@@ -1,5 +1,6 @@
 import type { LabIndex, RecordingSummary, RunDetail } from "./types.ts";
 import type { RecordingInsights } from "../../../../../packages/core/src/record/insights.ts";
+import type { LaunchVideo } from "../../../../../packages/core/src/data.ts";
 
 /** Data source: baked into an exported file, or fetched from `lab ui`. */
 interface Baked {
@@ -42,7 +43,7 @@ export function isAuthError(e: unknown): boolean {
 
 export async function loadIndex(): Promise<LabIndex> {
   if (baked) return baked.index;
-  const res = await fetch("/api/index");
+  const res = await fetch("/api/index", { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new HttpError(res.status, `Could not load the lab index (${res.status}).`);
   return (await res.json()) as LabIndex;
 }
@@ -53,7 +54,7 @@ export async function loadRun(dir: string): Promise<RunDetail> {
     if (!detail) throw new Error("This run is not included in the snapshot.");
     return detail;
   }
-  const res = await fetch(`/api/run?dir=${encodeURIComponent(dir)}`);
+  const res = await fetch(`/api/run?dir=${encodeURIComponent(dir)}`, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`Could not load run ${dir} (${res.status}).`);
   return (await res.json()) as RunDetail;
 }
@@ -95,6 +96,19 @@ export interface TtsProviderInfo {
   voices: CloudVoice[];
 }
 
+export interface DesktopTaskStatus {
+  id: string;
+  kind: "launch-video" | "kokoro-setup";
+  recordingId?: string;
+  status: "running" | "complete" | "failed";
+  progress: number;
+  message: string;
+  startedAt: string;
+  updatedAt: string;
+  error?: string;
+  video?: LaunchVideo;
+}
+
 export interface Capabilities {
   live: boolean;
   /** Sample-site recordings allowed (always on desktop; LAB_DEMO_SITE=1 on a shared server). */
@@ -120,7 +134,7 @@ export interface Capabilities {
 export async function loadCapabilities(): Promise<Capabilities> {
   if (baked) return { live: false };
   try {
-    const res = await fetch("/api/capabilities");
+    const res = await fetch("/api/capabilities", { signal: AbortSignal.timeout(10_000) });
     return res.ok ? ((await res.json()) as Capabilities) : { live: false };
   } catch {
     return { live: false };
@@ -193,7 +207,7 @@ async function submitForResult(path: string, input: unknown, onProgress?: (s: Jo
   };
   const key = crypto.randomUUID();
   const promise = (async () => {
-    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input) });
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(input), signal: AbortSignal.timeout(15_000) });
     // A proxy's HTML error page is not JSON: fall back to the status rather than "Unexpected token <".
     const body = (await res.json().catch(() => ({}))) as { job?: JobStatus; error?: string };
     if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -206,7 +220,7 @@ async function submitForResult(path: string, input: unknown, onProgress?: (s: Jo
       // server restarting, Wi-Fi blinking) is a reason to ask again, not to report the job failed.
       let poll: Response;
       try {
-        poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`);
+        poll = await fetch(`/api/jobs/${encodeURIComponent(job.id)}`, { signal: AbortSignal.timeout(10_000) });
       } catch {
         continue;
       }
@@ -298,7 +312,7 @@ export function startRecording(
  */
 export async function findMyActiveJob(kind: "record" | "run"): Promise<JobStatus | null> {
   if (baked) return null;
-  const res = await fetch(`/api/jobs/mine?kind=${kind}`);
+  const res = await fetch(`/api/jobs/mine?kind=${kind}`, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) return null;
   const body = (await res.json().catch(() => ({}))) as { job?: JobStatus | null };
   return body.job ?? null;
@@ -307,14 +321,14 @@ export async function findMyActiveJob(kind: "record" | "run"): Promise<JobStatus
 /** Picks back up polling a job already in flight, resolving with its result like submitForResult. */
 function waitForJob(id: string, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
   return (async () => {
-    let poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`);
+    let poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) });
     if (!poll.ok) throw new Error(`Could not reach this job (${poll.status}).`);
     let job = ((await poll.json()) as { job: JobStatus }).job;
     onProgress?.(job);
     for (let delay = 1000; job.status === "queued" || job.status === "running"; delay = Math.min(delay * 1.3, 4000)) {
       await new Promise((r) => setTimeout(r, delay));
       try {
-        poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`);
+        poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) });
       } catch {
         continue;
       }
@@ -345,7 +359,7 @@ export class JobCancelled extends Error {}
 
 /** Stop a queued or running job. */
 export async function cancelJob(id: string): Promise<void> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  const res = await fetch(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST", signal: AbortSignal.timeout(10_000) });
   // 409: it ended on its own first, which the poll loop picks up.
   if (!res.ok && res.status !== 409) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -371,7 +385,7 @@ export interface Me {
  */
 export async function loadMe(): Promise<Me> {
   if (baked) return { user: null, google: false, openrouter: false, chatgpt: false, authRequired: false };
-  const res = await fetch("/api/me");
+  const res = await fetch("/api/me", { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new HttpError(res.status, `Could not reach the account service (${res.status}).`);
   return (await res.json()) as Me;
 }
@@ -392,7 +406,7 @@ export function cloudVoicePreviewUrl(provider: string, voice: string, language?:
 export async function loadTtsProviders(): Promise<TtsProviderInfo[]> {
   if (baked) return [];
   try {
-    const res = await fetch("/api/voices");
+    const res = await fetch("/api/voices", { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return [];
     const body = (await res.json()) as { providers?: TtsProviderInfo[] };
     return body.providers ?? [];
@@ -401,8 +415,34 @@ export async function loadTtsProviders(): Promise<TtsProviderInfo[]> {
   }
 }
 
+async function taskRequest(url: string, init?: RequestInit): Promise<DesktopTaskStatus> {
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+  const body = (await res.json().catch(() => ({}))) as { task?: DesktopTaskStatus; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.task) throw new Error(body.error ?? `Video task failed (${res.status}).`);
+  return body.task;
+}
+
+export function startLaunchVideo(id: string, voice: string): Promise<DesktopTaskStatus> {
+  return taskRequest(`/api/recordings/${encodeURIComponent(id)}/launch-videos`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice }),
+  });
+}
+
+export function setupLaunchVoice(): Promise<DesktopTaskStatus> {
+  return taskRequest("/api/launch-videos/setup", { method: "POST" });
+}
+
+export function loadDesktopTask(id: string): Promise<DesktopTaskStatus> {
+  return taskRequest(`/api/launch-videos/jobs/${encodeURIComponent(id)}`);
+}
+
+export function recordingAssetUrl(id: string, file: string): string {
+  return `/files/recordings/${encodeURIComponent(id)}/${encodeURIComponent(file)}`;
+}
+
 async function recordingCall(id: string, what: "narration" | "voiceover", init: RequestInit): Promise<RecordingSummary> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/${what}`, { method: "POST", ...init });
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/${what}`, { method: "POST", ...init, signal: AbortSignal.timeout(15_000) });
   const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Request failed (${res.status}).`);
@@ -421,7 +461,7 @@ export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSumma
 
 /** Re-frame the walkthrough for a feed: 9:16 or 1:1, with the captions burned in. */
 export async function exportShape(id: string, shape: "vertical" | "square"): Promise<RecordingSummary> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/export?shape=${shape}`, { method: "POST" });
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/export?shape=${shape}`, { method: "POST", signal: AbortSignal.timeout(15_000) });
   const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Export failed (${res.status}).`);
@@ -430,7 +470,7 @@ export async function exportShape(id: string, shape: "vertical" | "square"): Pro
 
 /** Build (or reuse) a no-narration copy of the recording, for downloading without the voiceover. */
 export async function buildSilentCopy(id: string): Promise<RecordingSummary> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/no-voice`, { method: "POST" });
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/no-voice`, { method: "POST", signal: AbortSignal.timeout(15_000) });
   const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Couldn't build a no-voice copy (${res.status}).`);
@@ -439,7 +479,7 @@ export async function buildSilentCopy(id: string): Promise<RecordingSummary> {
 
 /** Delete a recording and its files. */
 export async function deleteRecording(id: string): Promise<void> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}`, { method: "DELETE", signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not delete the recording (${res.status}).`);
@@ -464,7 +504,7 @@ export function transcriptUrl(id: string, format: "srt" | "vtt" | "json" | "md")
 export async function loadInsights(id: string): Promise<RecordingInsights | null> {
   if (isSnapshot) return null;
   try {
-    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/insights`);
+    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/insights`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return null;
     const body = (await res.json()) as { insights?: RecordingInsights };
     return body.insights ?? null;
@@ -472,6 +512,8 @@ export async function loadInsights(id: string): Promise<RecordingInsights | null
     return null;
   }
 }
+
+
 
 /** A share link: the token is the permission, and the link expires. */
 export interface ShareLink {
@@ -517,6 +559,7 @@ export async function sttCaptions(id: string, language = "unknown"): Promise<Rec
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ language }),
+    signal: AbortSignal.timeout(15_000),
   });
   const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -542,7 +585,7 @@ export interface Annotation {
 export async function loadAnnotations(id: string): Promise<Annotation[]> {
   if (isSnapshot) return [];
   try {
-    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations`);
+    const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return [];
     const body = (await res.json().catch(() => ({}))) as { annotations?: Annotation[] };
     return body.annotations ?? [];
@@ -557,6 +600,7 @@ export async function createAnnotation(id: string, at: number, text: string): Pr
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ at, text }),
+    signal: AbortSignal.timeout(10_000),
   });
   const body = (await res.json().catch(() => ({}))) as { annotation?: Annotation; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -566,7 +610,7 @@ export async function createAnnotation(id: string, at: number, text: string): Pr
 
 /** Take a note back. */
 export async function deleteAnnotation(id: string, noteId: string): Promise<void> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations/${encodeURIComponent(noteId)}`, { method: "DELETE" });
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/annotations/${encodeURIComponent(noteId)}`, { method: "DELETE", signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not delete the note (${res.status}).`);
@@ -588,7 +632,7 @@ export interface Schedule {
 }
 
 export async function loadSchedules(): Promise<Schedule[]> {
-  const res = await fetch("/api/schedules");
+  const res = await fetch("/api/schedules", { signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not load schedules (${res.status}).`);
@@ -600,6 +644,7 @@ export async function createSchedule(input: { url: string; interval: string; aut
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal: AbortSignal.timeout(10_000),
   });
   const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -608,7 +653,7 @@ export async function createSchedule(input: { url: string; interval: string; aut
 }
 
 export async function deleteSchedule(id: string): Promise<Schedule[]> {
-  const res = await fetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const res = await fetch(`/api/schedules/${encodeURIComponent(id)}`, { method: "DELETE", signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { schedules?: Schedule[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not remove the schedule (${res.status}).`);
@@ -639,7 +684,7 @@ export interface WebhookDelivery {
 }
 
 export async function loadWebhooks(): Promise<Webhook[]> {
-  const res = await fetch("/api/webhooks");
+  const res = await fetch("/api/webhooks", { signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not load webhooks (${res.status}).`);
@@ -651,6 +696,7 @@ export async function createWebhook(url: string): Promise<Webhook[]> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
+    signal: AbortSignal.timeout(10_000),
   });
   const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
@@ -659,7 +705,7 @@ export async function createWebhook(url: string): Promise<Webhook[]> {
 }
 
 export async function deleteWebhook(id: string): Promise<Webhook[]> {
-  const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const res = await fetch(`/api/webhooks/${encodeURIComponent(id)}`, { method: "DELETE", signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { items?: Webhook[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not remove the endpoint (${res.status}).`);
@@ -667,7 +713,7 @@ export async function deleteWebhook(id: string): Promise<Webhook[]> {
 }
 
 export async function loadWebhookDeliveries(limit = 50): Promise<WebhookDelivery[]> {
-  const res = await fetch(`/api/webhooks/deliveries?limit=${encodeURIComponent(String(limit))}`);
+  const res = await fetch(`/api/webhooks/deliveries?limit=${encodeURIComponent(String(limit))}`, { signal: AbortSignal.timeout(10_000) });
   const body = (await res.json().catch(() => ({}))) as { deliveries?: WebhookDelivery[]; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not load deliveries (${res.status}).`);

@@ -1,4 +1,6 @@
 frames/
+fresh-frames/
+output-fresh/
 node_modules/
 *.wav
 silent.mp4

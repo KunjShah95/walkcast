@@ -1,5 +1,6 @@
 param(
-  [switch]$WarmModel
+  [switch]$WarmModel,
+  [string]$CachePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,20 +27,26 @@ Write-Host "Kokoro is installed and available to Walkcast: $python"
 Write-Host "Default launch voice: af_heart. Override with KOKORO_VOICE when needed."
 
 if ($WarmModel) {
-  $sampleDir = Join-Path $repo ".walkcast"
+  $sampleDir = if ($CachePath) { Join-Path (Split-Path -Parent $CachePath) "kokoro-setup" } else { Join-Path $repo ".walkcast" }
   New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null
+  $env:HF_HOME = if ($CachePath) { $CachePath } elseif ($env:WALKCAST_KOKORO_CACHE) { $env:WALKCAST_KOKORO_CACHE } else { Join-Path $sampleDir "kokoro-cache" }
+  $env:WALKCAST_KOKORO_CACHE = $env:HF_HOME
+  $env:PYTHONUTF8 = "1"
+  New-Item -ItemType Directory -Force -Path $env:HF_HOME | Out-Null
   $sample = Join-Path $sampleDir "kokoro-warmup.wav"
   $program = @'
 import sys, numpy as np, soundfile as sf
 from kokoro import KPipeline
 pipe = KPipeline(lang_code="a")
-parts = [audio for _, _, audio in pipe("Walkcast is ready to record your product walkthrough.", voice="af_heart")]
+parts = [audio for _, _, audio in pipe("Your product tour is ready to record and share.", voice="af_heart")]
 audio = np.concatenate(parts) if parts else np.zeros(0, dtype="float32")
 sf.write(sys.argv[1], audio, 24000)
 print(f"Kokoro model ready: {len(audio)/24000:.2f}s of speech")
 '@
   Write-Host "Loading Kokoro and warming its local model cache..."
-  & $python -c $program $sample
+  $programPath = Join-Path $sampleDir "kokoro-warmup.py"
+  [System.IO.File]::WriteAllText($programPath, $program, [System.Text.UTF8Encoding]::new($false))
+  try { & $python $programPath $sample } finally { Remove-Item -LiteralPath $programPath -Force -ErrorAction SilentlyContinue }
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $sample)) { throw "Kokoro model warm-up failed. See Python output above." }
   Write-Host "Sample saved to $sample"
 }

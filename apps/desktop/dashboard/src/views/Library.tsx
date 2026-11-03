@@ -19,7 +19,6 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   // The recording whose Delete is waiting for a second click.
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // Whether the share panel is open under the header.
   const [sharing, setSharing] = useState(false);
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
@@ -180,6 +179,7 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
               </div>
             </div>
             {deleteError && <p className="rounded-xl border border-fail/30 bg-fail-soft px-4 py-3 text-[13px] text-fail">{deleteError}</p>}
+
             {sharing && (
               <SharePanel
                 recording={current}

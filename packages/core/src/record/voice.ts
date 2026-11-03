@@ -237,6 +237,13 @@ export async function kokoroReady(): Promise<boolean> {
   return kokoroPython === true;
 }
 
+/** Recheck after the desktop app installs or upgrades its local Python voice runtime. */
+export async function refreshKokoro(): Promise<boolean> {
+  kokoroPython = undefined;
+  kokoroProbe = null;
+  return kokoroReady();
+}
+
 /** Kokoro's one-liner as valid Python: real newlines, so a loop is a statement and not a `;`-joined clause. */
 export function kokoroScript(): string {
   return [
@@ -296,7 +303,11 @@ export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
         timeout: 5 * 60_000,
         windowsHide: true,
         maxBuffer: 4 * 1024 * 1024,
-        env: { ...process.env, PYTHONUTF8: "1" },
+        env: {
+          ...process.env,
+          PYTHONUTF8: "1",
+          ...(process.env.WALKCAST_KOKORO_CACHE ? { HF_HOME: process.env.WALKCAST_KOKORO_CACHE } : {}),
+        },
       });
     } finally {
       rmSync(manifest, { force: true });

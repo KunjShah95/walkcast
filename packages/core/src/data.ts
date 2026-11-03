@@ -121,6 +121,15 @@ export interface ShareLink {
   silent?: boolean;
 }
 
+export interface LaunchVideo {
+  id: string;
+  video: string;
+  poster: string;
+  captions: string;
+  voice: string;
+  createdAt: string;
+}
+
 /** A named recording as it is listed by the dashboard. */
 export interface RecordingSummary {
   id: string;
@@ -146,6 +155,8 @@ export interface RecordingSummary {
     exports?: Partial<Record<"vertical" | "square", string>>;
     /** The same recording with no narration track, once someone has asked to download it that way. */
     silent?: string;
+    /** Launch films rendered from this walkthrough, newest first. */
+    launchVideos?: LaunchVideo[];
   };
   /** Why the walk ended, when a length cap was set. */
   stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };

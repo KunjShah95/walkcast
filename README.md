@@ -244,11 +244,20 @@ How it works (`packages/core/src/record/`):
   exactly as long as its line takes. Without ffmpeg/flite (and no cloud key) you still get the WebM
   video and captions.
 
-For the natural offline voice, run `npm run kokoro:setup`. Add `-- --WarmModel` to load Kokoro's
+For the natural offline voice, run `npm run kokoro:setup`; run `npm run kokoro:warm` to load Kokoro's
 model once and save a short local warm-up sample. Walkcast checks the Python package without
 importing the heavyweight model at app startup. If Kokoro lives in a separate environment, set
 `WALKCAST_KOKORO_PYTHON` to that environment's Python executable; the same setting is read from
 the repository `.env` for local development.
+
+### Launch Studio
+
+The desktop dashboard includes **Launch Studio**. Record `walkcast.kunjshah.in` through Home,
+Download, and Lab, then choose the recording and a Kokoro voice. Walkcast renders the designed
+1080p launch cut on the computer, with original score and effects, ducked narration, and captions;
+the MP4 and VTT are saved with the source recording. The first run can prepare Kokoro and its local
+voice-model cache from the Studio itself. `npm run launch:video -- <recording.mp4>` remains available
+for rebuilding from the command line.
 
 Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/2FA (stops and
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;

@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
 :root{--ink:#1b1a17;--ink2:#4c4841;--muted:#6b665d;--dim:#8a847a;--line:#e7e3db;--panel:#f5f4f1;--panel3:#eae8e3;
---signal:#9c5700;--signal2:#874b00;--soft:#f4e7d2;--exhibit:#f1dfbd;--exink:#5c3400;--exsoft:#f8efdf;--rec:#c0321c;--fail:#b2261c;--pass:#2c6a3d;
+--signal:#0e6b58;--signal2:#084d41;--soft:#d8eee7;--exhibit:#d8eee7;--exink:#18483d;--exsoft:#edf6f2;--rec:#c0321c;--fail:#b2261c;--pass:#2c6a3d;
 --night:#12110f;--e:cubic-bezier(.16,1,.3,1);--spring:cubic-bezier(.34,1.56,.64,1)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1920px;height:1080px;overflow:hidden;background:#000}
@@ -24,7 +24,7 @@ body{font-family:'Schibsted Grotesk';color:var(--ink);-webkit-font-smoothing:ant
 .h-m{font-size:76px;font-weight:800;letter-spacing:-.045em;line-height:1.04}
 .dimtxt{color:var(--dim)} .dark .dimtxt{color:#7d766b}
 .serif{font-family:'Instrument Serif';font-weight:400;letter-spacing:-.02em}
-.o{color:#e0962e}.r{color:#e5533b}
+.o{color:#2aa47b}.r{color:#e5533b}
 /* motion vocabulary — every animation's delay is absolute video time (set from data-d by JS) */
 .a{animation-duration:.8s;animation-timing-function:var(--e);animation-fill-mode:both;animation-play-state:paused}
 .rise{animation-name:rise}@keyframes rise{from{opacity:0;transform:translateY(60px);filter:blur(10px)}to{opacity:1;transform:none;filter:blur(0)}}
@@ -54,7 +54,7 @@ body{font-family:'Schibsted Grotesk';color:var(--ink);-webkit-font-smoothing:ant
 
 /* S2 */
 .word{font-size:180px;font-weight:800;letter-spacing:-.06em;line-height:1}
-.num{font:600 28px 'JetBrains Mono';color:#e0962e;letter-spacing:.1em;margin-bottom:28px}
+.num{font:600 28px 'JetBrains Mono';color:#2aa47b;letter-spacing:.1em;margin-bottom:28px}
 .timer{position:absolute;right:80px;top:70px;text-align:right}
 .timer .v{font:600 54px 'JetBrains Mono';color:#fff;letter-spacing:-.02em}
 .timer .k{font:600 16px 'JetBrains Mono';letter-spacing:.25em;color:#8a847a}
@@ -89,9 +89,9 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 .dark .chip{background:#24221e;color:#d9d3c8;box-shadow:inset 0 0 0 1px #3a3731}
 .feat{background:var(--panel);color:var(--ink2);font:600 22px 'Schibsted Grotesk';padding:16px 20px;border-radius:16px;display:flex;align-items:center;gap:14px;box-shadow:inset 0 0 0 1px var(--line)}
 .feat .n{font:600 15px 'JetBrains Mono';color:var(--dim)}
-.feat.on{background:var(--ink);color:#fff;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}.feat.on .n{color:#e0962e}
+.feat.on{background:var(--ink);color:#fff;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}.feat.on .n{color:#2aa47b}
 .callout{position:absolute;background:var(--ink);color:#fff;font:600 27px 'Schibsted Grotesk';padding:18px 26px;border-radius:18px;display:flex;align-items:center;gap:14px;box-shadow:0 30px 60px -20px rgba(0,0,0,.5);white-space:nowrap}
-.callout .n{font:600 17px 'JetBrains Mono';color:#e0962e}
+.callout .n{font:600 17px 'JetBrains Mono';color:#2aa47b}
 .tx{display:flex;flex-direction:column;gap:2px;font-size:19px;color:var(--ink2);text-align:left}
 .tx div{display:flex;gap:16px;padding:7px 14px;border-radius:10px}
 .tx t{font:500 17px 'JetBrains Mono';color:var(--dim);width:58px;flex:none;padding-top:3px}
@@ -105,8 +105,8 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 .node{width:300px;height:180px;border-radius:26px;background:#1f1d1a;box-shadow:inset 0 0 0 1.5px #3a3731;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 30px;text-align:left;position:relative}
 .node .n{font:600 16px 'JetBrains Mono';color:#7d766b;letter-spacing:.15em}
 .node .t{font-size:34px;font-weight:700;letter-spacing:-.03em;color:#f3efe8;margin-top:8px}
-.node.on{background:#2b2316;box-shadow:inset 0 0 0 2px #e0962e,0 0 60px -10px rgba(224,150,46,.45)}
-.node.on .n{color:#e0962e}
+.node.on{background:#17382f;box-shadow:inset 0 0 0 2px #2aa47b,0 0 60px -10px rgba(224,150,46,.45)}
+.node.on .n{color:#2aa47b}
 .cause{font:500 26px 'JetBrains Mono';padding:14px 24px;border-radius:999px;background:#24221e;color:#d9d3c8;box-shadow:inset 0 0 0 1px #3a3731}
 .cause.u{background:var(--exhibit);color:var(--exink);box-shadow:0 0 0 6px rgba(241,223,189,.15)}
 .brow{display:grid;grid-template-columns:260px 1fr 190px;align-items:center;gap:34px;margin:20px 0}
@@ -143,7 +143,17 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
   <div class="center">
     <div class="win a rise drift2" data-d="10" style="width:1180px;position:relative">
       <div class="in"><div class="chrome"><b></b><b></b><b></b><div class="url">walkthrough-v1.4-final-FINAL.mp4</div></div>
-      <div class="shot" style="height:560px;background-image:url(frames/b/060.jpg);filter:saturate(.75)" id="stale"></div></div>
+      <div class="shot" style="height:560px;background:#f6f5f1;padding:64px 72px;display:grid;align-content:center;gap:22px" id="stale">
+        <div style="font:600 16px 'JetBrains Mono';letter-spacing:.16em;color:#81796e">THE WALKTHROUGH YOU SHIPPED</div>
+        <div style="font:750 68px 'Schibsted Grotesk';letter-spacing:-.055em;color:#171714">Product tour · v1.4</div>
+        <div style="display:flex;gap:14px">
+          <div style="padding:15px 20px;border-radius:12px;background:white;box-shadow:inset 0 0 0 1px #e4e0d8;font:500 20px 'JetBrains Mono';color:#5c574e">14 scenes</div>
+          <div style="padding:15px 20px;border-radius:12px;background:white;box-shadow:inset 0 0 0 1px #e4e0d8;font:500 20px 'JetBrains Mono';color:#5c574e">4h 12m to make</div>
+          <div style="padding:15px 20px;border-radius:12px;background:white;box-shadow:inset 0 0 0 1px #e4e0d8;font:500 20px 'JetBrains Mono';color:#5c574e">MP4 · captions</div>
+        </div>
+        <div style="height:1px;background:#dedad1;margin-top:14px"></div>
+        <div style="font:500 22px 'Schibsted Grotesk';color:#716b61">The interface changed. This recording didn't.</div>
+      </div></div>
       <div class="a right-in" data-d="11.4" style="position:absolute;right:-80px;top:110px;background:#fff;border-radius:18px;padding:20px 26px;box-shadow:0 30px 60px -20px rgba(0,0,0,.6);display:flex;gap:16px;align-items:center;text-align:left;color:var(--ink)">
         <div style="width:46px;height:46px;border-radius:12px;background:var(--pass);color:#fff;display:flex;align-items:center;justify-content:center;font:700 24px 'JetBrains Mono'">↑</div>
         <div><div style="font:700 24px 'Schibsted Grotesk'">Deployed v1.5</div><div style="font:500 18px 'JetBrains Mono';color:var(--muted)">new nav · new pricing · 12 changes</div></div></div>
@@ -178,7 +188,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 <!-- S5 · scale of the problem -->
 <section class="scene dark" data-s="18" data-e="21.75"><div class="grid"></div>
   <div class="center">
-    <div style="display:flex;align-items:baseline;gap:30px"><div class="mono a pop" data-d="18" id="c76" style="font-size:300px;font-weight:700;letter-spacing:-.07em;color:#e0962e;line-height:1">0</div>
+    <div style="display:flex;align-items:baseline;gap:30px"><div class="mono a pop" data-d="18" id="c76" style="font-size:300px;font-weight:700;letter-spacing:-.07em;color:#2aa47b;line-height:1">0</div>
     <div style="text-align:left"><div class="h-m a rise" data-d="18.3">runs said “success”.</div><div class="h-m a rise r" data-d="18.9">The app disagreed.</div></div></div>
     <div class="a fade mono" data-d="19.4" style="margin-top:30px;font-size:24px;color:#7d766b">162 of 378 runs failed · 76 claimed success anyway · walkcast lab, overview</div>
     <div style="display:flex;gap:18px;margin-top:60px">
@@ -189,7 +199,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 
 <!-- S6 · drop: logo reveal -->
 <section class="scene light" data-s="22" data-e="30"><div class="grid"></div>
-  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-200px;background:radial-gradient(closest-side,#f4e7d2,transparent);opacity:.9"></div>
+  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-200px;background:radial-gradient(closest-side,#d8eee7,transparent);opacity:.9"></div>
   <div class="center drift a" data-d="22" data-dur="8">
     <div style="display:flex;align-items:center;gap:44px">
       <div class="mark a pop" data-d="22" style="--s:210px" id="logoMark"></div>
@@ -223,28 +233,24 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 <section class="scene light" data-s="36" data-e="48"><div class="grid"></div>
   <div style="position:absolute;left:90px;top:84px;width:1740px;display:flex;gap:40px">
     <div class="win a rise" data-d="36" style="width:1220px">
-      <div class="in"><div class="chrome"><b></b><b></b><b></b><div class="url"><span style="width:10px;height:10px;border-radius:50%;background:var(--pass)"></span><span id="u">agentic-crm-henna.vercel.app</span></div></div>
-        <div class="shot" style="height:762px"><img id="demo" src="frames/a/001.jpg">
+      <div class="in"><div class="chrome"><b></b><b></b><b></b><div class="url"><span style="width:10px;height:10px;border-radius:50%;background:var(--pass)"></span><span id="u">walkcast.kunjshah.in</span></div></div>
+        <div class="shot" style="height:762px"><img id="demo" src="fresh-frames/a/001.jpg">
           <div class="recchip"><i class="a pulse" data-d="36"></i><span id="rect">REC 0:00</span></div>
           <div class="cap"><span class="cite" id="ex">EX-2</span><span id="captxt"></span></div></div></div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-top:6px">
-      <div class="a right-in" data-d="36.5"><div class="kicker">Chapters</div><div class="chap" id="chap"><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span><span><u></u></span></div></div>
+      <div class="a right-in" data-d="36.5"><div class="kicker">Chapters</div><div class="chap" id="chap"><span><u></u></span><span><u></u></span><span><u></u></span></div></div>
       <div class="a right-in" data-d="36.8"><div class="kicker" style="margin-top:12px">Transcript</div>
         <div class="tx" id="tx">
-          <div><t>00:00</t>Opening agentic-crm-henna.vercel.app.</div>
-          <div><t>00:10</t>Scrolling through “Real Estate CRM for Indian Sales Teams”.</div>
-          <div><t>00:16</t>Opening the product page.</div>
-          <div><t>00:21</t>Scrolling through “Product — Inventory, Bookings, Site Visits”.</div>
-          <div><t>00:28</t>Opening the pricing page.</div>
-          <div><t>00:33</t>Scrolling through “Pricing — Plans from ₹1,499/month”.</div>
-          <div><t>00:39</t>Opening the contact page.</div>
+          <div><t>00:06</t>Walkcast homepage · live browser capture.</div>
+          <div><t>00:38</t>Download · free desktop app for Windows and Linux.</div>
+          <div><t>00:56</t>Walkcast Lab · replay browser journeys as tests.</div>
         </div></div>
       <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
-        <div class="feat a left-in" data-d="37.0" data-on="37.0"><span class="n">01</span>Drives a real Chromium</div>
-        <div class="feat a left-in" data-d="40.2" data-on="40.2"><span class="n">02</span>Narration written only from what happened</div>
+        <div class="feat a left-in" data-d="37.0" data-on="37.0"><span class="n">01</span>Drives a real browser</div>
+        <div class="feat a left-in" data-d="40.2" data-on="40.2"><span class="n">02</span>Captures what visitors see</div>
         <div class="feat a left-in" data-d="43.2" data-on="43.2"><span class="n">03</span>Captions, chapters, transcript</div>
-        <div class="feat a left-in" data-d="45.4" data-on="45.4"><span class="n">04</span>Never bypasses CAPTCHA or 2FA</div>
+        <div class="feat a left-in" data-d="45.4" data-on="45.4"><span class="n">04</span>Stops at CAPTCHA or 2FA</div>
       </div>
     </div>
   </div>
@@ -284,7 +290,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
     <div class="label a fade" data-d="60.1">Failure → fixture → replay → pass^k</div>
     <div style="position:relative;display:flex;gap:80px;margin-top:60px">
       <div style="position:absolute;left:150px;right:150px;top:89px;height:3px;background:#3a3731"></div>
-      <div class="a grow" data-d="60.4" style="animation-duration:3.4s;animation-timing-function:linear;position:absolute;left:150px;right:150px;top:89px;height:3px;background:#e0962e;transform-origin:0 0"></div>
+      <div class="a grow" data-d="60.4" style="animation-duration:3.4s;animation-timing-function:linear;position:absolute;left:150px;right:150px;top:89px;height:3px;background:#2aa47b;transform-origin:0 0"></div>
       <div class="node a pop" data-d="60.3" data-on="60.5"><div class="n">01 · CAPTURE</div><div class="t">Failed run</div></div>
       <div class="node a pop" data-d="60.5" data-on="61.6"><div class="n">02 · CLASSIFY</div><div class="t">Cause + evidence</div></div>
       <div class="node a pop" data-d="60.7" data-on="62.7"><div class="n">03 · FREEZE</div><div class="t">Fixture</div></div>
@@ -321,7 +327,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 
 <!-- S14 · end card -->
 <section class="scene light" data-s="80" data-e="88"><div class="grid"></div>
-  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-160px;background:radial-gradient(closest-side,#f4e7d2,transparent)"></div>
+  <div style="position:absolute;width:1400px;height:900px;left:260px;top:-160px;background:radial-gradient(closest-side,#d8eee7,transparent)"></div>
   <div class="center drift a" data-d="80" data-dur="8">
     <div style="display:flex;align-items:center;gap:36px">
       <div class="mark a pop" data-d="80" style="--s:150px" id="endMark"></div>
@@ -329,7 +335,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
     <div class="h-m a rise" data-d="81.2" style="margin-top:64px;font-size:64px">Show what actually happened.</div>
     <div class="a fade" data-d="82.2" style="display:flex;gap:16px;margin-top:46px">
       <div class="chip">MIT licensed</div><div class="chip" style="background:var(--exhibit);color:var(--exink);box-shadow:none">The price is zero.</div><div class="chip">Windows · Linux</div></div>
-    <div class="a rise" data-d="83" style="margin-top:56px;display:flex;align-items:center;gap:18px;font:600 40px 'JetBrains Mono';letter-spacing:-.01em;color:#fff;background:var(--ink);padding:22px 40px 22px 30px;border-radius:999px;box-shadow:0 30px 60px -25px rgba(27,26,23,.6)"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#e0962e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>walkcast.kunjshah.in<span style="color:#e0962e">→</span></div>
+    <div class="a rise" data-d="83" style="margin-top:56px;display:flex;align-items:center;gap:18px;font:600 40px 'JetBrains Mono';letter-spacing:-.01em;color:#fff;background:var(--ink);padding:22px 40px 22px 30px;border-radius:999px;box-shadow:0 30px 60px -25px rgba(27,26,23,.6)"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2aa47b" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>walkcast.kunjshah.in<span style="color:#2aa47b">→</span></div>
   </div>
 </section>
 
@@ -337,7 +343,7 @@ mark{background:var(--exhibit);color:var(--exink);padding:1px 7px;border-radius:
 <div id="vig"></div><div id="grain"></div><div id="flash"></div><div id="bar"></div>
 
 <script>
-const MARK=id=>`<svg viewBox="0 0 64 64"><defs><linearGradient id="G${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c5700"/><stop offset="1" stop-color="#7a4100"/></linearGradient></defs>
+const MARK=id=>`<svg viewBox="0 0 64 64"><defs><linearGradient id="G${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0e6b58"/><stop offset="1" stop-color="#063e35"/></linearGradient></defs>
 <rect width="64" height="64" rx="16" fill="url(#G${id})"/>
 <path class="trail" d="M11 26.5h8M14.5 37.5h4.5" stroke="#fff" stroke-width="3.6" stroke-linecap="round" opacity=".5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="0"/>
 <path class="play" d="M25.5 22.3v19.4c0 2.3 2.5 3.7 4.5 2.5l15.6-9.7c1.8-1.2 1.8-3.8 0-5L30 19.8c-2-1.2-4.5.2-4.5 2.5z" fill="#fff"/>
@@ -358,10 +364,10 @@ const lerp=(a,b,x)=>a+(b-a)*x;
 const $=id=>document.getElementById(id);
 const pad=n=>String(Math.floor(n)).padStart(2,'0');
 
-const SEG=[{s:36,e:40,dir:'a',url:'agentic-crm-henna.vercel.app',cap:'Scrolling through “Real Estate CRM for Indian Sales Teams — Estate360”.',ex:'EX-2',line:1,demo0:10.5},
-           {s:40,e:44,dir:'b',url:'agentic-crm-henna.vercel.app/product',cap:'Scrolling through “Product — Inventory, Bookings, Site Visits, WhatsApp”.',ex:'EX-4',line:3,demo0:21.3},
-           {s:44,e:48,dir:'c',url:'agentic-crm-henna.vercel.app/pricing',cap:'Scrolling through “Pricing — Plans from ₹1,499/month”.',ex:'EX-6',line:5,demo0:33.0}];
-const URL_T='https://agentic-crm-henna.vercel.app';
+const SEG=[{s:36,e:40,dir:'a',url:'walkcast.kunjshah.in',cap:'Paste a link. Get a narrated walkthrough of your site.',ex:'HOME',line:0,demo0:6},
+           {s:40,e:44,dir:'b',url:'walkcast.kunjshah.in/download',cap:'Free desktop app for Windows and Linux.',ex:'DOWNLOAD',line:1,demo0:38},
+           {s:44,e:48,dir:'c',url:'walkcast.kunjshah.in/lab',cap:'Replay browser journeys as reliable regression tests.',ex:'LAB',line:2,demo0:56}];
+const URL_T='https://walkcast.kunjshah.in';
 
 async function render(t){
   for(const s of scenes){ s.style.display=(t>=+s.dataset.s && t<+s.dataset.e)?(s.classList.contains('sub')?'flex':'block'):'none'; }
@@ -398,7 +404,7 @@ async function render(t){
   if(t>=30&&t<36){
     const n=Math.floor(clamp((t-30.7)/1.8)*URL_T.length); $('typed').textContent=URL_T.slice(0,n);
     $('caret').style.opacity=(n<URL_T.length||Math.floor(t*2.5)%2)?1:0;
-    const tickOn=t>=33.35; const tk=$('tick'); tk.style.background=tickOn?'#9c5700':'transparent'; tk.style.boxShadow=tickOn?'none':'inset 0 0 0 2px #cfc9bd'; tk.textContent=tickOn?'✓':'';
+    const tickOn=t>=33.35; const tk=$('tick'); tk.style.background=tickOn?'#0e6b58':'transparent'; tk.style.boxShadow=tickOn?'none':'inset 0 0 0 2px #cfc9bd'; tk.textContent=tickOn?'✓':'';
     // cursor path: start bottom right → checkbox → button
     const cur=$('cursor'); const tb=$('tick').getBoundingClientRect(), gb=$('go').getBoundingClientRect();
     const P=[[1500,1000,32.4],[tb.x+12,tb.y+10,33.25],[tb.x+12,tb.y+10,33.6],[gb.x+gb.width*.45,gb.y+gb.height*.5,34.25]];
@@ -406,19 +412,19 @@ async function render(t){
     for(let i=1;i<P.length;i++){ if(t>=P[i-1][2]){ const k=ease(clamp((t-P[i-1][2])/(P[i][2]-P[i-1][2]))); x=lerp(P[i-1][0],P[i][0],k); y=lerp(P[i-1][1],P[i][1],k);} }
     cur.style.transform=`translate(${x}px,${y}px) scale(${t>34.25&&t<34.45?.85:1})`; cur.style.opacity=t<32.4?0:1;
     const go=$('go'); const press=t>=34.25&&t<34.45; go.style.transform=`scale(${press?.95:1})`;
-    go.style.background=t>=34.45?'#874b00':'#9c5700';
-    $('golabel').textContent=t>=34.45?`Recording… ${Math.min(6,Math.floor((t-34.45)*2.4)+1)}/6 pages`:'Make my walkthrough';
+    go.style.background=t>=34.45?'#084d41':'#0e6b58';
+    $('golabel').textContent=t>=34.45?`Recording… ${Math.min(3,Math.floor((t-34.45)*1.2)+1)}/3 pages`:'Make my walkthrough';
   }
   // S8 demo playback + captions + transcript + chapters
   if(t>=36&&t<48){
     const seg=SEG.find(s=>t>=s.s&&t<s.e); const lt=t-seg.s;
-    const f=Math.min(126,Math.floor(lt*30*1.04)+1); const src=`frames/${seg.dir}/${String(f).padStart(3,'0')}.jpg`;
+    const f=Math.min(126,Math.floor(lt*30*1.04)+1); const src=`fresh-frames/${seg.dir}/${String(f).padStart(3,'0')}.jpg`;
     const img=$('demo'); if(!img.src.endsWith(src)){ img.src=src; await img.decode().catch(()=>{}); }
     $('u').textContent=seg.url; $('ex').textContent=seg.ex;
     const words=seg.cap.split(' '); const wn=Math.ceil(clamp((lt-.2)/1.4)*words.length); $('captxt').textContent=words.slice(0,wn).join(' ');
     const rt=seg.demo0+lt*1.04; $('rect').textContent=`REC ${Math.floor(rt/60)}:${pad(rt%60)}`;
     [...$('tx').children].forEach((d,i)=>{ d.className=i===seg.line?'now':''; d.style.opacity=i>seg.line+1?.35:1; });
-    const chapIdx=SEG.indexOf(seg); [...$('chap').children].forEach((c,i)=>{ const u=c.firstChild; u.style.width=(i<chapIdx*2+1?100:i===chapIdx*2+1?clamp(lt/4)*100:0)+'%'; });
+    const chapIdx=SEG.indexOf(seg); [...$('chap').children].forEach((c,i)=>{ const u=c.firstChild; u.style.width=(i<chapIdx?100:i===chapIdx?clamp(lt/4)*100:0)+'%'; });
   }
   // S9 marquee
   if(t>=48&&t<54) $('marq').style.transform=`translateX(${-(t-48)*160}px)`;

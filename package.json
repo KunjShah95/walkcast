@@ -1,6 +1,6 @@
 {
   "name": "walkcast",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "bin": {
     "walkcast": "bin/walkcast.mjs"
@@ -35,6 +35,8 @@
     "cli": "node --import tsx apps/desktop/cli.ts",
     "doctor": "node --import tsx apps/desktop/cli.ts doctor",
     "kokoro:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-kokoro.ps1",
+    "kokoro:warm": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-kokoro.ps1 -WarmModel",
+    "launch:video": "node docs/launch/source/build-fresh.mjs",
     "walkcast": "node bin/walkcast.mjs",
     "qa": "npm run typecheck && npm run ui:build",
     "lint": "eslint .",

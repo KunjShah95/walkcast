@@ -1,7 +1,6 @@
 import { MotionConfig } from "motion/react";
 import { DOC_PAGES } from "./pages/Docs.tsx";
-import { HeroBlock, BrandMark } from "./ui.tsx";
-import { Hero, Nav } from "./sections/Hero.tsx";
+import { Nav } from "./sections/Hero.tsx";
 import { Bento, Closing, Faq, Footer, Uses } from "./sections/More.tsx";
 import { Agents, Plain } from "./sections/Plain.tsx";
 import { Hero as PremiumHero } from "./pages/Hero.tsx";

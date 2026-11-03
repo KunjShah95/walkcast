@@ -3,6 +3,7 @@ import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { Studio, hostOf } from "../components/Studio.tsx";
 import { Cite, Empty, ExhibitTag, FindingChip, Panel, PanelHeader, Stamp, Verdict } from "../components/ui.tsx";
+import { ArrowUpRight, CirclePlay, Sparkles } from "lucide-react";
 import { type Capabilities, type Me, fileUrl, isSnapshot, loadCapabilities, loadRun } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 import { TASKS } from "../lib/agents.ts";
@@ -28,23 +29,26 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
 
   return (
     <div className="grid gap-6 [&>*]:min-w-0">
-      <section className="relative grid gap-4 overflow-hidden border-b border-line pb-6">
-        <div className="relative z-10 flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
-          <h1 className="text-[28px] font-semibold leading-[1.05] tracking-tight sm:text-[40px]">
-            {first ? `${first}, ${t("dashboard.prompt")}` : t("dashboard.prompt")}
-          </h1>
+      <section className="dashboard-hero studio-card relative grid gap-6 overflow-hidden rounded-[26px] border p-5 sm:p-8 lg:p-9">
+        <div className="dashboard-hero-orbit pointer-events-none absolute -right-20 -top-36 size-[420px] rounded-full" />
+        <div className="relative z-10 grid gap-7 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,.7fr)] xl:items-end">
+          <div className="grid gap-5">
+            <div className="studio-kicker inline-flex w-fit items-center gap-2 text-[10px] font-bold"><Sparkles className="size-3.5" /> PRODUCT QUALITY WORKSPACE</div>
+            <div className="grid gap-3">
+              <h1 className="max-w-[760px] text-[clamp(34px,5vw,60px)] font-semibold leading-[.98] tracking-[-.065em]">
+                {first ? `${first}, ` : "Every journey, "}<span className="text-ink-3">{first ? "your next release starts here." : "under control."}</span>
+              </h1>
+              <p className="max-w-[64ch] text-[14px] leading-6 text-ink-2 sm:text-[15px]">Walk the real product, capture the story, and trace failures back to the exact step that caused them.</p>
+            </div>
+            {isSnapshot ? (
+              <p className="text-[13px] text-ink-3">{t("dashboard.readOnlySnapshot")}</p>
+            ) : (
+              <div className="max-w-3xl"><RecordBar onRecord={(url) => go({ view: "record", url })} /></div>
+            )}
+            {!isSnapshot && <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] text-ink-3"><span className="inline-flex items-center gap-1.5"><CirclePlay className="size-3.5 text-signal" /> Browser walkthroughs</span><span className="inline-flex items-center gap-1.5"><ArrowUpRight className="size-3.5 text-signal" /> Evidence-backed lab runs</span><button type="button" onClick={() => go({ view: "launch" })} className="inline-flex items-center gap-1 font-semibold text-signal transition-colors hover:text-ink"><Sparkles className="size-3.5" /> Make a launch film <ArrowUpRight className="size-3" /></button></div>}
+          </div>
           <Facts index={index} caps={caps} />
         </div>
-        {isSnapshot ? (
-          <p className="text-[13px] text-ink-3">{t("dashboard.readOnlySnapshot")}</p>
-        ) : (
-          <div className="max-w-3xl">
-            <RecordBar onRecord={(url) => go({ view: "record", url })} />
-          </div>
-        )}
-        <p className="max-w-[72ch] text-[14px] text-ink-2">
-          Paste a link and a real browser walks it, narrating only what it did. Lab runs below show where your agents broke, with the steps that prove it.
-        </p>
       </section>
 
       <div className="grid items-start gap-5 xl:grid-cols-12">
@@ -152,12 +156,12 @@ function Facts({ index, caps }: { index: LabIndex; caps: Capabilities | null }) 
   const money = runs.reduce((n, r) => n + (estimateCost(r.modelSpec, r.inputTokens ?? 0, r.outputTokens ?? 0) ?? 0), 0);
   if (spent > 0) items.push([`${shortTokens(spent)} tokens`, money > 0 ? `≈ ${usd(money)} spent` : "spent"]);
   return (
-    <dl className="flex flex-wrap gap-x-6 gap-y-1">
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
       {items.map(([v, k]) => (
-        <div key={k} className="flex items-baseline gap-1.5">
+        <div key={k} className="flex min-h-[76px] flex-col justify-between rounded-2xl border border-line bg-paper/70 px-3.5 py-3">
           <dt className="sr-only">{k}</dt>
-          <dd className="font-mono text-[15px] font-medium text-ink">{v}</dd>
-          <span className="text-[12.5px] text-ink-3">{k}</span>
+          <dd className="font-mono text-[20px] font-medium leading-none tracking-[-.04em] text-ink">{v}</dd>
+          <span className="text-[10.5px] leading-tight text-ink-3">{k}</span>
         </div>
       ))}
     </dl>

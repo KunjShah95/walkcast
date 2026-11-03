@@ -59,7 +59,7 @@ function shiftVtt(vtt, offset) {
 mkdirSync(here, { recursive: true });
 writeFileSync(shiftedVtt, shiftVtt(readFileSync(sourceVtt, "utf8"), mainStart), "utf8");
 
-const introGraph = `
+const introGraph = String.raw`
 [0:v]drawbox=x=1260:y=0:w=660:h=1080:color=0x15352F@0.5:t=fill,
 drawbox=x=1220:y=0:w=2:h=1080:color=0x36C9B2@0.32:t=fill,
 drawbox=x=200:y=855:w=720:h=3:color=0x28443F@1:t=fill,
@@ -80,7 +80,7 @@ await run([
   "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-r", "30", "-pix_fmt", "yuv420p", intro,
 ]);
 
-const outroGraph = `
+const outroGraph = String.raw`
 [0:v]drawbox=x=1260:y=0:w=660:h=1080:color=0x15352F@0.5:t=fill,
 drawbox=x=1220:y=0:w=2:h=1080:color=0x36C9B2@0.32:t=fill,
 drawbox=x=200:y=810:w=720:h=3:color=0x28443F@1:t=fill,
@@ -103,7 +103,7 @@ const homeEnd = (mainStart + 32.19).toFixed(2);
 const downloadEnd = (mainStart + 50.36).toFixed(2);
 const mainEnd = (mainStart + mainDuration).toFixed(2);
 const outroStartText = outroStart.toFixed(2);
-const filterGraph = `
+const filterGraph = String.raw`
 [0:v]settb=AVTB,setpts=PTS-STARTPTS,fps=30,format=yuv420p[intro];
 [1:v]settb=AVTB,setpts=PTS-STARTPTS,fps=30,format=yuv420p[main];
 [2:v]settb=AVTB,setpts=PTS-STARTPTS,fps=30,format=yuv420p[outro];

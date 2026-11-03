@@ -338,12 +338,11 @@ export function ReviewCard({ name, handle, quote, avatar }: { name: string; hand
 
 /** One step of an install flow: a numbered chip, a short title and a 15px description. */
 
-export function InstallStep({ number, title, text, icon }: { number: number; title: string; text: string; icon: LucideIcon }) {
-  const still = useReducedMotion();
+export function InstallStep({ number, title, text, icon: Icon }: { number: number; title: string; text: string; icon: LucideIcon }) {
   return (
     <div className="install-step">
       <span className="install-step-number">{String(number).padStart(2, "0")}</span>
-      <span className="install-step-icon"><icon size={15} /></span>
+      <span className="install-step-icon"><Icon size={15} /></span>
       <div className="install-step-copy">
         <b className="install-step-title">{title}</b>
         <small className="install-step-text">{text}</small>
@@ -354,19 +353,19 @@ export function InstallStep({ number, title, text, icon }: { number: number; tit
 
 /** A head with one clear focal, a supporting picture of the product, and one large CTA. */
 
-export function HeroSection({ headline, subhead, picture, cta, children, className = "" }: {
+export function HeroSection({ headline, subhead, picture, cta, children, eyebrow, className = "" }: {
   headline: string;
   subhead: string;
+  eyebrow?: string;
   picture?: ReactNode;
   cta?: string;
   children?: ReactNode;
   className?: string;
 }) {
-  const still = useReducedMotion();
   return (
     <section className={`hero-section ${className ?? ""}`}>
       <div className="hero-section-copy">
-        <span className="hero-section-eyebrow">{eyebrow}</span>
+        {eyebrow && <span className="hero-section-eyebrow">{eyebrow}</span>}
         <h1 className="hero-section-headline">{headline}</h1>
         <p className="hero-section-subhead">{subhead}</p>
         {children}
@@ -380,7 +379,6 @@ export function HeroSection({ headline, subhead, picture, cta, children, classNa
 /** A counter beaten out in the sheet metal of the card: the headline number, then the label below. */
 
 export function Beaten({ children, className = "", value }: { children: ReactNode; className?: string; value: string }) {
-  const still = useReducedMotion();
   return (
     <div className={`beaten ${className ?? ""}`}>
       <div className="beaten-inner">
@@ -393,11 +391,10 @@ export function Beaten({ children, className = "", value }: { children: ReactNod
 
 /** One row of a feature list: a small icon chip, an 18px headline, a muted 15px description. */
 
-export function FeatureRow({ icon, title, text, className = "" }: { icon: LucideIcon; title: string; text: string; className?: string }) {
-  const still = useReducedMotion();
+export function FeatureRow({ icon: Icon, title, text, className = "" }: { icon: LucideIcon; title: string; text: string; className?: string }) {
   return (
     <div className={`feature-row ${className ?? ""}`}>
-      <span className="feature-row-icon"><icon size={15} /></span>
+      <span className="feature-row-icon"><Icon size={15} /></span>
       <div className="feature-row-copy">
         <b className="feature-row-title">{title}</b>
         <small className="feature-row-text">{text}</small>
@@ -416,7 +413,6 @@ export function ProductCard({ title, eyebrow, children, className = "", href, ct
   href?: string;
   cta?: string;
 }) {
-  const still = useReducedMotion();
   return (
     <div className={`product-card ${className ?? ""}`}>
       <div className="product-card-top">

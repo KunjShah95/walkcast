@@ -52,38 +52,39 @@
   color-scheme: light;
 }
 
-/* Night variant: Manu Arora / Aceternity — true black canvas, single violet accent, glow depth. */
+/* Night studio: graphite surfaces, Walkcast mint signal, quiet depth. */
 :root[data-theme="dark"] {
-  --paper: #0a0a0a;
-  --panel: #111111;
-  --panel-2: #161616;
-  --panel-3: #1f1f1f;
-  --ink: #fafafa;
-  --ink-2: #a1a1aa;
-  --ink-3: #71717a;
-  --dim: #52525b;
-  --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --signal: #2f8f86;
-  --signal-strong: #237269;
-  --signal-soft: rgba(47, 143, 134, 0.18);
-  --on-signal: #ffffff;
-  --solid: #fafafa;
-  --on-solid: #0a0a0a;
+  --paper: #0a1012;
+  --panel: #10191b;
+  --panel-2: #0d1517;
+  --panel-3: #192426;
+  --ink: #f1f7f4;
+  --ink-2: #a6b8b2;
+  --ink-3: #71827d;
+  --dim: #8a9d96;
+  --line: rgba(191, 224, 211, 0.09);
+  --line-strong: rgba(191, 224, 211, 0.18);
+  --signal: #a5f36b;
+  --signal-strong: #85d84e;
+  --signal-soft: rgba(165, 243, 107, 0.13);
+  --on-signal: #11190e;
+  --solid: #a5f36b;
+  --on-solid: #11190e;
   --exhibit: rgba(246, 215, 118, 0.14);
   --exhibit-ink: #f6d776;
   --exhibit-soft: rgba(246, 215, 118, 0.09);
   --rec: #f87171;
-  --ember: #d97706;
-  --highlight: rgba(47, 143, 134, 0.18);
-  --highlight-ink: #f6d776;
+  --ember: #a5f36b;
+  --highlight: rgba(165, 243, 107, 0.14);
+  --highlight-ink: #d5f9b9;
   --fail: #f87171;
   --fail-soft: rgba(248, 113, 113, 0.12);
   --pass: #34d399;
   --pass-soft: rgba(52, 211, 153, 0.12);
   --warn: #fbbf24;
   --warn-soft: rgba(251, 191, 36, 0.12);
-  --shadow-card: none;
+  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  --shadow-hover: 0 18px 48px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(165, 243, 107, 0.08);
   color-scheme: dark;
 }
 
@@ -144,7 +145,9 @@ body,
 }
 
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(ellipse at 78% -10%, color-mix(in srgb, var(--signal) 7%, transparent), transparent 34rem),
+    var(--paper);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 14px;
@@ -152,6 +155,60 @@ body {
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
 }
+
+.workspace-sidebar {
+  background: color-mix(in srgb, var(--panel-2) 92%, #061012);
+  border-color: var(--line);
+}
+.workspace-brand {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--signal) 22%, transparent);
+}
+.workspace-nav-link[aria-current="page"] {
+  background: linear-gradient(100deg, color-mix(in srgb, var(--signal) 12%, var(--panel)), color-mix(in srgb, var(--signal) 4%, var(--panel)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 17%, transparent);
+  color: var(--ink);
+}
+.workspace-nav-link[aria-current="page"] .workspace-nav-icon { color: var(--signal); }
+.workspace-header {
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  border-color: var(--line);
+}
+.workspace-main { position: relative; isolation: isolate; }
+.workspace-main::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset: 0 0 auto;
+  height: 440px;
+  opacity: .5;
+  background-image: linear-gradient(color-mix(in srgb, var(--line) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--line) 40%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent);
+}
+.studio-card {
+  border-color: var(--line);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--panel) 97%, var(--signal)), var(--panel) 55%);
+  box-shadow: var(--shadow-card);
+}
+.studio-kicker {
+  color: var(--signal);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.workspace-nav-icon { color: var(--ink-3); transition: color 150ms ease; }
+.dashboard-hero-orbit {
+  border: 1px solid color-mix(in srgb, var(--signal) 13%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--signal) 12%, transparent), transparent 68%);
+  box-shadow: 0 0 0 36px color-mix(in srgb, var(--signal) 2%, transparent), 0 0 0 82px color-mix(in srgb, var(--signal) 1.5%, transparent);
+}
+.dashboard-hero { animation: hero-arrive 520ms var(--ease-out) both; }
+.dashboard-hero .studio-kicker { text-shadow: 0 0 18px color-mix(in srgb, var(--signal) 36%, transparent); }
+.dashboard-hero .studio-card { background: transparent; }
+.press:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px color-mix(in srgb, var(--signal) 12%, transparent); }
+.press:active:not(:disabled) { transform: translateY(0) scale(.985); }
+@keyframes hero-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .dashboard-hero { animation: none; } }
 
 h1,
 h2,

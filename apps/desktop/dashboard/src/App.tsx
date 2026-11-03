@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { Activity, AudioLines, Boxes, Bug, CirclePlay, Clock3, FlaskConical, LayoutDashboard, Library as LibraryIcon, ShieldAlert, Sparkles, Webhook, type LucideIcon } from "lucide-react";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { CommandBar } from "./components/CommandBar.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
@@ -24,12 +25,14 @@ import { Settings } from "./views/Settings.tsx";
 import { Schedules } from "./views/Schedules.tsx";
 import { Webhooks } from "./views/Webhooks.tsx";
 import { Mobile } from "./views/Mobile.tsx";
+import { LaunchStudio } from "./views/LaunchStudio.tsx";
 
 export type Route =
   | { view: "dashboard" }
   | { view: "simulator" }
   | { view: "record"; url?: string }
   | { view: "library"; dir?: string }
+  | { view: "launch" }
   | { view: "settings" }
   | { view: "schedules" }
   | { view: "webhooks" }
@@ -54,7 +57,7 @@ function parse(hash: string): Route {
   // `#simulator?scenario=…` picks a scenario; the query is read by the view itself.
   const bare = h.split("?")[0] ?? h;
   if (h === "mobile") return { view: "mobile" };
-  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "settings" || bare === "schedules" || bare === "webhooks" || bare === "dashboard")
+  if (bare === "runs" || bare === "failures" || bare === "fixtures" || bare === "experiments" || bare === "simulator" || bare === "record" || bare === "library" || bare === "launch" || bare === "settings" || bare === "schedules" || bare === "webhooks" || bare === "dashboard")
     return { view: bare } as Route;
   return { view: "dashboard" };
 }
@@ -75,6 +78,7 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
       { view: "dashboard", label: "Dashboard" },
       { view: "record", label: "Record" },
       { view: "library", label: "Library", count: (i) => i.recordings?.length ?? 0 },
+      { view: "launch", label: "Launch Studio" },
     ],
   },
   {
@@ -100,6 +104,7 @@ const TITLES: Record<Route["view"], string> = {
   dashboard: "Dashboard",
   record: "Record",
   library: "Library",
+  launch: "Launch Studio",
   settings: "Settings",
   schedules: "Schedules",
   webhooks: "Webhooks",
@@ -111,6 +116,12 @@ const TITLES: Record<Route["view"], string> = {
   fixtures: "Fixtures",
   experiments: "Experiments",
   mobile: "Mobile",
+};
+
+const NAV_ICONS: Partial<Record<Route["view"], LucideIcon>> = {
+  dashboard: LayoutDashboard, record: CirclePlay, library: LibraryIcon, launch: Sparkles,
+  schedules: Clock3, webhooks: Webhook, runs: Activity, failures: Bug,
+  fixtures: Boxes, experiments: FlaskConical, simulator: ShieldAlert,
 };
 
 export function App() {
@@ -229,7 +240,7 @@ export function App() {
     <MotionConfig reducedMotion="user">
     <I18nProvider>
     <ExhibitProvider>
-      <div className="relative min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      <div className="relative min-h-dvh lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
         <div className="hidden lg:block">
           <div className="sticky top-0 h-dvh">{sidebar}</div>
         </div>
@@ -260,8 +271,8 @@ export function App() {
         </AnimatePresence>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-            <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
+          <header className="workspace-header sticky top-0 z-30 border-b backdrop-blur-xl" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+            <div className="flex h-[62px] items-center gap-3 px-4 sm:px-7">
               <button
                 type="button"
                 className="-ml-1 inline-flex h-9 items-center justify-center rounded-full border border-line px-3 text-ink-2 hover:bg-panel-2 lg:hidden"
@@ -270,11 +281,11 @@ export function App() {
               >
                 <span className="text-[13px] font-medium">Menu</span>
               </button>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 pl-1">
                 <Breadcrumbs route={route} go={go} />
               </div>
               {route.view !== "dashboard" && route.view !== "record" && !isSnapshot && (
-                <div className="hidden w-[min(420px,40vw)] md:block">
+                <div className="hidden w-[min(380px,36vw)] md:block">
                   <RecordBar compact onRecord={(url) => go({ view: "record", url })} />
                 </div>
               )}
@@ -283,11 +294,12 @@ export function App() {
                   {isSnapshot ? "snapshot" : "live"} · {ago(Date.parse(index.generatedAt))}
                 </span>
               )}
+              {!isSnapshot && <span className="hidden items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 py-1 text-[10px] font-semibold tracking-wide text-ink-3 xl:inline-flex"><span className="size-1.5 rounded-full bg-pass shadow-[0_0_9px_var(--pass)]" /> LIVE</span>}
               <CommandBar index={index} go={go} />
             </div>
           </header>
 
-          <main className="mx-auto w-full max-w-[1320px] px-4 pb-20 pt-6 sm:px-6 sm:pt-8">
+          <main className="workspace-main mx-auto w-full max-w-[1480px] px-4 pb-20 pt-7 sm:px-7 sm:pt-9">
             <span className="sr-only" aria-live="polite">
               {TITLES[route.view]}
             </span>
@@ -303,6 +315,7 @@ export function App() {
                 {index && route.view === "simulator" && <FaultReplay index={index} go={go} refresh={refresh} />}
                 {index && route.view === "record" && <Record index={index} refresh={refresh} initialUrl={route.url} go={go} />}
                 {index && route.view === "library" && <Library index={index} dir={route.dir} go={go} refresh={refresh} />}
+                {index && route.view === "launch" && <LaunchStudio index={index} go={go} refresh={refresh} />}
                 {/* Every view is gated on `index`, which is null whenever there is no session. Settings and
                   schedules were not, so a stale #settings hash rendered them signed-out and their
                   fetches silently no-opped on 401. */}
@@ -340,11 +353,11 @@ function Sidebar({
   closable: boolean;
 }) {
   return (
-    <nav aria-label="Workspaces" className="flex h-full flex-col border-r border-line bg-panel-2" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-      <div className="flex h-14 items-center justify-between gap-2 px-4">
-        <button type="button" onClick={() => go({ view: "dashboard" })} className="flex items-center gap-2.5 rounded-lg">
-          <Mark />
-          <span className="text-[16px] font-semibold tracking-tight">Walkcast</span>
+    <nav aria-label="Workspaces" className="workspace-sidebar flex h-full flex-col border-r" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <div className="flex h-[62px] items-center justify-between gap-2 border-b border-line px-5">
+        <button type="button" onClick={() => go({ view: "dashboard" })} className="flex items-center gap-3 rounded-lg">
+          <span className="workspace-brand grid size-8 place-items-center rounded-[11px] bg-signal"><Mark /></span>
+          <span className="grid text-left leading-none"><span className="text-[15px] font-bold tracking-[-.04em]">Walkcast</span><span className="mt-1 text-[9px] font-semibold tracking-[.18em] text-ink-3">DESKTOP STUDIO</span></span>
         </button>
         {closable && (
           <button type="button" onClick={onClose} aria-label="Close menu" className="inline-flex h-8 items-center justify-center rounded-full px-2.5 text-ink-3 hover:bg-panel-2 lg:hidden">
@@ -355,9 +368,9 @@ function Sidebar({
 
       <div className="flex-1 overflow-y-auto px-3 pb-4">
         {WORKSPACES.map((ws) => (
-          <div key={ws.name} className="mt-4 first:mt-2">
-            <div className="px-2.5 pb-1.5 text-[11.5px] font-medium text-ink-3">{ws.name}</div>
-            <ul className="grid gap-0.5">
+          <div key={ws.name} className="mt-7 first:mt-5">
+            <div className="px-2.5 pb-2 text-[9px] font-semibold uppercase tracking-[.18em] text-ink-3">{ws.name}</div>
+            <ul className="grid gap-1">
               {ws.items.map((n) => {
                 const on = active === n.view;
                 const count = index && n.count ? n.count(index) : null;
@@ -368,11 +381,11 @@ function Sidebar({
                       onClick={() => go({ view: n.view } as Route)}
                       aria-current={on ? "page" : undefined}
                       className={cn(
-                        "relative flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] transition-colors",
+                        "workspace-nav-link relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] transition-[background,color,box-shadow] duration-150",
                         on ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
                       )}
                     >
-                      {on && <span className="absolute inset-y-2 left-0 w-0.5 bg-signal" aria-hidden />}
+                      {(() => { const Icon = NAV_ICONS[n.view]; return Icon ? <Icon aria-hidden className="workspace-nav-icon size-[16px] shrink-0" strokeWidth={1.8} /> : null; })()}
                       <span className="truncate">{n.label}</span>
                       {count !== null && count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-3">{count}</span>}
                     </button>
@@ -384,19 +397,19 @@ function Sidebar({
         ))}
       </div>
 
-      <div className="border-t border-line p-3">
+      <div className="border-t border-line p-4">
         <button
           type="button"
           onClick={() => go({ view: "settings" })}
           aria-current={active === "settings" ? "page" : undefined}
           className={cn(
-            "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] transition-colors",
+            "workspace-nav-link flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] transition-colors",
             active === "settings" ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
           )}
         >
-          Settings
+          <AudioLines aria-hidden className="workspace-nav-icon size-4" strokeWidth={1.8} /> Settings
         </button>
-        <div className="mt-2 flex min-w-0 items-center gap-2 px-1">
+        <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-line bg-panel px-2 py-2">
           <div className="min-w-0 flex-1">
             <Account me={me} ready={meReady} />
           </div>
@@ -488,7 +501,7 @@ function Mark() {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
       <rect x="0.5" y="0.5" width="25" height="25" rx="7.5" fill="var(--signal-strong)" />
-      <path d="M10.2 8.4v9.2l7.2-4.6z" fill="#fff" />
+      <path d="M10.2 8.4v9.2l7.2-4.6z" fill="var(--on-solid)" />
       <circle cx="20.4" cy="5.6" r="2.6" fill="var(--rec)" stroke="var(--panel)" strokeWidth="1.2" />
     </svg>
   );

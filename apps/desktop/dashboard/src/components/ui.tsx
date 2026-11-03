@@ -43,7 +43,7 @@ export function FindingChip({ id, kind, onClick }: { id: string; kind: "symptom"
 
 export function Panel({ children, className, as: Tag = "section", id }: { children: ReactNode; className?: string; as?: "section" | "div" | "article"; id?: string }) {
   return (
-    <Tag id={id} className={cn("relative rounded-2xl border border-line bg-panel shadow-card", className)}>
+    <Tag id={id} className={cn("relative rounded-[18px] border border-line bg-panel shadow-card", className)}>
       {children}
     </Tag>
   );
@@ -68,12 +68,12 @@ export function PageHead({ title, dim, icon, description, actions }: { title: Re
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h1 className="text-[26px] font-bold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
+        <h1 className="text-[clamp(30px,3.3vw,42px)] font-semibold leading-[1.02] tracking-[-.05em]">
           {title}
           {dim && <span className="text-dim"> {dim}</span>}
           {icon}
         </h1>
-        {description && <p className="mt-1.5 max-w-[68ch] text-[14px] leading-relaxed text-ink-2">{description}</p>}
+        {description && <p className="mt-2 max-w-[68ch] text-[14px] leading-relaxed text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

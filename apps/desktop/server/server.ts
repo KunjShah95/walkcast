@@ -1,9 +1,10 @@
 import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
+import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
+import { LabData, type LabIndex, type LaunchVideo, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
 import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
 import { budgetLimitsFor } from "../../../packages/core/src/llm/budget.ts";
@@ -15,7 +16,7 @@ import { PROVIDERS, apiKey, baseURL, configuredProviders } from "../../../packag
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
 import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
 import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio, buildSilentCopy } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders, engineFor, kokoroAvailable, kokoroReady } from "../../../packages/core/src/record/voice.ts";
+import { configuredCloudProviders, engineFor, kokoroAvailable, kokoroReady, refreshKokoro } from "../../../packages/core/src/record/voice.ts";
 import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
 import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
@@ -42,6 +43,35 @@ import { alarmState, queueAlarmMs, startQueueMonitor } from "../../../packages/c
 import { importLegacySchedules, newSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dashboard", "dist", "index.html");
+const APP_SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+type DesktopTaskStatus = "running" | "complete" | "failed";
+interface DesktopTask {
+  id: string;
+  kind: "launch-video" | "kokoro-setup";
+  owner: string | null;
+  recordingId?: string;
+  status: DesktopTaskStatus;
+  progress: number;
+  message: string;
+  startedAt: string;
+  updatedAt: string;
+  error?: string;
+  video?: LaunchVideo;
+  temporaryDir?: string;
+  child?: ChildProcess;
+}
+
+function trackDesktopTask(task: DesktopTask, chunk: Buffer | string): void {
+  const text = String(chunk);
+  const lines = text.split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length) task.message = lines.at(-1)!.slice(0, 220);
+  const frames = /frame\s+(\d+)\s*\/\s*(\d+)/.exec(text);
+  if (frames) task.progress = Math.min(96, 24 + Math.round((Number(frames[1]) / Number(frames[2])) * 70));
+  else if (/Prepared current/.test(text)) task.progress = Math.max(task.progress, 8);
+  else if (/Kokoro|voice/.test(text)) task.progress = Math.max(task.progress, 17);
+  else if (/score|music/i.test(text)) task.progress = Math.max(task.progress, 12);
+  task.updatedAt = new Date().toISOString();
+}
 const TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -413,6 +443,7 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
  */
 export function createApp(o: ServeOptions = {}): App {
   const root = o.root ?? process.cwd();
+  const desktopTasks = new Map<string, DesktopTask>();
   applyCredentialsFile(root);
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
@@ -458,6 +489,46 @@ export function createApp(o: ServeOptions = {}): App {
   const queueMonitor = startQueueMonitor(store);
 
   let draining = false;
+
+  function startDesktopTask(
+    task: DesktopTask,
+    command: string,
+    args: string[],
+    cwd: string,
+    env: NodeJS.ProcessEnv,
+    complete?: () => Promise<void>,
+  ): void {
+    desktopTasks.set(task.id, task);
+    const child = spawn(command, args, { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    task.child = child;
+    child.stdout?.on("data", (chunk: Buffer) => trackDesktopTask(task, chunk));
+    child.stderr?.on("data", (chunk: Buffer) => trackDesktopTask(task, chunk));
+    child.once("error", (error) => {
+      task.status = "failed";
+      task.error = error.message;
+      task.message = "The local video renderer could not start.";
+      task.updatedAt = new Date().toISOString();
+      if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
+    });
+    child.once("close", (code) => {
+      if (task.status !== "running") return;
+      void (async () => {
+        if (code !== 0) throw new Error(`Video renderer exited with code ${code ?? "unknown"}. ${task.message}`);
+        await complete?.();
+        if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
+        task.status = "complete";
+        task.progress = 100;
+        task.message = task.kind === "kokoro-setup" ? "Kokoro is ready." : "Launch video finished.";
+        task.updatedAt = new Date().toISOString();
+      })().catch((error: unknown) => {
+        task.status = "failed";
+        task.error = error instanceof Error ? error.message : String(error);
+        task.message = "Could not finish the launch video.";
+        task.updatedAt = new Date().toISOString();
+        if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
+      });
+    });
+  }
 
   const handler = (req: IncomingMessage, res: ServerResponse) => {
     const started = Date.now();
@@ -886,6 +957,110 @@ export function createApp(o: ServeOptions = {}): App {
       return json(200, { ok: true });
     }
 
+    // ---------------------------------------------------------- local product-launch video studio
+    const taskView = (task: DesktopTask) => ({
+      id: task.id, kind: task.kind, recordingId: task.recordingId, status: task.status,
+      progress: task.progress, message: task.message, startedAt: task.startedAt,
+      updatedAt: task.updatedAt, error: task.error, video: task.video,
+    });
+    if (url.pathname === "/api/launch-videos/setup" && req.method === "POST") {
+      if (!o.desktop) return json(403, { error: "Kokoro setup is available from the local desktop app." });
+      if (process.platform !== "win32") return json(501, { error: "Run the documented Kokoro setup command on this platform, then return to Launch Studio." });
+      const active = [...desktopTasks.values()].find((task) => task.kind === "kokoro-setup" && task.status === "running");
+      if (active) return json(202, { task: taskView(active) });
+      const id = randomUUID();
+      const task: DesktopTask = {
+        id, kind: "kokoro-setup", owner: owner ?? null, status: "running", progress: 2,
+        message: "Preparing Kokoro and its local voice model…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
+      mkdirSync(cache, { recursive: true });
+      const script = join(APP_SOURCE_ROOT, "scripts", "setup-kokoro.ps1");
+      startDesktopTask(task, "powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-WarmModel", "-CachePath", cache], APP_SOURCE_ROOT, {
+        ...process.env, PYTHONUTF8: "1", WALKCAST_KOKORO_CACHE: cache,
+      }, async () => {
+        if (!(await refreshKokoro())) throw new Error("Kokoro setup finished, but Walkcast still cannot find its Python packages.");
+      });
+      log.info("launch_video.kokoro_setup_started", { task: id, owner });
+      return json(202, { task: taskView(task) });
+    }
+    const launchTaskMatch = /^\/api\/launch-videos\/jobs\/([\w-]+)$/.exec(url.pathname);
+    if (launchTaskMatch && req.method === "GET") {
+      const task = desktopTasks.get(launchTaskMatch[1]!);
+      if (!task || !canSee(task.owner)) return json(404, { error: "Launch video job not found." });
+      return json(200, { task: taskView(task) });
+    }
+    const launchMatch = /^\/api\/recordings\/([\w.-]+)\/launch-videos$/.exec(url.pathname);
+    if (launchMatch && req.method === "POST") {
+      if (!o.desktop) return json(403, { error: "Launch Studio is available in the local desktop app." });
+      const id = launchMatch[1]!;
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "Launch films need the recording saved on this computer." });
+      let hostName = "";
+      try { hostName = new URL(row.summary.url).hostname.toLowerCase(); } catch { /* invalid old recording */ }
+      if (hostName !== "walkcast.kunjshah.in" && hostName !== "www.walkcast.kunjshah.in") {
+        return json(400, { error: "This Launch Studio film is the Walkcast product launch. Record walkcast.kunjshah.in first." });
+      }
+      if (row.summary.durationMs < 60_000) return json(400, { error: "Choose a fresh Walkcast recording that covers Home, Download, and Lab (at least one minute)." });
+      const paths = row.summary.pages.flatMap((page) => {
+        try { return [new URL(page.url).pathname.toLowerCase()]; } catch { return []; }
+      });
+      if (!paths.some((path) => path === "/download" || path.startsWith("/download/")) || !paths.some((path) => path === "/lab" || path.startsWith("/lab/"))) {
+        return json(400, { error: "That walkthrough does not include both Download and Lab. Record those pages in one fresh Walkcast walkthrough." });
+      }
+      const voice = String((await readJson(req, 20_000)).voice ?? "af_heart").trim();
+      if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
+      if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
+      if ([...desktopTasks.values()].some((task) => task.kind === "launch-video" && task.status === "running" && task.recordingId === id && task.owner === (owner ?? null))) {
+        return json(409, { error: "A launch video is already rendering from this recording." });
+      }
+      const recordingDir = join(root, "recordings", id);
+      const summaryFile = join(recordingDir, "recording.json");
+      if (!existsSync(summaryFile)) return json(404, { error: "Recording files are missing." });
+      const diskSummary = JSON.parse(readFileSync(summaryFile, "utf8")) as RecordingSummary & Record<string, unknown>;
+      const captureCandidates = [join(recordingDir, "recording.mp4"), diskSummary.media?.mp4 && join(recordingDir, basename(diskSummary.media.mp4)), diskSummary.media?.video && join(recordingDir, basename(diskSummary.media.video))]
+        .filter((file): file is string => typeof file === "string");
+      const capture = captureCandidates.find((file) => existsSync(file));
+      if (!capture) return json(404, { error: "The fresh recording video is missing. Record the site again in Walkcast." });
+
+      const taskId = randomUUID();
+      const taskRoot = join(root, "launch-video-work", taskId);
+      const workDir = join(taskRoot, "docs", "launch", "source");
+      const outputDir = join(taskRoot, "rendered");
+      const captionsPath = join(outputDir, "Walkcast-Launch-Fresh.vtt");
+      mkdirSync(taskRoot, { recursive: true });
+      const task: DesktopTask = {
+        id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
+        message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
+      };
+      const builder = join(APP_SOURCE_ROOT, "docs", "launch", "source", "build-fresh.mjs");
+      const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
+      startDesktopTask(task, process.execPath, [builder, capture], APP_SOURCE_ROOT, {
+        ...process.env,
+        KOKORO_VOICE: voice,
+        WALKCAST_KOKORO_CACHE: cache,
+        WALKCAST_LAUNCH_WORK_DIR: workDir,
+        WALKCAST_LAUNCH_OUTPUT_DIR: outputDir,
+        WALKCAST_LAUNCH_CAPTIONS_PATH: captionsPath,
+        ...(findChrome() ? { PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: findChrome()! } : {}),
+      }, async () => {
+        const video = `launch-video-${taskId}.mp4`;
+        const poster = `launch-video-${taskId}-poster.jpg`;
+        const captions = `launch-video-${taskId}.vtt`;
+        copyFileSync(join(outputDir, "Walkcast-Launch-Fresh.mp4"), join(recordingDir, video));
+        copyFileSync(join(outputDir, "Walkcast-Launch-Fresh-poster.jpg"), join(recordingDir, poster));
+        copyFileSync(captionsPath, join(recordingDir, captions));
+        const made: LaunchVideo = { id: taskId, video, poster, captions, voice, createdAt: new Date().toISOString() };
+        const fresh = rereadSummary(summaryFile, diskSummary);
+        fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
+        writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));
+        await saveRecordingSummary(id, row.owner, fresh);
+        task.video = made;
+      });
+      log.info("launch_video.started", { task: taskId, recording: id, voice, owner });
+      return json(202, { task: taskView(task) });
+    }
     // ---------------------------------------------------------------- custom voice upload/list
     const voicesDir = join(root, "data", "voices");
     // A voice sample is a recording of somebody's voice: it belongs to whoever uploaded it. The

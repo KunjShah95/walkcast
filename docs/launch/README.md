@@ -36,18 +36,44 @@ decisions come from filmagic.app, recent.design, raylight.app, remotion.dev/show
 screenlane.com, godly.website, motionographer.com, vimeo.com/channels/staffpicks
 and saasframe.io.
 
-A re-cut needs the Kokoro model files (`kokoro-v1.0.onnx`, `voices-v1.0.bin`) and
-the full `Rebuilding` pipeline below; `video.html` alone is not the deliverable.
-The v2 re-cut also requires new narration lines in `source/voiceover.py` for the
-live-preview and journey beats (cues 0:34-0:46 and 1:00-1:06).
+A re-cut needs the full build pipeline; `video.html` alone is not the deliverable. For new product
+footage, use the fresh rebuild below. It extracts proof shots from a new Walkcast recording instead
+of the older CRM demo used in the original launch cut.
+
+## Build a fresh launch cut
+
+In the desktop app, open **Launch Studio**, record the Walkcast site through Home, Download, and
+Lab, choose a Kokoro narrator, and press **Generate launch film**. The Studio renders locally,
+shows job progress, then plays the MP4 and captions. Its generated assets are saved beside the
+source recording. Use the command below for the same workflow from a shell.
+
+Capture a new recording of the current product site, then pass its raw MP4 to the launch builder:
+
+```powershell
+npm run kokoro:setup
+npm run launch:video -- recordings/<fresh-recording-id>/recording.mp4
+```
+
+The builder makes three proof shots from the fresh capture (Home, Download, and Lab), renders the
+88-second motion timeline with the installed Chrome browser, generates an `af_heart` Kokoro voice
+track, writes matching captions, creates the original Walkcast music score and effects, ducks the
+music under narration, resamples the stereo master to 48 kHz, and normalizes the mix to -14 LUFS.
+The homepage proof shot trims the page below the hero so its embedded legacy demo is not reused.
+Set `KOKORO_VOICE` to another installed
+Kokoro voice id if desired. The MP4, poster, and intermediate renders are written to
+`source/output-fresh/`; the VTT is `walkcast-launch-fresh.vtt`.
+
+This command requires `ffmpeg` with libx264, Node/Playwright, Python with Kokoro, NumPy and
+SoundFile, plus a fresh recorder MP4. `npm run kokoro:warm` loads Kokoro once and checks that its
+model cache can synthesize speech.
 
 ## Voice-over
 
-The narration is spoken by Kokoro (`af_heart` voice), an open-weights neural TTS (Apache-2.0)
-that runs offline. `source/voiceover.py` holds the script as `(cue, end of window, line)`
-rows. It places each line on its cue, trims silence, and speeds a line up (to at most 1.3×) only
-when it would run past its window. It also writes the VTT. The music is sidechain-ducked under the
-voice, so speech stays 9 to 26 dB above it, and the mix is normalized to −14 LUFS.
+The fresh launch builder speaks `source/voiceover-fresh.py` with Kokoro (`af_heart` voice), an
+open-weight neural TTS (Apache-2.0) that runs locally after the model is cached. The script places
+each line on its cue, trims silence, adjusts pace only when needed to fit its visual window, and
+writes the VTT. The music is sidechain-ducked under the voice, and the mix is normalized to
+−14 LUFS. `source/voiceover.py` remains the script for the original cut.
 
 ## Music
 

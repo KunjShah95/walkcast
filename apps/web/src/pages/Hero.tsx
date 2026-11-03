@@ -1,185 +1,93 @@
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Check, Download, EyeOff, Film, Play } from "lucide-react";
-import { type CSSProperties, useRef, useState } from "react";
-import { BrandMark, DownloadButton, Reveal, Tile } from "../ui.tsx";
+import { ArrowDown, ArrowRight, Check, EyeOff, FileText, Film, Sparkles, Volume2 } from "lucide-react";
+import { type CSSProperties } from "react";
+import { DownloadButton, Reveal } from "../ui.tsx";
 import { VERSION } from "../site.ts";
 
-/**
- * Premium hero for the landing page. Built from shadcn-style blocks:
- * a centred split hero, a product shot that is a real recording,
- * and an install block with the three platforms as large, unambiguous buttons.
- *
- * Copy is written to the eye first in one line: "Paste a link. Get a video tour of your site."
- * Everything after that is supporting detail.
- */
+/** The homepage hero makes the product promise first and lets a real walkthrough prove it. */
 export function Hero() {
   const still = useReducedMotion();
-
-  const line = (i: number) => ({
-    initial: still ? false : { opacity: 0, y: 22 },
+  const enter = (delay = 0) => ({
+    initial: still ? false : { opacity: 0, y: 14 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.8, ease: [0.2, 0.7, 0.2, 1] as const, delay: 0.05 + i * 0.09 },
+    transition: { duration: 0.62, ease: [0.2, 0.7, 0.2, 1] as const, delay },
   });
+  const trust = ["Free and MIT licensed", "No recording setup", "Your files stay on your PC"];
 
   return (
-    <section className="sec" id="top">
-      <div className="wrap">
-        <div className="hero">
-          <div className="hero-scroll">
-            <div className="hero-copy">
-              <Reveal>
-                <motion.a
-                  className="hero-announce"
-                  href={`https://github.com/KunjShah95/walkcast/releases/tag/v${VERSION}`}
-                  target="_blank"
-                  rel="noopener"
-                  {...line(0)}
-                >
-                  <span className="hero-announce-tag">New in {VERSION}</span>
-                  <span>A live preview while the recording still runs</span>
-                  <ArrowRight size={14} />
-                </motion.a>
-              </Reveal>
+    <section className="sec landing-hero" id="top">
+      <div className="wrap landing-hero-wrap">
+        <div className="landing-hero-shell">
+          <Reveal>
+            <motion.a
+              className="landing-release"
+              href={`https://github.com/KunjShah95/walkcast/releases/tag/v${VERSION}`}
+              target="_blank"
+              rel="noopener"
+              {...enter(0)}
+            >
+              <span className="landing-release-icon"><Sparkles size={13} /></span>
+              <span>Walkcast {VERSION}</span>
+              <span className="landing-release-sep" />
+              <span>Meet your new product tour</span>
+              <ArrowRight size={13} />
+            </motion.a>
+          </Reveal>
 
-              <Reveal className="hero-headline" delay={0.08}>
-                <h1>
-                  Paste a link. Get a <em className="serif hero-hl">video tour</em> of your site.
-                  <br />
-                  <span className="dim">Nothing to film.</span>
-                </h1>
-              </Reveal>
+          <Reveal className="landing-hero-copy" delay={0.06}>
+            <motion.h1 className="landing-title" {...enter(0.06)}>
+              Turn your live site
+              <br />
+              into a <em>video tour.</em>
+            </motion.h1>
+            <motion.p className="landing-lede" {...enter(0.13)}>
+              Walkcast visits your website in a real browser and gives you a narrated walkthrough, captions, transcript and step-by-step guide. Paste a link; there is nothing to film.
+            </motion.p>
+            <motion.div className="landing-actions" {...enter(0.2)}>
+              <DownloadButton big />
+              <a className="landing-watch" href="#demo"><span><ArrowDown size={14} /></span> Watch a real walkthrough</a>
+            </motion.div>
+            <motion.ul className="landing-trust" aria-label="Included with Walkcast" {...enter(0.26)}>
+              {trust.map((item, i) => (
+                <li key={item} style={{ "--i": i } as CSSProperties}><Check size={14} strokeWidth={2.6} />{item}</li>
+              ))}
+            </motion.ul>
+            <motion.p className="landing-note" {...enter(0.3)}>
+              <span className="landing-note-dot" /> Runs on your computer. Recordings are never uploaded.
+            </motion.p>
+          </Reveal>
 
-              <Reveal className="hero-lede" delay={0.14}>
-                <p>
-                  A real browser opens your site, signs in and clicks through your pages.
-                  You get the visit as an MP4 with captions, a transcript and an optional voice-over.
-                  First recording is free, and it takes less than a minute.
-                </p>
-              </Reveal>
-
-              <Reveal className="hero-actions" delay={0.2}>
-                <div className="hero-ctas">
-                  <DownloadButton big />
-                  <a className="pill ghost big" href="#demo">
-                    <Play size={15} fill="currentColor" /> Watch a real recording
-                  </a>
-                </div>
-                <ul className="hero-trust" aria-label="What it costs and includes">
-                  {["Free, MIT licensed", "No account needed", "No watermark on the video", "Every seat included"].map((t, i) => (
-                    <li key={t} style={{ "--i": i } as CSSProperties}>
-                      <Check size={14} strokeWidth={2.8} />
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-              </Reveal>
-
-              <Reveal className="hero-fact" delay={0.28}>
-                <span className="hero-fact-label mono">The proof is in the visit</span>
-                <span className="hero-fact-value">A demo recording plays below while it is still running.</span>
-              </Reveal>
-            </div>
-
-            <div className="hero-shot">
-              <div className="hero-stage">
-                <div className="hero-stage-card">
-                  <div className="hero-stage-bar">
-                    <span className="hero-stage-lights" aria-hidden="true"><i /><i /><i /></span>
-                    <span className="hero-stage-url mono">agentic-crm-henna.vercel.app</span>
-                    <span className="hero-stage-live">REC</span>
-                  </div>
-                  <div className="hero-stage-screen">
-                    <video
-                      className="hero-stage-video"
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      aria-hidden="true"
-                    >
-                      <source src="/assets/demo.mp4" type="video/mp4" />
-                      <source src="/assets/demo.webm" type="video/webm" />
-                      Your browser does not support the video tag. Get a better browser.
-                    </video>
-                    <div className="hero-stage-cap">A real browser signs in, walks the pages and narrates what it did.</div>
-                    <button className="hero-stage-play" aria-label="Play the recording"><Play size={14} /></button>
-                  </div>
-                  <div className="hero-stage-side">
-                    <div className="hero-side-head">
-                      <span className="hero-title">Visit log</span>
-                      <span className="mono">click to seek</span>
-                    </div>
-                    <ol className="hero-cues">
-                      <li><button aria-current="true"><time>0:11</time><span>A real browser signs in, walks the pages and narrates what it did.</span></button></li>
-                      <li><button aria-current="false"><time>0:23</time><span>It signs in and walks the site, page by page.</span></button></li>
-                      <li><button aria-current="false"><time>0:35</time><span>One continuous visit, no timeline to work in.</span></button></li>
-                      <li><button aria-current="false"><time>0:47</time><span>H.264 with captions, a transcript, the page list.</span></button></li>
-                    </ol>
-                  </div>
-                  <div className="hero-stage-foot">
-                    <span className="chip"><Film size={13} /> walkthrough.mp4</span>
-                    <span className="chip"><EyeOff size={13} /> captions.vtt</span>
-                    <span className="chip"><Film size={13} /> transcript.txt</span>
-                    <span className="chip"><Film size={13} /> 6 pages <b>200 OK</b></span>
-                  </div>
-                </div>
-                <span className="hero-tab">A real recording · unedited</span>
+          <Reveal className="landing-hero-visual" delay={0.16}>
+            <div className="landing-browser" id="demo">
+              <div className="landing-browser-bar">
+                <span className="landing-browser-lights" aria-hidden="true"><i /><i /><i /></span>
+                <span className="landing-browser-address">agentic-crm-henna.vercel.app</span>
+                <span className="landing-rec"><i /> REAL RECORDING</span>
               </div>
-            </div>
-          </div>
-
-          <div className="hero-cta-row">
-            <div className="hero-cta-card">
-              <div className="hero-cta-card-head">
-                <span className="hero-cta-card-icon"><Film size={15} /></span>
-                <div className="hero-cta-card-copy">
-                  <strong className="hero-cta-card-title">No camera, no microphone, no script</strong>
-                  <p className="hero-cta-card-text">
-                    Walkcast drives its own browser. It opens your site, signs in and clicks through
-                    your pages. You end up with a video tour that is identical every time you re-record it.
-                  </p>
-                </div>
-                <div className="hero-cta-card-cta">
-                  <DownloadButton />
+              <video className="landing-demo" poster="/assets/demo-poster.jpg" controls playsInline preload="metadata">
+                <source src="/assets/demo.mp4" type="video/mp4" />
+                <source src="/assets/demo.webm" type="video/webm" />
+                <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="English" default />
+                Your browser does not support the video tag.
+              </video>
+              <div className="landing-output">
+                <div className="landing-output-head"><span>One visit. Everything you need.</span><span className="mono">5 files</span></div>
+                <div className="landing-output-files">
+                  <span><Film size={14} /> MP4 + WebM</span>
+                  <span><EyeOff size={14} /> Captions</span>
+                  <span><Volume2 size={14} /> Voice-over</span>
+                  <span><FileText size={14} /> Transcript + guide</span>
                 </div>
               </div>
             </div>
+            <div className="landing-visual-caption"><span>01</span> A real browser. Your real product. One take.</div>
+          </Reveal>
 
-            <div className="hero-cta-card">
-              <div className="hero-cta-card-head">
-                <span className="hero-cta-card-icon"><Play size={15} /></span>
-                <div className="hero-cta-card-copy">
-                  <strong className="hero-cta-card-title">Start from any page</strong>
-                  <p className="hero-cta-card-text">
-                    Paste the link a new visitor would land on and Walkcast follows the links on the
-                    same site. Sign-out, delete, cancel and unsubscribe links are skipped automatically.
-                  </p>
-                </div>
-                <div className="hero-cta-card-cta">
-                  <a className="pill solid big" href="#what">
-                    See how it works <ArrowRight size={14} />
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <div className="hero-cta-card">
-              <div className="hero-cta-card-head">
-                <span className="hero-cta-card-icon"><Check size={15} /></span>
-                <div className="hero-cta-card-copy">
-                  <strong className="hero-cta-card-title">Same take after every release</strong>
-                  <p className="hero-cta-card-text">
-                    Regenerate a tour in a minute after a redesign. Every caption is timed to the
-                    voice you chose, and every narration line is written from what the browser actually did.
-                  </p>
-                </div>
-                <div className="hero-cta-card-cta">
-                  <a className="pill ghost big" href="#what">
-                    How it works <ArrowRight size={14} />
-                  </a>
-                </div>
-              </div>
-            </div>
+          <div className="landing-proofline" aria-label="How Walkcast works">
+            <div><span className="landing-proof-n">01</span><span><b>Paste your link</b><small>Start on any page</small></span></div>
+            <div><span className="landing-proof-n">02</span><span><b>Let Walkcast walk</b><small>Real browser, real clicks</small></span></div>
+            <div><span className="landing-proof-n">03</span><span><b>Share the tour</b><small>Video, captions and guide</small></span></div>
+            <a href="#what">See how it works <ArrowRight size={14} /></a>
           </div>
         </div>
       </div>
