@@ -1,8 +1,7 @@
 /**
- * Latest release with published installer assets. Keep this on the last working release while a
- * new tag is building; advance it once that release exists on GitHub.
+ * Latest release with published installer assets. Advance only after the GitHub release is live.
  */
-export const VERSION = "0.8.1";
+export const VERSION = "0.9.0";
 export const REPO_URL = "https://github.com/KunjShah95/walkcast";
 export const RELEASES_URL = `${REPO_URL}/releases`;
 const releaseAsset = (version: string, file: string) => `${RELEASES_URL}/download/v${version}/${file}`;
