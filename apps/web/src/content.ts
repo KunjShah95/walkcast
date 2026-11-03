@@ -4,6 +4,9 @@
  * the page too.
  */
 
+export const OG_IMAGE_ALT = "Walkcast social card: a video tour of your website generated from a link.";
+
+/** The social card image (og.png) is a 1200x630 PNG showing the Walkcast branding; an alt is required for the image to be readable by AI and accessibility tools. */
 export const NAME = "Walkcast";
 /** The canonical origin. SITE_URL overrides it for a one-off build (tests, staging). */
 export const SITE_ORIGIN = "https://walkcast.kunjshah.in";

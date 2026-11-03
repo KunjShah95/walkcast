@@ -16,6 +16,7 @@ import {
   HOWTO,
   LAB_FAQ,
   MORE_FAQ,
+  OG_IMAGE_ALT,
   NAME,
   PRICING_FAQ,
   ROUTES,
@@ -75,7 +76,7 @@ const vtt = readFileSync(join(here, "public/assets/demo.vtt"), "utf8");
 const transcript = [...vtt.matchAll(/-->[^\n]*\r?\n([\s\S]*?)(?:\r?\n\r?\n|$)/g)].map((m) => m[1]!.trim()).join(" ");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const ORG = { "@type": "Organization", "@id": `${SITE}/#org`, name: NAME, url: `${SITE}/`, logo: `${SITE}/favicon.svg`, sameAs: [REPO_URL], founder: { "@id": `${SITE}/#author` } };
+const ORG = { "@type": "Organization", "@id": `${SITE}/#org`, name: NAME, url: `${SITE}/`, logo: `${SITE}/assets/logo.png`, sameAs: [REPO_URL], founder: { "@id": `${SITE}/#author` } };
 const PERSON = { "@type": "Person", "@id": `${SITE}/#author`, name: AUTHOR.name, url: AUTHOR.url, sameAs: [AUTHOR.url] };
 const WEBSITE = { "@type": "WebSite", "@id": `${SITE}/#site`, url: `${SITE}/`, name: NAME, description: DESCRIPTION, publisher: { "@id": `${SITE}/#org` }, inLanguage: "en" };
 const APP = {
@@ -248,8 +249,10 @@ for (const route of ROUTES) {
     `<meta property="og:url" content="${url(route.path)}">`,
     `<meta property="og:image" content="${SITE}/assets/og.png">`,
     `<meta property="og:image:width" content="1200">`,
+    `<meta property="og:image:alt" content="${OG_IMAGE_ALT}">`,
     `<meta property="og:image:height" content="630">`,
     `<meta property="og:site_name" content="${NAME}">`,
+    `<meta name="twitter:image:alt" content="${OG_IMAGE_ALT}">`,
     `<meta name="twitter:image" content="${SITE}/assets/og.png">`,
     `<meta name="author" content="${esc(AUTHOR.name)}">`,
     route.path === "/" ? `<meta property="og:video" content="${SITE}/assets/demo.mp4">` : "",
