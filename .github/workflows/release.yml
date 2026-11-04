@@ -272,7 +272,7 @@ jobs:
 
   # Published as a draft: nothing is downloadable and releases/latest/download/latest.json (the
   # in-app updater feed, and the website's download links) keeps pointing at the previous release
-  # until `promote` flips it. See docs/releases/v0.10.0-checklist.md for rollback.
+  # until `promote` flips it. See docs/releases/v0.10.1-checklist.md for rollback.
   publish:
     needs: build
     runs-on: ubuntu-24.04

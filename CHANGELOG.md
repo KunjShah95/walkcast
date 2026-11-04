@@ -5,7 +5,10 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
-## [0.10.0] - 2026-11-04
+## [0.10.1] - 2026-11-04
+
+First release of the 0.10 line. A `v0.10.0` tag exists, but its build failed and it was never
+published, so this release includes everything planned for 0.10.0.
 
 ### Added
 
@@ -70,5 +73,5 @@ All notable changes to Walkcast are documented here. The format follows
 
 Earlier releases: see [GitHub Releases](https://github.com/KunjShah95/walkcast/releases).
 
-[0.10.0]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.0
+[0.10.1]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.1
 [0.9.1]: https://github.com/KunjShah95/walkcast/releases/tag/v0.9.1
