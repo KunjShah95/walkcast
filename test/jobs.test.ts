@@ -15,6 +15,19 @@ import { serveDashboard } from "../apps/desktop/server/server.ts";
 
 process.env.LAB_LOG = "off";
 
+/**
+ * The recording tests in this file drive a real Chromium and a real ffmpeg encode, so they cost
+ * minutes of CPU each — not milliseconds like the rest of the suite. Beside another browser-heavy
+ * test file on a 4-core runner they run about 3x slower (measured: the split web/worker recording
+ * takes 64 s alone in the `pg-tests` job and did not finish inside 180 s under the full suite), and
+ * a fixed poll window read that as a job that hung "running" forever. That was issue #6: the
+ * recording was working the whole time, just starved, which is why budget tuning never fixed it.
+ * So the Postgres variants are opt-in, and the job that opts in is `pg-tests`, which runs these
+ * files and nothing else (pg-tests.yml). Release verify runs the split one on its own too.
+ */
+const PG_E2E = process.env.LAB_PG_E2E === "1";
+const PG_E2E_OFF = "Opt-in: needs an uncontended runner. Set LAB_PG_E2E=1 (see pg-tests.yml).";
+
 let app: Awaited<ReturnType<typeof startApp>>;
 before(async () => {
   app = await startApp({ fault: "none", seed: 1, task: "lookup-owner", seedLeads: SEED_LEADS });
@@ -120,13 +133,13 @@ for (const [name, open] of stores) {
     // finally block then hung in srv.close() because Worker.stop() waited unboundedly for an
     // aborted job to unwind. stop() now bounds that wait (abortWaitMs) and the poll below runs to a
     // deadline inside the test timeout, so a slow runner fails with the job state, never a hang.
-    // The Postgres variant still intermittently leaves the job "running" for 6+ minutes on GitHub
-    // runners (issue #6, not yet root-caused), so it stays quarantined in CI; it runs locally.
+    // A slow runner used to leave the job "running" for 6+ minutes here too; that was starvation,
+    // not a stall (see PG_E2E at the top), so it runs where it gets a core to itself.
     test(
       "sign up, submit twice with one idempotency key, poll the job, watch the result",
       {
         timeout: 420_000,
-        skip: name === "postgres" && process.env.CI === "true" ? "Quarantined in CI: Postgres job stall, issue #6" : false,
+        skip: name === "postgres" && !PG_E2E ? PG_E2E_OFF : false,
       },
       async () => {
         const root = mkdtempSync(join(tmpdir(), "e2e-"));
@@ -252,7 +265,7 @@ for (const [name, open] of stores) {
 if (process.env.TEST_DATABASE_URL) {
   test(
     "production shape: web-only server + a separate worker process sharing Postgres",
-    { timeout: 240_000 },
+    { timeout: 480_000, skip: PG_E2E ? false : PG_E2E_OFF },
     async () => {
       const { Worker } = await import("../packages/core/src/jobs/worker.ts");
       const { randomBytes } = await import("node:crypto");
@@ -302,12 +315,23 @@ if (process.env.TEST_DATABASE_URL) {
 
         const worker = new Worker({ store: workerStore, media, root, pollMs: 200 }).start();
         let status = "queued";
-        for (const until = Date.now() + 180_000; Date.now() < until && (status === "queued" || status === "running"); ) {
+        const startedAt = Date.now();
+        // The budget is the test's own, not the product's: the worker's stall and ceiling guards are
+        // both longer than this window on purpose (they must never abort a healthy encode), so a
+        // slow runner has to be given room rather than reported as a stuck job.
+        for (const until = startedAt + 360_000; Date.now() < until && (status === "queued" || status === "running"); ) {
           await new Promise((res) => setTimeout(res, 500));
           status = (await web.job(job.id))!.status;
         }
         await worker.stop(1000);
-        assert.equal(status, "succeeded", (await web.job(job.id))?.error ?? "");
+        const ended = await web.job(job.id);
+        assert.equal(
+          status,
+          "succeeded",
+          ended?.error ??
+            `job ended "${status}" after ${Math.round((Date.now() - startedAt) / 1000)} s, ` +
+              `progress: ${ended?.progress ?? "none"}`,
+        );
         assert.equal((await web.recordings(null, 10)).length, 1);
       } finally {
         if (saved === undefined) delete process.env.LAB_SECRET_KEY;

@@ -57,6 +57,13 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ env.TEST_DATABASE_URL }}
         run: npm run lab -- db migrate && npm run lab -- db migrate
+      # The recording e2e above is skipped here (test/jobs.test.ts): next to the rest of the suite on
+      # this runner it slows to 3x and reads as a hung job — issue #6. A release cannot ship on a
+      # gate that skips it, so it runs once on its own, uncontended, exactly as pg-tests runs it.
+      - name: The split web/worker recording e2e, alone on the runner
+        env:
+          LAB_PG_E2E: "1"
+        run: npx tsx --test --test-name-pattern "production shape" test/jobs.test.ts
 
   build:
     needs: verify
