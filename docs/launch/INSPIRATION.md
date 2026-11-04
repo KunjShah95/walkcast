@@ -12,7 +12,7 @@ Every site that ships high-performing launch films converges on the same shape, 
 4. Sound is half the film. Raylight ships music, SFX and voiceover on a multitrack timeline; Filmagic offers optional voiceover. Walkcast's sidechain-ducked Kokoro narration plus original score is already ahead of most. Keep investing here.
 5. Motion has a reason. Screenlane and Godly reward one focal move at a time. No animation without a transfer of context. Power cuts, punch-ins and the logo build earn their place.
 6. Short, then shorter. Filmagic cuts are 20/30/45s. SaaSFrame product videos are under 60s. Walkcast's 88s is long; ship a 45s social cut and a 15s teaser alongside the long form.
-7. Aspect ratios are deliverables, not afterthoughts. Filmagic exports 16:9, 1:1 and 9:16 from one cut. Walkcast currently renders only 1920x1080.
+7. Aspect ratios are deliverables, not afterthoughts. Filmagic exports 16:9, 1:1 and 9:16 from one cut. Walkcast currently renders only 1920x1080. render.mjs now accepts width and height args as 7th/8th parameters (e.g., `node render.mjs video.html out.mp4 30 0 88 1280 720` for 720p). Auto-detects from viewport meta tag when using defaults.
 8. Accessibility is part of quality. Captions (we have VTT), reduced-motion respect, audio normalised to -14 LUFS.
 
 ## 2. What Walkcast does better than the references
@@ -87,7 +87,7 @@ The timeline is authored at 1920x1080. 1:1 and 9:16 are centre-crops with a safe
 
 ## 8. Tooling changes in this repo
 
-- docs/launch/source/render.mjs now accepts optional width and height arguments: node render.mjs video.html out.mp4 30 0 78 1080 1080 renders a square cut. Defaults remain 1920x1080.
+- docs/launch/source/render.mjs now accepts optional width and height arguments: node render.mjs video.html out.mp4 30 0 78 1080 1080 renders a square cut. Defaults remain 1920x1080. Also supports custom resolutions via 7th/8th args and auto-detects from viewport meta.
 - docs/launch/source/scenes.json is the machine-readable shot list (cues, on-screen copy, assets). The HTML timeline should be regenerated from it in a future step; for now it is the spec the author edits against.
 - docs/launch/README.md "What this cut predates" is replaced by the re-cut plan.
 
