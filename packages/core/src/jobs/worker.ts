@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BudgetState } from "../llm/budget.ts";
@@ -10,6 +10,7 @@ import type { MediaStore } from "../media/store.ts";
 import type { Voice } from "../record/media.ts";
 import { FFMPEG_TIMEOUT_MS } from "../record/media.ts";
 import { RecordError, recordSite } from "../record/site.ts";
+import { type Shape, isShape, socialExport } from "../record/social.ts";
 import { type FailureEvidence, type FailureReport, evidenceOf, explainFailure } from "../record/failure.ts";
 import { closeWarmBrowser } from "../record/browser.ts";
 import { loadFixture, replayFixture, writeFixture } from "../lab/fixture.ts";
@@ -22,6 +23,7 @@ import { withCredentials } from "../llm/credentials.ts";
 import type { Job, JobKind, Store } from "../store/types.ts";
 import { progressThrottle } from "./progress.ts";
 import { open } from "./secret-box.ts";
+import { DISK_FULL_MESSAGE, checkFreeSpace, isDiskFull, minFreeDiskBytes } from "../ops/disk.ts";
 
 /**
  * A job must eventually end: a wedged worker otherwise holds its slot forever and the dashboard
@@ -46,6 +48,10 @@ const EXPERIMENT_CEILING_MS = 20 * 60_000;
 const RECORD_BASE_MS = 5 * 60_000;
 /** Per-page allowance: ~3.6x the 12.45 s/page measured on a real 30-page site. */
 const RECORD_PER_PAGE_MS = 45_000;
+/** Fixed part of a batch-render job's ceiling: claiming, reading each recording.json, saving. */
+const BATCH_RENDER_BASE_MS = 60_000;
+/** Per-item allowance: one `socialExport` encode, which may itself run up to FFMPEG_TIMEOUT_MS. */
+const BATCH_RENDER_PER_ITEM_MS = FFMPEG_TIMEOUT_MS + 30_000;
 /** How long a record job may report nothing before it counts as stuck: one ffmpeg call plus margin. */
 export const STALL_MS_DEFAULT = FFMPEG_TIMEOUT_MS + 30_000;
 /** How often the stall guard checks. Coarse on purpose: the budget it compares against is minutes. */
@@ -64,8 +70,12 @@ export function pagesAsked(maxPages: unknown): number {
  * The wall-clock ceiling for one job. An explicit cap — the `deadlineMs` option or
  * `LAB_JOB_DEADLINE_MS` — wins outright, so a fleet can still impose its own hard limit.
  */
-export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null, op: unknown = null): number {
+export function jobCeilingMs(kind: JobKind, maxPages: unknown, explicit: number | null = null, maxSeconds: unknown = null, op: unknown = null, batchItems: unknown = null): number {
   if (explicit !== null) return explicit;
+  if (kind === "batch-render") {
+    const n = Array.isArray(batchItems) ? batchItems.length : 1;
+    return BATCH_RENDER_BASE_MS + BATCH_RENDER_PER_ITEM_MS * Math.max(1, n);
+  }
   if (kind !== "record") return op === "experiment" ? EXPERIMENT_CEILING_MS : LAB_CEILING_MS;
   const pageBased = RECORD_BASE_MS + RECORD_PER_PAGE_MS * pagesAsked(maxPages);
   // A requested recording length is itself a budget (the walk runs that long, then narration and
@@ -99,7 +109,17 @@ export interface WorkerOptions {
   maxPollMs?: number;
   /** Optional kind affinity: prefer `record`/`lab` jobs when claiming; scales out dedicated fleets. */
   kind?: "record" | "lab";
+  /**
+   * Free space a record or batch-render job needs before it starts (default LAB_MIN_FREE_DISK_MB,
+   * 1024 MB). Below it the job fails at once with the numbers instead of dying mid-encode.
+   */
+  minFreeDiskBytes?: number;
+  /** After a shutdown aborts the running job, how long to wait for it to unwind before handing it back anyway. */
+  abortWaitMs?: number;
 }
+
+/** A job refused because the disk is too full to start it: retrying won't help until someone frees space. */
+export class DiskSpaceError extends Error {}
 
 /**
  * Takes jobs from the queue one at a time. One job per worker process is deliberate: Chromium and
@@ -119,6 +139,8 @@ export class Worker {
   private readonly pollMs: number;
   private readonly maxPollMs: number;
   private readonly kind?: JobKind;
+  private readonly minFreeDisk: number;
+  private readonly abortWaitMs: number;
 
   constructor(private readonly o: WorkerOptions) {
     this.leaseMs = o.leaseMs ?? 60_000;
@@ -136,6 +158,8 @@ export class Worker {
     else if (process.env.LAB_WORKER_KIND === "record") kind = "record";
     else if (process.env.LAB_WORKER_KIND === "lab") kind = "run";
     this.kind = kind;
+    this.minFreeDisk = o.minFreeDiskBytes ?? minFreeDiskBytes();
+    this.abortWaitMs = o.abortWaitMs ?? 10_000;
   }
 
   start(): this {
@@ -173,12 +197,18 @@ export class Worker {
       const finished = await Promise.race([cur.done.then(() => true).catch(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), graceMs))]);
       if (!finished) {
         cur.abort.abort(new Error("worker shutting down"));
-        await cur.done.catch(() => undefined);
+        // Bounded: a step that ignores its abort signal (a browser launch, an encode stuck in a
+        // syscall) used to hold stop() — and with it the process exit — forever. That was the CI
+        // hang in jobs.test.ts (#6): its finally block closed the server while a slow recording
+        // was still running, and close() never returned. The job goes back to the queue either
+        // way; a late finish from the abandoned work is fenced by the lease.
+        const unwound = await settledWithin(cur.done, this.abortWaitMs);
+        if (!unwound) log.warn("job.abort_timeout", { job: cur.job.id, waitedMs: this.abortWaitMs });
         await this.o.store.release(cur.job.id, this.id).catch(() => undefined);
         log.info("job.released", { job: cur.job.id });
       }
     }
-    await this.loop;
+    await settledWithin(this.loop ?? Promise.resolve(), this.abortWaitMs);
     await closeWarmBrowser().catch(() => undefined);
     return;
   }
@@ -264,12 +294,13 @@ export class Worker {
         abort.abort(new Error("lease unconfirmed: no heartbeat acknowledgement within the lease margin"));
       }
     }, 2000);
-    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds, job.input.op);
+    const ceilingMs = jobCeilingMs(job.kind, job.input.maxPages, this.deadlineMs, job.input.maxSeconds, job.input.op, job.input.recordingIds);
     const deadline = setTimeout(() => abort.abort(new Error(`took longer than ${Math.round(ceilingMs / 1000)} s`)), ceilingMs);
-    // Stall guard: only a record job reports progress, so only a record job has a liveness signal to
-    // measure. A lab run keeps its flat ceiling and gets no stall check, exactly as before.
+    // Stall guard: record and batch-render jobs report progress at stage cadence, so only they have
+    // a liveness signal to measure. A lab run keeps its flat ceiling and gets no stall check,
+    // exactly as before.
     const stall =
-      job.kind === "record"
+      job.kind === "record" || job.kind === "batch-render"
         ? setInterval(() => {
             const silentMs = Date.now() - lastProgressAt;
             if (silentMs > this.stallMs) abort.abort(new Error(`no progress for ${Math.round(silentMs / 1000)} s`));
@@ -287,13 +318,25 @@ export class Worker {
       await this.o.store.flush().catch((e) => log.warn("job.store_flush_failed", { job: job.id, error: String(e) }));
     };
     try {
-      const result = job.kind === "record" ? await this.record(job, abort.signal, onProgress) : await untilAborted(this.labRun(job, abort.signal, onProgress), abort.signal);
+      // Recordings and exports write hundreds of MB: refuse up front, with the numbers, rather
+      // than fail mid-encode with whatever ffmpeg says about a full disk.
+      if (job.kind === "record" || job.kind === "batch-render") {
+        const dir = job.kind === "record" && this.o.media.kind !== "local" ? tmpdir() : join(this.o.root, "recordings");
+        const space = await checkFreeSpace(dir, this.minFreeDisk);
+        if (!space.ok) throw new DiskSpaceError(space.message);
+      }
+      const result =
+        job.kind === "record"
+          ? await this.record(job, abort.signal, onProgress)
+          : job.kind === "batch-render"
+            ? await this.batchRender(job, abort.signal, onProgress)
+            : await untilAborted(this.labRun(job, abort.signal, onProgress), abort.signal);
       await finish({ status: "succeeded", result });
       // An earlier attempt's evidence is moot once a retry made the recording.
       if (job.kind === "record") rmSync(failureDir(this.o.root, job.id), { recursive: true, force: true });
       log.info("job.succeeded", { job: job.id, kind: job.kind, ms: Date.now() - started });
     } catch (e) {
-      const message = e instanceof Error ? e.message.split("\n")[0]! : String(e);
+      const message = isDiskFull(e) ? DISK_FULL_MESSAGE : e instanceof Error ? e.message.split("\n")[0]! : String(e);
       if (this.stopping && abort.signal.aborted) return; // handed back by stop()
       // Cancelled by its owner, or taken over after a lost lease: the store already has the
       // outcome (or someone else is working on it), so there is nothing to record here.
@@ -306,7 +349,7 @@ export class Worker {
       // Bad input won't get better on retry, nor will an address that doesn't resolve or a bad
       // certificate; crashes and timeouts get one more try.
       const permanent = job.kind === "record" && ["address", "not-allowed", "certificate"].includes(explainFailure(message).category);
-      const retry = !(e instanceof RecordError) && !abort.signal.aborted && !permanent;
+      const retry = !(e instanceof RecordError) && !(e instanceof DiskSpaceError) && !abort.signal.aborted && !permanent;
       // Errors can quote a URL or form value; the site's credentials must not land in the job row.
       const err = scrubText(abort.signal.aborted ? `Stopped: ${String(abort.signal.reason?.message ?? "aborted")}` : message);
       await finish({ status: "failed", error: err, retry }).catch(() => undefined);
@@ -482,9 +525,69 @@ export class Worker {
       return { dir: `runs/${r.runDir.split(/[\\/]/).pop()}`, ...(fixture ? { fixture } : {}) };
     });
   }
+
+  /**
+   * Re-export several existing recordings in one job (see server.ts's
+   * POST /api/recordings/batch-render). Each item is the same work the single-recording
+   * `/api/recordings/:id/export` route does — `socialExport` plus rewriting recording.json — but
+   * one item's failure (a deleted recording, a corrupt file) must not take down the rest: the
+   * batch always finishes and reports per item which ones made it.
+   */
+  private async batchRender(job: Job, signal: AbortSignal, onProgress: (p: string) => void): Promise<Record<string, unknown>> {
+    const input = job.input as { recordingIds?: unknown; shape?: unknown };
+    const ids = Array.isArray(input.recordingIds) ? input.recordingIds.map(String) : [];
+    const shape: Shape = isShape(input.shape) ? input.shape : "vertical";
+    const items: { recordingId: string; status: "ok" | "error"; file?: string; error?: string }[] = [];
+    let succeeded = 0;
+    let failed = 0;
+    for (let i = 0; i < ids.length; i++) {
+      if (signal.aborted) throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason ?? "aborted"));
+      const id = ids[i]!;
+      onProgress(`rendering ${i + 1}/${ids.length}`);
+      try {
+        if (this.o.media.kind !== "local") throw new Error("Exports need recordings kept on this server's disk.");
+        const dir = join(this.o.root, "recordings", id);
+        const file = join(dir, "recording.json");
+        if (!existsSync(file)) throw new Error("Recording not found.");
+        const summary = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown> & { owner?: string | null; media?: Record<string, unknown>; url?: string; createdAt?: string };
+        // Re-check ownership here too: the request that enqueued this job verified it once, but a
+        // recording can be deleted (or, in theory, change hands) while the job sat in the queue.
+        if (summary.owner && summary.owner !== job.owner) throw new Error("Recording not found.");
+        const made = await socialExport(dir, shape, signal);
+        // The encode took a while: re-read the summary so a note or share link added meanwhile
+        // isn't overwritten, same as the single-item /export route does.
+        const fresh = JSON.parse(readFileSync(file, "utf8")) as typeof summary;
+        const priorExports = (fresh.media as Record<string, unknown> | undefined)?.exports as Record<string, unknown> | undefined;
+        fresh.media = { ...(fresh.media ?? {}), exports: { ...priorExports, [shape]: made.file } };
+        writeFileSync(`${file}.tmp`, JSON.stringify(fresh, null, 2));
+        renameSync(`${file}.tmp`, file);
+        if (this.o.store.kind !== "file") {
+          const { dir: _dir, ...rest } = fresh as Record<string, unknown>;
+          await this.o.store.saveRecording({ id, owner: fresh.owner ?? job.owner ?? null, url: String(fresh.url ?? ""), createdAt: String(fresh.createdAt ?? new Date().toISOString()), summary: rest });
+        }
+        items.push({ recordingId: id, status: "ok", file: made.file });
+        succeeded++;
+      } catch (e) {
+        items.push({ recordingId: id, status: "error", error: isDiskFull(e) ? DISK_FULL_MESSAGE : e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
+        failed++;
+      }
+    }
+    return { total: ids.length, succeeded, failed, items };
+  }
 }
 
 const CANCELLED = "cancelled by its owner";
+
+/** Whether `p` settles (either way) within `ms`. */
+function settledWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    p.then(() => true, () => true),
+    new Promise<boolean>((r) => {
+      timer = setTimeout(() => r(false), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 /** "Model spend: 142k of 250k tokens · ≈ $0.41 of $5.00" */
 export function spendLine(b: BudgetState): string {

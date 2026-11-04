@@ -1,5 +1,6 @@
 import { type ButtonHTMLAttributes, type ReactNode, createContext, useCallback, useContext, useRef, useState } from "react";
 import { cn, label } from "../lib/format.ts";
+import { type ThemePref, useThemePref } from "../lib/theme.ts";
 
 export function Verdict({ verdict, size = "sm" }: { verdict: "pass" | "fail"; size?: "sm" | "lg" }) {
   const pass = verdict === "pass";
@@ -43,7 +44,7 @@ export function FindingChip({ id, kind, onClick }: { id: string; kind: "symptom"
 
 export function Panel({ children, className, as: Tag = "section", id }: { children: ReactNode; className?: string; as?: "section" | "div" | "article"; id?: string }) {
   return (
-    <Tag id={id} className={cn("relative rounded-[18px] border border-line bg-panel shadow-card", className)}>
+    <Tag id={id} className={cn("relative rounded-xl border border-line bg-panel", className)}>
       {children}
     </Tag>
   );
@@ -82,7 +83,7 @@ export function PageHead({ title, dim, icon, description, actions }: { title: Re
 
 type ButtonTone = "primary" | "secondary" | "ghost" | "danger" | "record";
 
-/* The record action: ochre, with the record-light dot before the label (added in CSS). */
+/* The record action: teal signal, with the record-light dot before the label (added in CSS). */
 const TONE: Record<ButtonTone, string> = {
   primary: "bg-solid text-on-solid hover:brightness-95",
   record: "bg-signal text-on-signal hover:bg-signal-strong pill-rec-dot",
@@ -214,27 +215,22 @@ export function CopyButton({ text, label: buttonLabel = "Copy" }: { text: string
   );
 }
 
+const THEME_NEXT: Record<ThemePref, ThemePref> = { system: "light", light: "dark", dark: "system" };
+const THEME_LABEL: Record<ThemePref, string> = { system: "Auto", light: "Day", dark: "Night" };
+
+/** Cycles Auto (follow the system) → Day → Night. Settings has the same choice as a picker. */
 export function ThemeToggle({ className }: { className?: string }) {
-  const [theme, setTheme] = useState<string>(() => document.documentElement.getAttribute("data-theme") ?? "light");
-  const dark = theme === "dark";
+  const [pref, setPref] = useThemePref();
+  const next = THEME_NEXT[pref];
   return (
     <button
       type="button"
-      aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}
-      title={dark ? "Light theme" : "Dark theme"}
-      onClick={() => {
-        const next = dark ? "light" : "dark";
-        document.documentElement.setAttribute("data-theme", next);
-        try {
-          localStorage.setItem("lab-theme", next);
-        } catch {
-          /* storage unavailable */
-        }
-        setTheme(next);
-      }}
-      className={cn("inline-flex h-8 items-center justify-center rounded-lg px-2 text-ink-3 transition-colors hover:bg-panel-2 hover:text-ink", className)}
+      aria-label={`Theme: ${THEME_LABEL[pref]}. Switch to ${next === "system" ? "the system theme" : `the ${next} theme`}`}
+      title={`Theme: ${THEME_LABEL[pref]}`}
+      onClick={() => setPref(next)}
+      className={cn("inline-flex h-8 items-center justify-center rounded-lg px-2 text-ink-3 transition-colors hover:bg-panel-2 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal", className)}
     >
-      <span className="text-[12px] font-medium">{dark ? "Day" : "Night"}</span>
+      <span className="text-[12px] font-medium">{THEME_LABEL[pref]}</span>
     </button>
   );
 }
@@ -261,7 +257,7 @@ export function Stamp({ tone, children }: { tone: "fail" | "pass" | "warn" | "mu
       className={cn(
         "inline-flex -rotate-2 items-center rounded border-[1.5px] px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-[0.12em]",
         tone === "fail" && "border-fail/70 text-fail",
-        tone === "pass" && "border-pass/70 text-pass",
+        tone === "pass" && "border-pass/70 [color:var(--on-pass)]",
         tone === "warn" && "border-warn/70 text-warn",
         tone === "muted" && "border-ink-3/60 text-ink-3",
       )}

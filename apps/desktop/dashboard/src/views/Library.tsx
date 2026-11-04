@@ -4,8 +4,8 @@ import { RecordBar } from "../components/RecordBar.tsx";
 import { Insights } from "../components/Insights.tsx";
 import { SharePanel } from "../components/Share.tsx";
 import { OUTCOME, Studio, hostOf } from "../components/Studio.tsx";
-import { Empty, PageHead, Stamp, fieldClass } from "../components/ui.tsx";
-import { type Capabilities, deleteRecording, guideUrl, isSnapshot, loadCapabilities, transcriptUrl } from "../lib/api.ts";
+import { Button, Empty, PageHead, Panel, Stamp, fieldClass } from "../components/ui.tsx";
+import { type BatchRenderResult, type Capabilities, type JobStatus, JobCancelled, cancelJob, deleteRecording, guideUrl, isSnapshot, loadCapabilities, startBatchRender, transcriptUrl, watchBatchRender } from "../lib/api.ts";
 import { ago, cn, ms } from "../lib/format.ts";
 import type { LabIndex, RecordingSummary } from "../lib/types.ts";
 
@@ -20,9 +20,52 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  // Batch render: pick several walkthroughs, re-frame them all for a feed in one job.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pickingShape, setPickingShape] = useState(false);
+  const [batchJob, setBatchJob] = useState<JobStatus | null>(null);
+  const [batchResult, setBatchResult] = useState<BatchRenderResult | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const batchBusy = batchJob !== null && batchJob.status !== "succeeded" && batchJob.status !== "failed" && batchJob.status !== "cancelled";
   useEffect(() => {
     if (!isSnapshot) loadCapabilities().then(setCaps);
   }, []);
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+    setPickingShape(false);
+  };
+
+  const startBatch = async (shape: "vertical" | "square") => {
+    const ids = [...selected];
+    setPickingShape(false);
+    setBatchError(null);
+    setBatchResult(null);
+    try {
+      const jobId = await startBatchRender(ids, shape);
+      setBatchJob({ id: jobId, status: "queued", progress: null, error: null, result: null });
+      const result = await watchBatchRender(jobId, setBatchJob);
+      setBatchResult(result);
+      setSelectMode(false);
+      setSelected(new Set());
+    } catch (e) {
+      if (e instanceof JobCancelled) {
+        setBatchJob(null);
+        return;
+      }
+      setBatchError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const recordings = useMemo(() => (index.recordings ?? []).map((r) => overrides[r.dir] ?? r), [index.recordings, overrides]);
   const shown = recordings.filter((r) => !query || `${r.url} ${r.pages.map((p) => p.title).join(" ")}`.toLowerCase().includes(query.toLowerCase()));
@@ -53,20 +96,79 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
       />
       <div className="grid items-start gap-5 2xl:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="grid gap-2 2xl:sticky 2xl:top-20">
-          <label className="relative">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by site or page"
-              aria-label="Filter walkthroughs"
-              className={cn(fieldClass, "h-9")}
+          <div className="flex items-center gap-2">
+            <label className="relative flex-1">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter by site or page"
+                aria-label="Filter walkthroughs"
+                className={cn(fieldClass, "h-9")}
+              />
+            </label>
+            {!isSnapshot && caps?.live && (
+              <button
+                type="button"
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                aria-pressed={selectMode}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center rounded-full border px-3 text-[12.5px]",
+                  selectMode ? "border-signal/60 bg-signal-soft text-signal" : "border-line text-ink-2 hover:border-line-strong hover:text-ink",
+                )}
+              >
+                {selectMode ? "Done" : "Select"}
+              </button>
+            )}
+          </div>
+          {selectMode && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-panel-2 px-3 py-2 text-[12.5px]">
+              <span className="text-ink-2">{selected.size} selected</span>
+              {!pickingShape ? (
+                <Button size="sm" tone="primary" className="ml-auto" disabled={selected.size === 0 || batchBusy} onClick={() => setPickingShape(true)}>
+                  Render selected
+                </Button>
+              ) : (
+                <span className="ml-auto flex items-center gap-1.5">
+                  <span className="text-ink-3">Shape:</span>
+                  <button type="button" onClick={() => void startBatch("vertical")} className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
+                    9:16
+                  </button>
+                  <button type="button" onClick={() => void startBatch("square")} className="inline-flex h-7 items-center rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
+                    1:1
+                  </button>
+                  <button type="button" onClick={() => setPickingShape(false)} className="inline-flex h-7 items-center rounded-full px-2 text-ink-3 hover:text-ink">
+                    Cancel
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+          {(batchJob || batchResult || batchError) && (
+            <BatchRenderPanel
+              job={batchJob}
+              result={batchResult}
+              error={batchError}
+              recordings={recordings}
+              onCancel={() => cancelJob(batchJob!.id).catch((e: unknown) => setBatchError(e instanceof Error ? e.message : String(e)))}
+              onDismiss={() => {
+                setBatchJob(null);
+                setBatchResult(null);
+                setBatchError(null);
+              }}
             />
-          </label>
+          )}
           <ul className="flex gap-2 overflow-x-auto pb-1 2xl:grid 2xl:max-h-[calc(100dvh-12rem)] 2xl:overflow-y-auto 2xl:overflow-x-visible">
             {shown.map((r) => (
               <li key={r.dir} className="w-[260px] shrink-0 2xl:w-auto">
-                <LibraryRow recording={r} on={current?.dir === r.dir} onOpen={() => go({ view: "library", dir: r.id })} />
+                <LibraryRow
+                  recording={r}
+                  on={current?.dir === r.dir}
+                  onOpen={() => go({ view: "library", dir: r.id })}
+                  selectMode={selectMode}
+                  checked={selected.has(r.id)}
+                  onToggleSelect={() => toggleSelect(r.id)}
+                />
               </li>
             ))}
             {shown.length === 0 && <li className="px-2 py-4 text-[13px] text-ink-3">Nothing matches “{query}”.</li>}
@@ -207,20 +309,52 @@ export function Library({ index, dir, go, refresh }: { index: LabIndex; dir?: st
   );
 }
 
-function LibraryRow({ recording: r, on, onOpen }: { recording: RecordingSummary; on: boolean; onOpen: () => void }) {
+function LibraryRow({
+  recording: r,
+  on,
+  onOpen,
+  selectMode,
+  checked,
+  onToggleSelect,
+}: {
+  recording: RecordingSummary;
+  on: boolean;
+  onOpen: () => void;
+  selectMode?: boolean;
+  checked?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const outcome = OUTCOME[r.signIn.outcome] ?? { text: r.signIn.outcome, tone: "muted" as const };
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={selectMode ? onToggleSelect : onOpen}
       aria-current={on ? "true" : undefined}
+      aria-pressed={selectMode ? checked : undefined}
       className={cn(
         "grid w-full gap-1.5 rounded-xl border p-3 text-left transition-colors",
-        on ? "border-signal/50 bg-signal-soft" : "border-line bg-panel hover:border-line-strong",
+        selectMode ? (checked ? "border-signal/50 bg-signal-soft" : "border-line bg-panel hover:border-line-strong") : on ? "border-signal/50 bg-signal-soft" : "border-line bg-panel hover:border-line-strong",
       )}
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="truncate text-[13.5px] font-medium">{hostOf(r.url)}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {selectMode && (
+            <span
+              aria-hidden
+              className={cn(
+                "grid size-4 shrink-0 place-items-center rounded border",
+                checked ? "border-signal bg-signal text-white" : "border-line-strong",
+              )}
+            >
+              {checked && (
+                <svg viewBox="0 0 12 12" width="9" height="9" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 6.2 4.6 9 10 2.5" />
+                </svg>
+              )}
+            </span>
+          )}
+          <span className="truncate text-[13.5px] font-medium">{hostOf(r.url)}</span>
+        </span>
         <span className="shrink-0 font-mono text-[11px] text-ink-3">{ago(Date.parse(r.createdAt))}</span>
       </span>
       <span className="flex items-center gap-2">
@@ -230,6 +364,85 @@ function LibraryRow({ recording: r, on, onOpen }: { recording: RecordingSummary;
         </span>
       </span>
     </button>
+  );
+}
+
+/** "rendering 3/10" -> { done: 3, total: 10 }. Null while the server hasn't said a count yet. */
+function parseBatchProgress(progress: string | null | undefined): { done: number; total: number } | null {
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(progress ?? "");
+  return m ? { done: Number(m[1]), total: Number(m[2]) } : null;
+}
+
+/** Progress (and, once it lands, the per-recording result) of a batch-render job. */
+function BatchRenderPanel({
+  job,
+  result,
+  error,
+  recordings,
+  onCancel,
+  onDismiss,
+}: {
+  job: JobStatus | null;
+  result: BatchRenderResult | null;
+  error: string | null;
+  recordings: RecordingSummary[];
+  onCancel: () => void;
+  onDismiss: () => void;
+}) {
+  const nameOf = (id: string) => {
+    const r = recordings.find((x) => x.id === id);
+    return r ? hostOf(r.url) : id;
+  };
+  const progress = job ? parseBatchProgress(job.progress) : null;
+  const running = job && (job.status === "queued" || job.status === "running");
+  return (
+    <Panel className="overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-2.5">
+        <h3 className="text-[13px] font-semibold">Batch render</h3>
+        {!running && (
+          <button type="button" onClick={onDismiss} className="text-[12px] text-ink-3 hover:text-ink">
+            Dismiss
+          </button>
+        )}
+      </div>
+      <div className="grid gap-2.5 px-3.5 py-3">
+        {error && <p className="rounded-lg border border-fail/30 bg-fail-soft px-3 py-2 text-[12.5px] text-fail">{error}</p>}
+        {!error && job && !result && (
+          <div className="grid gap-2">
+            <p className="text-[12.5px] text-ink-2">{job.status === "queued" ? "Queued…" : progress ? `Rendering ${progress.done}/${progress.total}` : "Rendering…"}</p>
+            {progress && (
+              <div className="h-1.5 overflow-hidden rounded-full bg-panel-3">
+                <div className="h-full rounded-full bg-signal transition-[width]" style={{ width: `${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%` }} />
+              </div>
+            )}
+            {running && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="justify-self-start rounded-full border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-fail/60 hover:text-fail"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
+        {!error && result && (
+          <div className="grid gap-2">
+            <p className="text-[12.5px] text-ink-2">
+              {result.succeeded} of {result.total} rendered{result.failed > 0 ? `, ${result.failed} failed` : ""}
+            </p>
+            <ul className="grid gap-1.5">
+              {result.items.map((it) => (
+                <li key={it.recordingId} className="flex items-center justify-between gap-2 text-[12.5px]">
+                  <span className="min-w-0 truncate">{nameOf(it.recordingId)}</span>
+                  {it.status === "ok" ? <Stamp tone="pass">Ok</Stamp> : <span title={it.error}><Stamp tone="fail">Failed</Stamp></span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 

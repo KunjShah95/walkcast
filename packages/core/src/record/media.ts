@@ -9,6 +9,7 @@ import { chooseVoiceEngine, type VoiceEngine, engineFor, fliteEngine, kokoroEngi
 import { cachedClip, clipKey, storeClip } from "./voice-cache.ts";
 import { transcribe } from "./stt.ts";
 import { readFocus, writeFocus, zoomFilterFor } from "./zoom.ts";
+import { DISK_FULL_MESSAGE, isDiskFull } from "../ops/disk.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -540,6 +541,8 @@ export function wavSeconds(file: string): number {
  * first one hid every real cause behind a wall of flags.
  */
 export function failureReason(error: unknown): string {
+  // A full disk reads as "Conversion failed!" or a raw ENOSPC from ffmpeg: say what it is.
+  if (isDiskFull(error)) return DISK_FULL_MESSAGE;
   const message = error instanceof Error ? error.message : String(error);
   const lines = message
     .split("\n")

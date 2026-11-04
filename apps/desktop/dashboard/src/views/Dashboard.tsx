@@ -3,7 +3,7 @@ import type { Route } from "../App.tsx";
 import { RecordBar } from "../components/RecordBar.tsx";
 import { Studio, hostOf } from "../components/Studio.tsx";
 import { Cite, Empty, ExhibitTag, FindingChip, Panel, PanelHeader, Stamp, Verdict } from "../components/ui.tsx";
-import { ArrowUpRight, CirclePlay, Sparkles } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { type Capabilities, type Me, fileUrl, isSnapshot, loadCapabilities, loadRun } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 import { TASKS } from "../lib/agents.ts";
@@ -24,39 +24,48 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
   const recordings = index.recordings ?? [];
   const runs = index.runs;
   const latestRec = recordings[0];
+  const latestRun = runs[0];
   const latestFail = runs.find((r) => r.verdict === "fail");
   const first = me?.user?.name?.split(" ")[0];
 
   return (
     <div className="grid gap-6 [&>*]:min-w-0">
-      <section className="dashboard-hero studio-card relative grid gap-6 overflow-hidden rounded-[26px] border p-5 sm:p-8 lg:p-9">
-        <div className="dashboard-hero-orbit pointer-events-none absolute -right-20 -top-36 size-[420px] rounded-full" />
-        <div className="relative z-10 grid gap-7 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,.7fr)] xl:items-end">
-          <div className="grid gap-5">
-            <div className="studio-kicker inline-flex w-fit items-center gap-2 text-[10px] font-bold"><Sparkles className="size-3.5" /> PRODUCT QUALITY WORKSPACE</div>
-            <div className="grid gap-3">
-              <h1 className="max-w-[760px] text-[clamp(34px,5vw,60px)] font-semibold leading-[.98] tracking-[-.065em]">
-                {first ? `${first}, ` : "Every journey, "}<span className="text-ink-3">{first ? "your next release starts here." : "under control."}</span>
-              </h1>
-              <p className="max-w-[64ch] text-[14px] leading-6 text-ink-2 sm:text-[15px]">Walk the real product, capture the story, and trace failures back to the exact step that caused them.</p>
-            </div>
-            {isSnapshot ? (
-              <p className="text-[13px] text-ink-3">{t("dashboard.readOnlySnapshot")}</p>
-            ) : (
-              <div className="max-w-3xl"><RecordBar onRecord={(url) => go({ view: "record", url })} /></div>
-            )}
-            {!isSnapshot && <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11.5px] text-ink-3"><span className="inline-flex items-center gap-1.5"><CirclePlay className="size-3.5 text-signal" /> Browser walkthroughs</span><span className="inline-flex items-center gap-1.5"><ArrowUpRight className="size-3.5 text-signal" /> Evidence-backed lab runs</span><button type="button" onClick={() => go({ view: "launch" })} className="inline-flex items-center gap-1 font-semibold text-signal transition-colors hover:text-ink"><Sparkles className="size-3.5" /> Make a launch film <ArrowUpRight className="size-3" /></button></div>}
-          </div>
-          <Facts index={index} caps={caps} />
+      {/* One URL to a result: the field comes first, and it opens Record with the link in it,
+          where the person confirms they may test the site before anything starts. */}
+      <section className="grid gap-4 rounded-xl border border-line bg-panel p-5 sm:p-6" aria-labelledby="dash-start">
+        <div className="grid gap-1.5">
+          <h1 id="dash-start" className="text-[clamp(24px,2.6vw,30px)] font-semibold leading-tight tracking-[-.03em]">
+            {first ? `${first}, what should we walk through?` : "What should we walk through?"}
+          </h1>
+          <p className="max-w-[64ch] text-[14px] leading-relaxed text-ink-2">Paste a link. Walkcast visits the pages, narrates what it sees and gives you a video with a transcript and captions.</p>
         </div>
+        {isSnapshot ? (
+          <p className="text-[13px] text-ink-3">{t("dashboard.readOnlySnapshot")}</p>
+        ) : (
+          <div className="max-w-3xl">
+            <RecordBar onRecord={(url) => go({ view: "record", url })} />
+          </div>
+        )}
+        {!isSnapshot && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-ink-2">
+            <button type="button" onClick={() => go({ view: "launch" })} className="inline-flex items-center gap-1 rounded-full font-medium text-signal underline-offset-4 hover:underline">
+              Make a launch film <ArrowUpRight aria-hidden className="size-3.5" />
+            </button>
+            <button type="button" onClick={() => go({ view: "simulator" })} className="inline-flex items-center gap-1 rounded-full font-medium text-signal underline-offset-4 hover:underline">
+              Replay a fault in the Lab <ArrowUpRight aria-hidden className="size-3.5" />
+            </button>
+          </div>
+        )}
       </section>
+
+      <Facts index={index} caps={caps} />
 
       <div className="grid items-start gap-5 xl:grid-cols-12">
         <section className="grid min-w-0 gap-3 xl:col-span-7">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-[16px] font-semibold">{t("dashboard.latestWalkthrough")}</h2>
             {latestRec && (
-              <button type="button" onClick={() => go({ view: "library", dir: latestRec.id })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
+              <button type="button" onClick={() => go({ view: "library", dir: latestRec.id })} className="inline-flex min-w-0 items-center gap-1 truncate text-[13px] text-ink-2 hover:text-ink">
                 {hostOf(latestRec.url)} · open in the studio
               </button>
             )}
@@ -64,53 +73,44 @@ export function Dashboard({ index, me, go }: { index: LabIndex; me: Me | null; g
           {latestRec ? (
             <Studio recording={latestRec} caps={caps} compact />
           ) : (
-            <>
+            <Panel>
               <Empty title="Your first walkthrough lands here" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none" /></svg>} tone="signal">
-                Paste a link in the bar above. You get the video, a transcript and captions.
+                Paste a link in the field above. You get the video, a transcript and captions.
               </Empty>
-              <section className="border border-line rounded-2xl bg-panel p-1 shadow-card">
-                <div className="px-4 py-3 border-b border-line">
-                  <h2 className="text-[15px] font-semibold">Watch the product walkthrough</h2>
-                  <p className="mt-1 text-[12.5px] text-ink-2">60 seconds — narrated by Kokoro (female voice), with captions.</p>
-                </div>
-                <div className="p-4">
-                  <video src="/walkthrough.mp4" poster="https://walkcast.kunjshah.in/favicon.svg" controls className="w-full h-[420px] rounded-xl bg-black">
-                    <track kind="captions" src="/walkthrough.vtt" srcLang="en" label="Narration" default />
-                  </video>
-                </div>
-              </section>
-            </>
+            </Panel>
           )}
         </section>
 
         <section className="grid min-w-0 gap-3 xl:col-span-5">
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="text-[16px] font-semibold">Latest failure</h2>
-            {latestFail && (
-              <button type="button" onClick={() => go({ view: "run", dir: latestFail.dir })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
+            <h2 className="text-[16px] font-semibold">Latest lab run</h2>
+            {latestRun && (
+              <button type="button" onClick={() => go({ view: "run", dir: latestRun.dir })} className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
                 open the full run
               </button>
             )}
           </div>
-          {latestFail ? (
-            <FailureCase run={latestFail} go={go} />
-          ) : runs.length ? (
-            <Empty title="No failing runs" tone="pass" icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>}>
-              Every recorded agent run passed its application checks.
-            </Empty>
+          {latestRun ? (
+            latestRun.verdict === "fail" ? (
+              <FailureCase run={latestRun} go={go} />
+            ) : (
+              <PassedRun run={latestRun} latestFail={latestFail} go={go} />
+            )
           ) : (
-            <Empty
-              title="No lab runs yet"
-              tone="signal"
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" /><path d="M4 4v4.5h4.5" /></svg>}
-              action={
-                <button type="button" onClick={() => go({ view: "simulator" })} className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid hover:brightness-95">
-                  Replay a fault
-                </button>
-              }
-            >
-              Run an agent against an injected fault and the cause shows up here, with the steps that prove it.
-            </Empty>
+            <Panel>
+              <Empty
+                title="No lab runs yet"
+                tone="signal"
+                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" /><path d="M4 4v4.5h4.5" /></svg>}
+                action={
+                  <button type="button" onClick={() => go({ view: "simulator" })} className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid hover:brightness-95">
+                    Replay a fault
+                  </button>
+                }
+              >
+                Run an agent against an injected fault and the cause shows up here, with the steps that prove it.
+              </Empty>
+            </Panel>
           )}
         </section>
       </div>
@@ -156,15 +156,71 @@ function Facts({ index, caps }: { index: LabIndex; caps: Capabilities | null }) 
   const money = runs.reduce((n, r) => n + (estimateCost(r.modelSpec, r.inputTokens ?? 0, r.outputTokens ?? 0) ?? 0), 0);
   if (spent > 0) items.push([`${shortTokens(spent)} tokens`, money > 0 ? `≈ ${usd(money)} spent` : "spent"]);
   return (
-    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       {items.map(([v, k]) => (
-        <div key={k} className="flex min-h-[76px] flex-col justify-between rounded-2xl border border-line bg-paper/70 px-3.5 py-3">
-          <dt className="sr-only">{k}</dt>
-          <dd className="font-mono text-[20px] font-medium leading-none tracking-[-.04em] text-ink">{v}</dd>
-          <span className="text-[10.5px] leading-tight text-ink-3">{k}</span>
+        <div key={k} className="flex min-h-[72px] flex-col-reverse justify-end gap-2 rounded-lg border border-line bg-panel px-3.5 py-3">
+          <dt className="text-[12px] leading-tight text-ink-2">{k}</dt>
+          <dd className="font-mono text-[20px] font-medium leading-none tracking-[-.03em] text-ink">{v}</dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * A screenshot thumbnail that degrades to a neutral tile: a missing or broken file never shows
+ * the browser's broken-image glyph or spills its alt text across the row.
+ */
+function Thumb({ src, alt }: { src?: string; alt: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+  if (!src || broken) {
+    return (
+      <span className="grid h-9 w-14 shrink-0 place-items-center overflow-hidden rounded border border-line bg-panel-2 text-[11px] text-ink-3" title={src ? "Screenshot unavailable" : "No screenshot for this step"}>
+        <span className="sr-only">{src ? "Screenshot unavailable" : "No screenshot"}</span>
+        <span aria-hidden>—</span>
+      </span>
+    );
+  }
+  return <img src={src} alt={alt} onError={() => setBroken(true)} className="h-9 w-14 shrink-0 overflow-hidden rounded border border-line bg-panel-2 object-cover object-top text-[0px]" loading="lazy" />;
+}
+
+/** The newest run when it passed: what ran, what it took, and a way to the last failure. */
+function PassedRun({ run, latestFail, go }: { run: RunSummary; latestFail?: RunSummary; go: (r: Route) => void }) {
+  return (
+    <Panel className="overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+        <span className="font-mono text-[12.5px] font-medium">{run.agent}</span>
+        <span className="text-ink-3">on</span>
+        <span className="min-w-0 truncate text-[13px]">{faultLabel(run.fault)}</span>
+        <span className="ml-auto">
+          <Verdict verdict="pass" />
+        </span>
+      </div>
+      <dl className="grid grid-cols-3 divide-x divide-line text-[13px]">
+        <div className="grid gap-1 px-4 py-3">
+          <dt className="text-[12px] text-ink-2">Steps</dt>
+          <dd className="font-mono">{run.steps}</dd>
+        </div>
+        <div className="grid gap-1 px-4 py-3">
+          <dt className="text-[12px] text-ink-2">Took</dt>
+          <dd className="font-mono">{ms(run.durationMs)}</dd>
+        </div>
+        <div className="grid gap-1 px-4 py-3">
+          <dt className="text-[12px] text-ink-2">Ran</dt>
+          <dd className="font-mono">{ago(run.createdAt)}</dd>
+        </div>
+      </dl>
+      {run.incidents[0] && <p className="border-t border-line px-4 py-3 text-[13px] text-ink-2">Recovered from {label(run.incidents[0])}.</p>}
+      {latestFail && (
+        <button type="button" onClick={() => go({ view: "run", dir: latestFail.dir })} className="flex w-full items-center gap-2 border-t border-line px-4 py-3 text-left text-[13px] text-ink-2 hover:bg-panel-2 hover:text-ink">
+          <span className="size-1.5 shrink-0 rounded-full bg-fail" aria-hidden />
+          <span className="min-w-0 truncate">
+            Last failure: {latestFail.agent} on {faultLabel(latestFail.fault)}, {ago(latestFail.createdAt)}
+          </span>
+        </button>
+      )}
+    </Panel>
   );
 }
 
@@ -249,11 +305,7 @@ function FailureCase({ run, go }: { run: RunSummary; go: (r: Route) => void }) {
                           {s?.error && <span className="block truncate text-[11.5px] text-fail">{s.error.replace(/^page\.\w+: /, "")}</span>}
                           {!s?.error && s?.after?.url && <span className="block truncate font-mono text-[11px] text-ink-3">{s.after.url}</span>}
                         </span>
-                        {shot ? (
-                          <img src={shot} alt={`Screenshot after step ${id}`} className="h-9 w-14 rounded border border-line object-cover object-top" loading="lazy" />
-                        ) : (
-                          <span className="text-[11px] text-ink-3">no shot</span>
-                        )}
+                        <Thumb src={shot} alt={`Screenshot after step ${id}`} />
                       </button>
                     </li>
                   );

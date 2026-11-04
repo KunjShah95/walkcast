@@ -8,7 +8,7 @@ import { LabData, type LabIndex, type LaunchVideo, type RecordingSummary, type R
 import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
 import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
 import { budgetLimitsFor } from "../../../packages/core/src/llm/budget.ts";
-import { seal, sharedKeyConfigured, useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
+import { masterKey, openAtRest, seal, sealAtRest, sharedKeyConfigured, useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
 import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
 import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
@@ -44,34 +44,6 @@ import { importLegacySchedules, newSchedule, startScheduler } from "../../../pac
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dashboard", "dist", "index.html");
 const APP_SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-type DesktopTaskStatus = "running" | "complete" | "failed";
-interface DesktopTask {
-  id: string;
-  kind: "launch-video" | "kokoro-setup";
-  owner: string | null;
-  recordingId?: string;
-  status: DesktopTaskStatus;
-  progress: number;
-  message: string;
-  startedAt: string;
-  updatedAt: string;
-  error?: string;
-  video?: LaunchVideo;
-  temporaryDir?: string;
-  child?: ChildProcess;
-}
-
-function trackDesktopTask(task: DesktopTask, chunk: Buffer | string): void {
-  const text = String(chunk);
-  const lines = text.split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length) task.message = lines.at(-1)!.slice(0, 220);
-  const frames = /frame\s+(\d+)\s*\/\s*(\d+)/.exec(text);
-  if (frames) task.progress = Math.min(96, 24 + Math.round((Number(frames[1]) / Number(frames[2])) * 70));
-  else if (/Prepared current/.test(text)) task.progress = Math.max(task.progress, 8);
-  else if (/Kokoro|voice/.test(text)) task.progress = Math.max(task.progress, 17);
-  else if (/score|music/i.test(text)) task.progress = Math.max(task.progress, 12);
-  task.updatedAt = new Date().toISOString();
-}
 const TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -145,6 +117,8 @@ const LIMITS = {
   activeJobsPerUser: Number(process.env.LAB_MAX_ACTIVE_JOBS ?? 1),
   recordingsPerDay: Number(process.env.LAB_RECORDINGS_PER_DAY ?? 20),
   runsPerDay: Number(process.env.LAB_RUNS_PER_DAY ?? 100),
+  /** Most recordings one batch-render job may re-export at once. */
+  maxBatchRenderItems: Number(process.env.LAB_MAX_BATCH_RENDER_ITEMS ?? 10),
 };
 
 /**
@@ -258,6 +232,83 @@ function credentialsPath(root: string): string {
   return join(root, ".walkcast-credentials.json");
 }
 
+/** The same credentials, encrypted under WALKCAST_MASTER_KEY: written instead of the plaintext file when that key is set. */
+function encryptedCredentialsPath(root: string): string {
+  return join(root, ".walkcast-credentials.enc");
+}
+
+function parseCredentials(text: string): Record<string, string> {
+  try {
+    const v = JSON.parse(text) as unknown;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    return Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === "string"));
+  } catch {
+    return {};
+  }
+}
+
+/** Write a file readable by its owner only, atomically: a crash mid-write must not lose every saved key. */
+function writePrivateFile(p: string, body: string): void {
+  const tmp = `${p}.${process.pid}.tmp`;
+  writeFileSync(tmp, body, { mode: 0o600 });
+  try {
+    chmodSync(tmp, 0o600);
+  } catch {
+    /* a filesystem without POSIX permissions (Windows) has nothing to tighten */
+  }
+  renameSync(tmp, p);
+}
+
+/**
+ * The saved credentials.
+ *
+ * With WALKCAST_MASTER_KEY set they live encrypted in .walkcast-credentials.enc. A plaintext
+ * .walkcast-credentials.json from before is folded in, re-saved encrypted, and then deleted, so
+ * the keys stop sitting on disk in the clear. An encrypted file that this key can't open throws
+ * rather than reading as empty: saving over it would silently drop every other saved key.
+ * Without the master key nothing changes: the plaintext file, owner-readable only.
+ */
+export function readCredentials(root: string): Record<string, string> {
+  const plain = credentialsPath(root);
+  const enc = encryptedCredentialsPath(root);
+  if (!masterKey()) {
+    if (!existsSync(plain)) {
+      if (existsSync(enc)) log.warn("credentials.locked", { reason: "WALKCAST_MASTER_KEY is not set, so the encrypted credentials file can't be read" });
+      return {};
+    }
+    return parseCredentials(readFileSync(plain, "utf8"));
+  }
+  let data: Record<string, string> = {};
+  if (existsSync(enc)) {
+    try {
+      data = parseCredentials(openAtRest(readFileSync(enc, "utf8")));
+    } catch (e) {
+      throw new Error(`The saved credentials can't be opened with this WALKCAST_MASTER_KEY (${e instanceof Error ? e.message : String(e)}).`);
+    }
+  }
+  if (existsSync(plain)) {
+    // Migration: the encrypted copy wins where both name a key (it was written later).
+    data = { ...parseCredentials(readFileSync(plain, "utf8")), ...data };
+    writePrivateFile(enc, sealAtRest(JSON.stringify(data)));
+    // Only once the encrypted copy is on disk and opens again.
+    if (JSON.stringify(parseCredentials(openAtRest(readFileSync(enc, "utf8")))) === JSON.stringify(data)) {
+      rmSync(plain, { force: true });
+      log.info("credentials.encrypted", { keys: Object.keys(data).length });
+    }
+  }
+  return data;
+}
+
+function writeCredentials(root: string, data: Record<string, string>): void {
+  if (masterKey()) {
+    writePrivateFile(encryptedCredentialsPath(root), sealAtRest(JSON.stringify(data)));
+    rmSync(credentialsPath(root), { force: true });
+    return;
+  }
+  // The file holds the keys in plain text, so it is readable by its owner only.
+  writePrivateFile(credentialsPath(root), JSON.stringify(data, null, 2));
+}
+
 /**
  * Read the saved credentials into this process's environment.
  *
@@ -267,14 +318,13 @@ function credentialsPath(root: string): string {
  * Settings panel writes; the worker reads the same one.
  */
 export function applyCredentialsFile(root: string): void {
-  const p = credentialsPath(root);
-  if (!existsSync(p)) return;
   try {
-    const data = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
-    for (const [k, v] of Object.entries(data)) {
-      if (typeof v === "string" && CREDENTIAL_KEYS.some((c) => c.env === k)) setCredential(k, v);
+    for (const [k, v] of Object.entries(readCredentials(root))) {
+      if (CREDENTIAL_KEYS.some((c) => c.env === k)) setCredential(k, v);
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    log.warn("credentials.unreadable", { error: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /**
@@ -312,17 +362,9 @@ function clearCredential(env: string): void {
 }
 
 function saveCredential(root: string, env: string, value: string): void {
-  const p = credentialsPath(root);
-  let data: Record<string, string> = {};
-  if (existsSync(p)) try { data = JSON.parse(readFileSync(p, "utf8")) as Record<string, string>; } catch { data = {}; }
+  const data = readCredentials(root);
   if (value) data[env] = value; else delete data[env];
-  // The file holds the keys in plain text, so it is readable by its owner only.
-  writeFileSync(p, JSON.stringify(data, null, 2), { mode: 0o600 });
-  try {
-    chmodSync(p, 0o600);
-  } catch {
-    /* a filesystem without POSIX permissions (Windows) has nothing to tighten */
-  }
+  writeCredentials(root, data);
   if (value) setCredential(env, value); else clearCredential(env);
   // Capabilities depend on which credentials are set; drop cached responses, and voice samples
   // spoken with the old key.
@@ -489,46 +531,7 @@ export function createApp(o: ServeOptions = {}): App {
   const queueMonitor = startQueueMonitor(store);
 
   let draining = false;
-
-  function startDesktopTask(
-    task: DesktopTask,
-    command: string,
-    args: string[],
-    cwd: string,
-    env: NodeJS.ProcessEnv,
-    complete?: () => Promise<void>,
-  ): void {
-    desktopTasks.set(task.id, task);
-    const child = spawn(command, args, { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    task.child = child;
-    child.stdout?.on("data", (chunk: Buffer) => trackDesktopTask(task, chunk));
-    child.stderr?.on("data", (chunk: Buffer) => trackDesktopTask(task, chunk));
-    child.once("error", (error) => {
-      task.status = "failed";
-      task.error = error.message;
-      task.message = "The local video renderer could not start.";
-      task.updatedAt = new Date().toISOString();
-      if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
-    });
-    child.once("close", (code) => {
-      if (task.status !== "running") return;
-      void (async () => {
-        if (code !== 0) throw new Error(`Video renderer exited with code ${code ?? "unknown"}. ${task.message}`);
-        await complete?.();
-        if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
-        task.status = "complete";
-        task.progress = 100;
-        task.message = task.kind === "kokoro-setup" ? "Kokoro is ready." : "Launch video finished.";
-        task.updatedAt = new Date().toISOString();
-      })().catch((error: unknown) => {
-        task.status = "failed";
-        task.error = error instanceof Error ? error.message : String(error);
-        task.message = "Could not finish the launch video.";
-        task.updatedAt = new Date().toISOString();
-        if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
-      });
-    });
-  }
+  let shuttingDown = false;
 
   const handler = (req: IncomingMessage, res: ServerResponse) => {
     const started = Date.now();
@@ -976,7 +979,7 @@ export function createApp(o: ServeOptions = {}): App {
       const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
       mkdirSync(cache, { recursive: true });
       const script = join(APP_SOURCE_ROOT, "scripts", "setup-kokoro.ps1");
-      startDesktopTask(task, "powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-WarmModel", "-CachePath", cache], APP_SOURCE_ROOT, {
+      desktopTasks.start(task, "powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-WarmModel", "-CachePath", cache], APP_SOURCE_ROOT, {
         ...process.env, PYTHONUTF8: "1", WALKCAST_KOKORO_CACHE: cache,
       }, async () => {
         if (!(await refreshKokoro())) throw new Error("Kokoro setup finished, but Walkcast still cannot find its Python packages.");
@@ -1036,7 +1039,7 @@ export function createApp(o: ServeOptions = {}): App {
       };
       const builder = join(APP_SOURCE_ROOT, "docs", "launch", "source", "build-site-film.mjs");
       const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
-      startDesktopTask(task, process.execPath, [builder, capture], APP_SOURCE_ROOT, {
+      desktopTasks.start(task, process.execPath, [builder, capture], APP_SOURCE_ROOT, {
         ...process.env,
         KOKORO_VOICE: voice,
         WALKCAST_KOKORO_CACHE: cache,
@@ -1244,6 +1247,28 @@ try {
       writeFileSync(file, JSON.stringify(fresh, null, 2));
       await saveRecordingSummary(id, row.owner, fresh);
       return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
+    }
+    // Re-export several existing recordings in one background job: the per-item work is exactly
+    // what POST /api/recordings/:id/export does, run sequentially so one bad recording doesn't
+    // sink the rest. The whole batch counts as one active job, same ceiling as a single run.
+    if (url.pathname === "/api/recordings/batch-render" && req.method === "POST") {
+      const b = (await readJson(req).catch(() => ({}))) as { recordingIds?: unknown; shape?: unknown };
+      const recordingIds = Array.isArray(b.recordingIds) ? b.recordingIds.filter((x): x is string => typeof x === "string" && x.length > 0) : null;
+      if (!recordingIds || recordingIds.length === 0) return json(400, { error: "recordingIds must be a non-empty array of recording ids." });
+      if (recordingIds.length > LIMITS.maxBatchRenderItems) return json(400, { error: `A batch render can include at most ${LIMITS.maxBatchRenderItems} recordings.` });
+      if (!isShape(b.shape)) return json(400, { error: "shape must be vertical or square" });
+      // Fail the whole request up front if any id is missing or not this account's: the user must
+      // know which one was bad before anything runs, not after the job half-finishes.
+      for (const id of recordingIds) {
+        const row = await findRecording(id);
+        if (!row || !canSee(row.owner)) return json(404, { error: `Recording ${id} not found.` });
+      }
+      if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) return json(429, { error: "You already have a job running. Wait for it to finish." });
+      const job = await store.enqueueLimited({ kind: "batch-render", owner, input: { recordingIds, shape: b.shape } }, LIMITS.activeJobsPerUser);
+      if (!job) return json(429, { error: "You already have a job running. Wait for it to finish." });
+      worker?.poke();
+      log.info("job.enqueued", { job: job.id, kind: "batch-render", owner, items: recordingIds.length });
+      return json(202, { jobId: job.id });
     }
     // A download of the same walkthrough with no narration track, for a recording that was
     // made with a voice but is wanted without one (sharing with sound off, dubbing it elsewhere).

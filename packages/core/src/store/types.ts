@@ -31,7 +31,7 @@ export interface User {
   createdAt: string;
 }
 
-export type JobKind = "record" | "run";
+export type JobKind = "record" | "run" | "batch-render";
 
 export interface StoreMetrics {
   /** Window over which the duration figures were computed. */

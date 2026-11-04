@@ -55,6 +55,7 @@ export type FailureCategory =
   | "too-long"
   | "interrupted"
   | "encoding"
+  | "disk"
   | "narration"
   | "not-allowed"
   | "model"
@@ -90,6 +91,7 @@ export function evidenceOf(error: unknown): FailureEvidence | null {
 
 const RULES: [RegExp, FailureCategory, string, string][] = [
   [/server is restarting|can't run recordings|is selected but this server has no/i, "refused", "The recording was refused before it started", "Fix what the message says, then record again."],
+  [/Not enough free disk space|disk is full|ENOSPC|No space left on device/i, "disk", "The disk is full", "Free some disk space (old recordings and exports are the big files), then try again."],
   [/still downloading|could not be installed/i, "browser", "The recording browser wasn't ready yet", "It downloads once on first run; wait for the banner to say it's ready, then record again."],
   [/Stagehand agents need|LAB_CHROME_PATH/i, "browser", "No Chrome for the Stagehand agent", "Install Google Chrome or Microsoft Edge, or set LAB_CHROME_PATH, then run again."],
   [/budget exhausted/i, "model", "The run reached its model budget", "Raise LAB_AGENT_TOKEN_BUDGET or LAB_AGENT_COST_BUDGET_USD for a higher ceiling, or replay a recorded run, which costs nothing."],

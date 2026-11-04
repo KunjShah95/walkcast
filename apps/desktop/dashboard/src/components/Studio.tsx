@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
-import { type Annotation, type Capabilities, type Voice, buildSilentCopy, createAnnotation, deleteAnnotation, exportShape, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, transcriptUrl, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
+import { type Annotation, type Capabilities, type Voice, createAnnotation, deleteAnnotation, guideUrl, loadAnnotations, mediaUrl, renarrate, sttCaptions, uploadVoiceover, voicePreviewUrl } from "../lib/api.ts";
 import { guideSteps } from "../../../../../packages/core/src/record/guide.ts";
 import { cn, ms } from "../lib/format.ts";
 import { VOICE_LABEL, usePrefs } from "../lib/prefs.ts";
@@ -103,7 +103,8 @@ export function Studio({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(r.durationMs / 1000);
   const [prefs, setPrefs] = usePrefs();
-  const [tab, setTab] = useState<"transcript" | "steps" | "notes" | "script" | "voice">("transcript");
+  const [tab, setTab] = useState<Tab>("transcript");
+  const tabsId = useId();
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
   const chapters = useMemo(() => chaptersOf(r), [r]);
@@ -121,9 +122,6 @@ export function Studio({
   const [version, setVersion] = useState(0);
   const [sttBusy, setSttBusy] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
-  // Which feed shape is encoding, if any: one at a time, each is a full re-encode.
-  const [shaping, setShaping] = useState<"vertical" | "square" | null>(null);
-  const [silencing, setSilencing] = useState(false);
   // Known only on a live server; elsewhere let the server answer.
   const sttMissing = caps?.live && caps.sttProviders?.length === 0;
 
@@ -196,8 +194,9 @@ export function Studio({
         </div>
 
         {chapters.length > 0 && (
-          <div className="border-t border-line px-3 pt-2.5" aria-label="Chapters">
-            <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
+          <nav className="border-t border-line px-3 pt-1.5" aria-label="Chapters">
+            {/* Each segment is a 24px-tall target; the visible bar stays a thin 6px line inside it. */}
+            <div className="flex h-6 items-center gap-0.5">
               {chapters.map((c, i) => {
                 const end = chapters[i + 1]?.start ?? duration;
                 const width = Math.max(2, ((end - c.start) / Math.max(1, duration)) * 100);
@@ -209,10 +208,13 @@ export function Studio({
                     onClick={() => seek(c.start)}
                     title={`${clock(c.start)} · ${c.title}`}
                     aria-label={`Chapter ${i + 1}: ${c.title}`}
-                    className="relative h-full overflow-hidden bg-panel-3 transition-[filter] hover:brightness-150"
+                    aria-current={i === chapter ? "step" : undefined}
+                    className="group grid h-6 items-center"
                     style={{ width: `${width}%` }}
                   >
-                    <span className="absolute inset-y-0 left-0 bg-signal" style={{ width: `${fill}%` }} />
+                    <span className={cn("relative block h-1.5 overflow-hidden bg-panel-3 transition-[filter] group-hover:brightness-90", i === 0 && "rounded-l-full", i === chapters.length - 1 && "rounded-r-full")}>
+                      <span className="absolute inset-y-0 left-0 bg-signal" style={{ width: `${fill}%` }} />
+                    </span>
                   </button>
                 );
               })}
@@ -223,7 +225,7 @@ export function Studio({
               </span>
               <span className="min-w-0 truncate text-ink-2">{chapters[chapter]?.title}</span>
             </div>
-          </div>
+          </nav>
         )}
 
         {pictures.length > 0 && (
@@ -308,137 +310,17 @@ export function Studio({
             >
               {sttBusy ? "Transcribing..." : "Auto-captions (STT)"}
             </button>
-            {!compact &&
-              (
-                [
-                  [r.media.mp4, "MP4"],
-                  [r.media.captions, "VTT"],
-                  [r.media.audio, "Audio"],
-                ] as const
-              ).map(([file, label]) => {
-                const href = file ? mediaUrl(r.dir, file) : undefined;
-                return href ? (
-                  <a key={label} href={href} download={`${r.id}-${file}`} className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
-                    {label}
-                  </a>
-                ) : null;
-              })}
-            {!compact && (
-              // The whole visit as one document: the pages, the narration, the notes and what
-              // the recorder found — to paste into a ticket, a README or a chat.
-              <a href={transcriptUrl(r.id, "md")} download={`${r.id}.md`} className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
-                Markdown
-              </a>
-            )}
-            {!compact &&
-              (
-                [
-                  ["vertical", "9:16"],
-                  ["square", "1:1"],
-                ] as const
-              ).map(([shape, label]) => {
-                const made = r.media.exports?.[shape];
-                const cls = "inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40";
-                // Made once, then it is a download like the MP4.
-                if (made) {
-                  return (
-                    <a key={shape} href={mediaUrl(r.dir, made)} download={`${r.id}-${made}`} title={`The walkthrough in ${label}, captions burned in`} className={cls}>
-                      {label}
-                    </a>
-                  );
-                }
-                return (
-                  <button
-                    key={shape}
-                    type="button"
-                    disabled={shaping !== null || !r.media.mp4}
-                    title={`Re-frame for a feed in ${label}, with the captions burned in`}
-                    onClick={async () => {
-                      setShaping(shape);
-                      setSttError(null);
-                      try {
-                        onChange?.(await exportShape(r.id, shape));
-                      } catch (e) {
-                        setSttError(e instanceof Error ? e.message : String(e));
-                      } finally {
-                        setShaping(null);
-                      }
-                    }}
-                    className={cls}
-                  >
-                    {shaping === shape ? `Making ${label}…` : `Make ${label}`}
-                  </button>
-                );
-              })}
-            {!compact && r.media.voice !== "none" && (() => {
-              const cls = "inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink disabled:opacity-40";
-              if (r.media.silent) {
-                return (
-                  <a href={mediaUrl(r.dir, r.media.silent)} download={`${r.id}-${r.media.silent}`} title="The walkthrough with no narration, captions still on" className={cls}>
-                    No voice
-                  </a>
-                );
-              }
-              return (
-                <button
-                  type="button"
-                  disabled={silencing || !r.media.mp4}
-                  title="Make a download of this walkthrough with the narration stripped out"
-                  onClick={async () => {
-                    setSilencing(true);
-                    setSttError(null);
-                    try {
-                      onChange?.(await buildSilentCopy(r.id));
-                    } catch (e) {
-                      setSttError(e instanceof Error ? e.message : String(e));
-                    } finally {
-                      setSilencing(false);
-                    }
-                  }}
-                  className={cls}
-                >
-                  {silencing ? "Making…" : "Download (no voice)"}
-                </button>
-              );
-            })()}
-            {!compact && (
-              // The visit as numbered steps, each with a picture of the screen: for a help
-              // article or an onboarding doc, where people skim instead of watching.
-              <a href={guideUrl(r.id)} target="_blank" rel="noreferrer" title="Every page and every click as numbered steps with pictures" className="inline-flex h-8 items-center gap-1 rounded-full border border-line px-2.5 text-ink-2 hover:border-line-strong hover:text-ink">
-                Step guide
-              </a>
-            )}
           </span>
         </div>
         {sttError && <p className="border-t border-line px-4 py-2.5 text-[12.5px] text-fail">{sttError}</p>}
       </Panel>
 
       <Panel className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-        {!compact && (
-          <div className="flex gap-1 border-b border-line p-1.5" role="tablist" aria-label="Narration">
-            {(
-              [
-                ["transcript", "Transcript"],
-                ["steps", "Steps"],
-                ["notes", "Notes"],
-                ["script", "Script"],
-                ["voice", "Voice"],
-              ] as const
-            ).map(([id, name]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => setTab(id)}
-                title={id === "script" ? "Edit the narration script" : id === "voice" ? "Record or upload your own voice" : undefined}
-                className={cn("h-8 flex-1 rounded-full text-[12px] font-medium transition-colors", tab === id ? "bg-solid text-on-solid" : "text-ink-3 hover:text-ink")}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-        )}
+        {!compact && <NarrationTabs id={tabsId} tab={tab} onTab={setTab} />}
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          {...(!compact ? { role: "tabpanel", id: `${tabsId}-panel`, "aria-labelledby": `${tabsId}-tab-${tab}`, tabIndex: -1 } : {})}
+        >
         {tab === "steps" && <Steps recording={r} starts={pageStarts} seek={seek} />}
         {tab === "transcript" && (
           <ol ref={list} className={cn("min-h-0 flex-1 overflow-y-auto p-1.5", compact ? "max-h-[19rem]" : "max-h-[34rem]")}>
@@ -499,7 +381,63 @@ export function Studio({
             }}
           />
         )}
+        </div>
       </Panel>
+    </div>
+  );
+}
+
+const TABS = [
+  ["transcript", "Transcript", undefined],
+  ["steps", "Steps", undefined],
+  ["notes", "Notes", undefined],
+  ["script", "Script", "Edit the narration script"],
+  ["voice", "Voice", "Record or upload your own voice"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+/** The narration tabs: a real tablist, arrow keys move between tabs (and select them), Home/End jump. */
+function NarrationTabs({ id, tab, onTab }: { id: string; tab: Tab; onTab: (t: Tab) => void }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const move = (to: number) => {
+    const n = (to + TABS.length) % TABS.length;
+    onTab(TABS[n]![0]);
+    refs.current[n]?.focus();
+  };
+  return (
+    <div
+      className="flex gap-1 border-b border-line p-1.5"
+      role="tablist"
+      aria-label="Narration"
+      onKeyDown={(e) => {
+        const at = TABS.findIndex(([t]) => t === tab);
+        if (e.key === "ArrowRight") move(at + 1);
+        else if (e.key === "ArrowLeft") move(at - 1);
+        else if (e.key === "Home") move(0);
+        else if (e.key === "End") move(TABS.length - 1);
+        else return;
+        e.preventDefault();
+      }}
+    >
+      {TABS.map(([t, name, hint], i) => (
+        <button
+          key={t}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          id={`${id}-tab-${t}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === t}
+          aria-controls={`${id}-panel`}
+          tabIndex={tab === t ? 0 : -1}
+          onClick={() => onTab(t)}
+          title={hint}
+          className={cn("h-8 flex-1 rounded-full text-[12px] font-medium transition-colors", tab === t ? "bg-solid text-on-solid" : "text-ink-3 hover:text-ink")}
+        >
+          {name}
+        </button>
+      ))}
     </div>
   );
 }

@@ -11,6 +11,8 @@ import { ago, cn, formatElapsed } from "../lib/format.ts";
 import { journeyAsPlaywright, parseJourney } from "../../../../../packages/core/src/record/journey.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import type { LabIndex } from "../lib/types.ts";
+import { refreshActiveJob, useActiveJob } from "../lib/active-job.ts";
+import { ActiveJobNotice } from "./ActiveJobNotice.tsx";
 
 type Attempt = { url: string; status: "running" | "failed"; message: string; at: number };
 
@@ -75,7 +77,11 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const target = demo ? "sample:minicrm" : normalizeUrl(url);
   const limitHit = caps?.limits && caps.usage ? caps.usage.recordingsToday >= caps.limits.recordingsPerDay : false;
   const blocked = isSnapshot ? "This is a snapshot: it plays recordings but can't make new ones." : (caps?.jobsUnavailable ?? (limitHit ? "You've reached today's recording limit. It resets 24 hours after your oldest recording today." : null));
-  const ready = Boolean(target) && authorized && !blocked && !busy && settled;
+  // The one-active-job limit, checked before Start rather than answered with a raw 429. A
+  // recording of this account's is picked back up below, so only other kinds of job block here.
+  const { job: activeJob } = useActiveJob();
+  const otherJob = !busy && activeJob && activeJob.kind !== "record" ? activeJob : null;
+  const ready = Boolean(target) && authorized && !blocked && !otherJob && !busy && settled;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +126,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
       void refresh().catch(() => undefined);
     } finally {
       setJob(null);
+      void refreshActiveJob();
       // The "N of 20 used today" line was read once on load and never moved.
       void loadCapabilities().then(setCaps);
     }
@@ -412,6 +419,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                 {blocked}
               </p>
             )}
+            {!blocked && otherJob && <ActiveJobNotice job={otherJob} go={go} action="start a recording" />}
             {error && <p className="rounded-xl border border-fail/30 bg-fail-soft px-4 py-3 text-[13px] text-fail">{error}</p>}
 
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -565,7 +573,7 @@ function JobPanel({ job, target, onCancel }: { job: JobStatus | null; target: st
                 <span
                   className={cn(
                     "grid size-5 shrink-0 place-items-center rounded-full border font-mono text-[10px]",
-                    i < stage ? "border-signal bg-signal text-white" : i === stage ? "border-signal text-signal" : "border-line-strong text-ink-3",
+                    i < stage ? "border-signal bg-signal text-on-signal" : i === stage ? "border-signal text-signal" : "border-line-strong text-ink-3",
                   )}
                 >
                   {i + 1}

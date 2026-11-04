@@ -6,6 +6,7 @@ import { Updates } from "../components/Updates.tsx";
 import { type Capabilities, type Me, type Voice, isSnapshot, loadCapabilities } from "../lib/api.ts";
 import { usePrefs, type TtsProvider } from "../lib/prefs.ts";
 import { useI18n, LANGS } from "../lib/i18n.tsx";
+import { type ThemePref, useThemePref } from "../lib/theme.ts";
 
 /** Account, recording defaults, connected providers, and what the day allows. */
 export function Settings({ me }: { me: Me | null }) {
@@ -33,6 +34,8 @@ export function Settings({ me }: { me: Me | null }) {
           </select>
         </div>
       </Panel>
+
+      <Appearance />
 
       <Account me={me} />
 
@@ -112,6 +115,7 @@ export function Settings({ me }: { me: Me | null }) {
       )}
       {caps && <Providers caps={caps} />}
       {caps && <Usage caps={caps} />}
+      {!isSnapshot && <Diagnostics />}
     </div>
   );
 }
@@ -536,6 +540,133 @@ function Usage({ caps }: { caps: Capabilities }) {
           </div>
         ))}
       </dl>
+    </Panel>
+  );
+}
+const THEME_CHOICES: { value: ThemePref; label: string; note: string }[] = [
+  { value: "system", label: "System", note: "Follows your computer's light or dark setting." },
+  { value: "light", label: "Light", note: "Paper and ink." },
+  { value: "dark", label: "Dark", note: "Graphite with the same teal." },
+];
+
+function Appearance() {
+  const [pref, setPref] = useThemePref();
+  return (
+    <Panel>
+      <PanelHeader title="Appearance" eyebrow="Kept in this browser only." />
+      <fieldset className="grid gap-2 px-4 py-4">
+        <legend className="sr-only">Theme</legend>
+        <div role="radiogroup" aria-label="Theme" className="inline-flex w-fit rounded-full border border-line bg-panel-2 p-0.5">
+          {THEME_CHOICES.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              role="radio"
+              aria-checked={pref === c.value}
+              onClick={() => setPref(c.value)}
+              className={`h-8 rounded-full px-4 text-[13px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal ${pref === c.value ? "bg-solid font-medium text-on-solid" : "text-ink-2 hover:text-ink"}`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[12.5px] text-ink-3">{THEME_CHOICES.find((c) => c.value === pref)?.note}</p>
+      </fieldset>
+    </Panel>
+  );
+}
+
+/**
+ * A support bundle from /api/diagnostics: versions, settings with secrets removed, recent job
+ * states and server log lines. The server builds it and strips keys; this only fetches it.
+ */
+function Diagnostics() {
+  const [state, setState] = useState<{ busy: "copy" | "download" | null; message: string | null; error: boolean }>({ busy: null, message: null, error: false });
+
+  async function fetchBundle(): Promise<Response> {
+    const res = await fetch("/api/diagnostics", { signal: AbortSignal.timeout(30_000), cache: "no-store" });
+    if (res.status === 401) throw new Error("Sign in again to collect diagnostics.");
+    if (res.status === 404) throw new Error("This server can't build a diagnostics bundle yet. Update Walkcast and try again.");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `Could not collect diagnostics (${res.status}).`);
+    }
+    return res;
+  }
+
+  async function download() {
+    setState({ busy: "download", message: null, error: false });
+    try {
+      const res = await fetchBundle();
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const named = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)?.[1];
+      const ext = /zip/.test(blob.type) ? "zip" : "json";
+      const name = named ? decodeURIComponent(named) : `walkcast-diagnostics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10_000);
+      setState({ busy: null, message: `Saved ${name} (${Math.max(1, Math.round(blob.size / 1024))} KB).`, error: false });
+    } catch (e) {
+      setState({ busy: null, message: e instanceof Error ? e.message : String(e), error: true });
+    }
+  }
+
+  async function copy() {
+    setState({ busy: "copy", message: null, error: false });
+    try {
+      const res = await fetchBundle();
+      const type = res.headers.get("content-type") ?? "";
+      if (!/json|text/.test(type)) throw new Error("This bundle is an archive, so it can't go on the clipboard. Use Download instead.");
+      const text = await res.text();
+      let pretty = text;
+      try {
+        pretty = JSON.stringify(JSON.parse(text), null, 2);
+      } catch {
+        /* not JSON: copy as is */
+      }
+      await navigator.clipboard.writeText(pretty);
+      setState({ busy: null, message: "Copied to the clipboard. Paste it into your support request.", error: false });
+    } catch (e) {
+      setState({ busy: null, message: e instanceof Error ? e.message : String(e), error: true });
+    }
+  }
+
+  return (
+    <Panel>
+      <PanelHeader title="Diagnostics" eyebrow="For a bug report or a support request." />
+      <div className="grid gap-3 px-4 py-4">
+        <p className="text-[13px] text-ink-2">
+          A file describing this install so a problem can be reproduced: app and server versions, your operating system, which providers are configured (yes or no, never the key), and the
+          state and errors of your recent jobs. API keys, passwords and session cookies are left out. The addresses of sites you recorded can appear in it, so read it before you share it.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={state.busy !== null}
+            onClick={() => void download()}
+            className="h-9 rounded-full border border-line-strong px-4 text-[13.5px] hover:bg-panel-2 disabled:opacity-50"
+          >
+            {state.busy === "download" ? "Collecting…" : "Download diagnostics"}
+          </button>
+          <button
+            type="button"
+            disabled={state.busy !== null}
+            onClick={() => void copy()}
+            className="h-9 rounded-full border border-line px-4 text-[13.5px] text-ink-2 hover:bg-panel-2 hover:text-ink disabled:opacity-50"
+          >
+            {state.busy === "copy" ? "Collecting…" : "Copy diagnostics"}
+          </button>
+        </div>
+        <p aria-live="polite" className={`min-h-[1.25em] text-[12.5px] ${state.error ? "text-fail" : "text-ink-3"}`}>
+          {state.message}
+        </p>
+      </div>
     </Panel>
   );
 }

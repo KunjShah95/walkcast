@@ -319,7 +319,7 @@ export async function findMyActiveJob(kind: "record" | "run"): Promise<JobStatus
 }
 
 /** Picks back up polling a job already in flight, resolving with its result like submitForResult. */
-function waitForJob(id: string, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
+export function waitForJob(id: string, onProgress?: (s: JobStatus) => void): Promise<NonNullable<JobStatus["result"]>> {
   return (async () => {
     let poll = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(10_000) });
     if (!poll.ok) throw new Error(`Could not reach this job (${poll.status}).`);
@@ -466,6 +466,38 @@ export async function exportShape(id: string, shape: "vertical" | "square"): Pro
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Export failed (${res.status}).`);
   return body.recording;
+}
+
+/** What a finished batch-render job's result looks like: one line per recording asked for. */
+export interface BatchRenderResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  items: { recordingId: string; status: "ok" | "error"; error?: string }[];
+}
+
+/**
+ * Re-export several recordings in one background job (the same re-framing as `exportShape`, run
+ * sequentially server-side). Answers at once with the job's id — bare, unlike the `{ job }` shape
+ * most other endpoints return — so the caller polls it with `waitForJob`.
+ */
+export async function startBatchRender(recordingIds: string[], shape: "vertical" | "square"): Promise<string> {
+  const res = await fetch("/api/recordings/batch-render", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recordingIds, shape }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as { jobId?: string; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.jobId) throw new Error(body.error ?? `Request failed (${res.status}).`);
+  return body.jobId;
+}
+
+/** Watches a batch-render job to completion and resolves with its per-item result. */
+export async function watchBatchRender(jobId: string, onProgress?: (s: JobStatus) => void): Promise<BatchRenderResult> {
+  const result = await waitForJob(jobId, onProgress);
+  return result as unknown as BatchRenderResult;
 }
 
 /** Build (or reuse) a no-narration copy of the recording, for downloading without the voiceover. */
@@ -718,4 +750,58 @@ export async function loadWebhookDeliveries(limit = 50): Promise<WebhookDelivery
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok) throw new Error(body.error ?? `Could not load deliveries (${res.status}).`);
   return body.deliveries ?? [];
+}
+
+// --- views ---
+
+/** One line of a batch-render result, with the exported file once the server names it. */
+export type BatchRenderItem = BatchRenderResult["items"][number] & { file?: string };
+
+/**
+ * Fallback for the most recordings one batch render takes, used only when the server's
+ * capabilities don't say (`limits.maxBatchRenderItems`, server default 10).
+ */
+export const FALLBACK_MAX_BATCH_RENDER_ITEMS = 10;
+
+/** The server's batch-render ceiling, read from capabilities when it publishes one. */
+export function maxBatchRenderItems(caps: Capabilities | null | undefined): number {
+  const n = Number((caps?.limits as { maxBatchRenderItems?: unknown } | undefined)?.maxBatchRenderItems);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : FALLBACK_MAX_BATCH_RENDER_ITEMS;
+}
+
+/** False once the server said it can't reveal files (web deployment, older server). */
+let revealSupported = true;
+
+/**
+ * Whether "Show in folder" can be offered: only the desktop app (or a loopback server) can open
+ * the system file manager, and only until the server has answered 404 once.
+ */
+export function canRevealFiles(): boolean {
+  if (baked || !revealSupported || typeof window === "undefined") return false;
+  const w = window as unknown as { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown };
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__) || loopback;
+}
+
+/**
+ * Open the system file manager at a recording's folder, selecting `file` when given. Resolves
+ * false when this server can't (404): the caller hides the button from then on.
+ */
+export async function revealRecordingFile(id: string, file?: string): Promise<boolean> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/reveal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(file ? { file } : {}),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 404 || res.status === 405 || res.status === 501) {
+    revealSupported = false;
+    return false;
+  }
+  if (res.status === 401) throw new SignInRequired("Sign in first.");
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Could not open the folder (${res.status}).`);
+  }
+  return true;
 }

@@ -3,7 +3,7 @@
 @import "@fontsource-variable/jetbrains-mono";
 
 /*
-  Look: a case file on paper. Tinted paper, ink, and one ochre accent that means two things only:
+  Look: a case file on paper. Tinted paper, ink, and one deep-teal accent that means two things only:
   "do this" (the primary action) and "this is the evidence" (an exhibit tag, a cited line). Red is
   failure and the record light, green is pass, nothing else is colored. Surfaces separate by rules
   and one step of tone, never by shadow or blur. Schibsted Grotesk carries the type with its full
@@ -37,6 +37,7 @@
   --fail: #b2261c;
   --fail-soft: #f8e9e6;
   --pass: #2c6a3d;
+  --on-pass: #e8f5e9;
   --pass-soft: #e7f0e8;
   --warn: #9a5b00;
   --warn-soft: #f6ecd9;
@@ -52,39 +53,41 @@
   color-scheme: light;
 }
 
-/* Night studio: graphite surfaces, Walkcast mint signal, quiet depth. */
+/* Night studio: graphite surfaces and the same deep-teal signal, lifted for a dark ground.
+   Signal (teal, "record this" / selected / focus), solid (near-white, "go"), pass (leaf green)
+   and the record light (red) are four different hues so none reads as another. Ratios are
+   checked against --panel; see DESIGN.md "Contrast". */
 :root[data-theme="dark"] {
   --paper: #0a1012;
   --panel: #10191b;
   --panel-2: #0d1517;
   --panel-3: #192426;
   --ink: #f1f7f4;
-  --ink-2: #a6b8b2;
-  --ink-3: #71827d;
-  --dim: #8a9d96;
-  --line: rgba(191, 224, 211, 0.09);
-  --line-strong: rgba(191, 224, 211, 0.18);
-  --signal: #a5f36b;
-  --signal-strong: #85d84e;
-  --signal-soft: rgba(165, 243, 107, 0.13);
-  --on-signal: #11190e;
-  --solid: #a5f36b;
-  --on-solid: #11190e;
+  --ink-2: #b3c3be;
+  --ink-3: #8fa19b;
+  --dim: #74867f;
+  --line: rgba(191, 224, 211, 0.1);
+  --line-strong: rgba(191, 224, 211, 0.2);
+  --signal: #5cb8ad;
+  --signal-strong: #7ccbc1;
+  --signal-soft: rgba(92, 184, 173, 0.14);
+  --on-signal: #04201c;
+  --solid: #e8efec;
+  --on-solid: #0a1012;
   --exhibit: rgba(246, 215, 118, 0.14);
   --exhibit-ink: #f6d776;
   --exhibit-soft: rgba(246, 215, 118, 0.09);
-  --rec: #f87171;
-  --ember: #a5f36b;
-  --highlight: rgba(165, 243, 107, 0.14);
-  --highlight-ink: #d5f9b9;
+  --rec: #ff5c47;
+  --ember: #5cb8ad;
+  --highlight: rgba(92, 184, 173, 0.16);
+  --highlight-ink: #c9ece7;
   --fail: #f87171;
   --fail-soft: rgba(248, 113, 113, 0.12);
-  --pass: #34d399;
-  --pass-soft: rgba(52, 211, 153, 0.12);
+  --pass: #86d47e;
+  --pass-soft: rgba(134, 212, 126, 0.12);
+  --on-pass: #0a1012;
   --warn: #fbbf24;
   --warn-soft: rgba(251, 191, 36, 0.12);
-  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  --shadow-hover: 0 18px 48px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(165, 243, 107, 0.08);
   color-scheme: dark;
 }
 
@@ -145,9 +148,7 @@ body,
 }
 
 body {
-  background:
-    radial-gradient(ellipse at 78% -10%, color-mix(in srgb, var(--signal) 7%, transparent), transparent 34rem),
-    var(--paper);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 14px;
@@ -157,39 +158,26 @@ body {
 }
 
 .workspace-sidebar {
-  background: color-mix(in srgb, var(--panel-2) 92%, #061012);
+  background: var(--panel-2);
   border-color: var(--line);
 }
-.workspace-brand {
-  box-shadow: 0 0 24px color-mix(in srgb, var(--signal) 22%, transparent);
-}
 .workspace-nav-link[aria-current="page"] {
-  background: linear-gradient(100deg, color-mix(in srgb, var(--signal) 12%, var(--panel)), color-mix(in srgb, var(--signal) 4%, var(--panel)));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 17%, transparent);
+  background: color-mix(in srgb, var(--signal) 10%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 22%, transparent);
   color: var(--ink);
 }
 .workspace-nav-link[aria-current="page"] .workspace-nav-icon { color: var(--signal); }
+.workspace-nav-link:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .workspace-header {
-  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  background: var(--paper);
   border-color: var(--line);
 }
 .workspace-main { position: relative; isolation: isolate; }
-.workspace-main::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-  inset: 0 0 auto;
-  height: 440px;
-  opacity: .5;
-  background-image: linear-gradient(color-mix(in srgb, var(--line) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--line) 40%, transparent) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, black, transparent);
-}
+/* Kept for views that still use them; depth is tone and a hairline, never a shadow. */
 .studio-card {
   border-color: var(--line);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--panel) 97%, var(--signal)), var(--panel) 55%);
-  box-shadow: var(--shadow-card);
+  background: var(--panel);
+  box-shadow: none;
 }
 .studio-kicker {
   color: var(--signal);
@@ -197,18 +185,7 @@ body {
   text-transform: uppercase;
 }
 .workspace-nav-icon { color: var(--ink-3); transition: color 150ms ease; }
-.dashboard-hero-orbit {
-  border: 1px solid color-mix(in srgb, var(--signal) 13%, transparent);
-  background: radial-gradient(circle, color-mix(in srgb, var(--signal) 12%, transparent), transparent 68%);
-  box-shadow: 0 0 0 36px color-mix(in srgb, var(--signal) 2%, transparent), 0 0 0 82px color-mix(in srgb, var(--signal) 1.5%, transparent);
-}
-.dashboard-hero { animation: hero-arrive 520ms var(--ease-out) both; }
-.dashboard-hero .studio-kicker { text-shadow: 0 0 18px color-mix(in srgb, var(--signal) 36%, transparent); }
-.dashboard-hero .studio-card { background: transparent; }
-.press:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px color-mix(in srgb, var(--signal) 12%, transparent); }
-.press:active:not(:disabled) { transform: translateY(0) scale(.985); }
-@keyframes hero-arrive { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .dashboard-hero { animation: none; } }
+.press:active:not(:disabled) { transform: scale(.98); }
 
 h1,
 h2,
@@ -307,10 +284,6 @@ input[type="radio"] {
   }
 }
 
-.press:active {
-  transform: scale(0.98);
-}
-
 /* The record light blinks only while something is actually recording. */
 @keyframes rec-blink {
   0%,
@@ -392,7 +365,7 @@ input[type="radio"] {
 .tile.t-ink { background: var(--solid); color: var(--on-solid); }
 .tile.t-signal { background: var(--signal); color: var(--on-signal); }
 .tile.t-rec { background: var(--rec); color: #fff; }
-.tile.t-pass { background: var(--pass); color: #fff; }
+.tile.t-pass { background: var(--pass); color: var(--on-pass); }
 .tile.t-exhibit { background: var(--exhibit); color: var(--exhibit-ink); }
 .tile.t-muted { background: var(--panel-3); color: var(--ink-2); }
 

@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use tauri::{
@@ -10,13 +10,16 @@ use tauri::{
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
   AppHandle, LogicalSize, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/// The app server the window talks to. In a release build it is the bundled Node running
-/// `sidecar.ts` on a free loopback port; `tauri dev` uses the server `npm run ui` already started.
-struct Sidecar(Mutex<Option<CommandChild>>);
+/// The app server the window talks to. In a release build it is the bundled Node running the
+/// pre-bundled `sidecar.mjs` on a loopback port; `tauri dev` uses the server `npm run ui` already
+/// started. The flag flips when that process's Terminated event arrives, which is how a graceful
+/// stop knows the server is gone without killing it.
+struct Sidecar(Mutex<Option<(CommandChild, Arc<AtomicBool>)>>);
 
 /// A release downloaded in the background at launch, waiting for the person to restart into it.
 #[derive(Default)]
@@ -34,26 +37,74 @@ static RESTARTS: AtomicUsize = AtomicUsize::new(0);
 static SHOWN: AtomicBool = AtomicBool::new(false);
 const MAX_RESTARTS: usize = 3;
 
-/// Stop the sidecar on purpose.
+/// How long a graceful stop waits for the server to finish its in-flight job and exit by itself
+/// (the server gives the job ~25 s) before the process is killed.
+const GRACEFUL_STOP: Duration = Duration::from_secs(30);
+
+/// Stop the sidecar on purpose: ask it to shut down (it stops claiming jobs, lets the running one
+/// finish or checkpoint, closes and exits 0), wait for it to go, and only then kill it. A plain
+/// kill is TerminateProcess on Windows: no handler runs and an in-flight recording is lost.
 fn stop_sidecar(app: &AppHandle) {
   QUITTING.store(true, Ordering::SeqCst);
-  if let Some(child) = app.state::<Sidecar>().0.lock().unwrap().take() {
+  let Some((child, exited)) = app.state::<Sidecar>().0.lock().unwrap().take() else { return };
+  let port = app.state::<Port>().0.lock().unwrap().to_owned();
+  if port != 0 && !exited.load(Ordering::SeqCst) {
+    let deadline = Instant::now() + GRACEFUL_STOP;
+    if request_shutdown(port) {
+      log::info!("asked the app server to shut down; waiting for it to exit");
+      while Instant::now() < deadline && !exited.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(250));
+      }
+    } else {
+      // A server without /api/shutdown (or one that refused): at least don't cut a job off
+      // mid-step if it is about to finish, then fall through to the kill.
+      log::warn!("the app server did not accept a shutdown request; waiting for /readyz");
+      while Instant::now() < deadline && !exited.load(Ordering::SeqCst) {
+        let ready = http_request(port, "GET", "/readyz", &[])
+          .map(|(_, body)| {
+            serde_json::from_str::<serde_json::Value>(body.trim())
+              .ok()
+              .map_or(false, |v| v.get("ok").copied().unwrap_or(false))
+          });
+        if ready.unwrap_or(false)
+          || !worker_state(port).map_or(true, |s| s == Worker::Busy)
+        {
+          break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+      }
+    }
+  }
+  if exited.load(Ordering::SeqCst) {
+    log::info!("app server exited on its own");
+  } else {
+    log::warn!("app server still running after the graceful stop; killing it");
     let _ = child.kill();
   }
 }
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sign-in redirects come back to http://127.0.0.1:<port>/auth/..., and Supabase only redirects to
-/// allow-listed URLs, so the app keeps one well-known port. Another one is used only if it is taken
-/// (the app still works; Google sign-in and email links then can't come back).
+/// allow-listed URLs, so the app keeps one well-known port. If it is taken, the next free port in a
+/// small fixed range is used (sign-in then returns through walkcast:// instead). The range is fixed
+/// rather than OS-assigned so the capabilities that grant the dashboard IPC can name these ports
+/// exactly (capabilities/*.json, checked by the tests below) instead of every loopback port.
 const PREFERRED_PORT: u16 = 4317;
+const PORT_RANGE: std::ops::RangeInclusive<u16> = 4317..=4326;
 
 fn free_port() -> std::io::Result<u16> {
-  if TcpListener::bind(("127.0.0.1", PREFERRED_PORT)).is_ok() {
-    return Ok(PREFERRED_PORT);
+  for port in PORT_RANGE {
+    if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+      if port != PREFERRED_PORT {
+        log::warn!("port {PREFERRED_PORT} is in use; using {port} (sign-in returns through walkcast://)");
+      }
+      return Ok(port);
+    }
   }
-  log::warn!("port {PREFERRED_PORT} is in use; sign-in redirects will not reach this run");
-  Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
+  Err(std::io::Error::new(
+    std::io::ErrorKind::AddrInUse,
+    format!("ports {}-{} are all in use", PORT_RANGE.start(), PORT_RANGE.end()),
+  ))
 }
 
 /// True once GET /healthz answers 200. Plain HTTP over a socket: no client library for one request.
@@ -69,23 +120,119 @@ fn healthy(port: u16) -> bool {
   stream.read_exact(&mut head).is_ok() && head.ends_with(b"200")
 }
 
-/// GET a path from the app server and hand back the whole response. One loopback request, so no
-/// client library.
-fn http_get(port: u16, path: &str) -> Option<String> {
+/// One loopback request to the app server; hands back the status code and body. No client library
+/// for a request this small.
+fn http_request(port: u16, method: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u16, String)> {
   let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(500)).ok()?;
   stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
-  stream
-    .write_all(format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").as_bytes())
-    .ok()?;
-  let mut body = String::new();
-  stream.read_to_string(&mut body).ok()?;
-  Some(body)
+  let mut request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n");
+  for (name, value) in headers {
+    request.push_str(&format!("{name}: {value}\r\n"));
+  }
+  request.push_str("\r\n");
+  stream.write_all(request.as_bytes()).ok()?;
+  let mut response = String::new();
+  stream.read_to_string(&mut response).ok()?;
+  parse_response(&response)
+}
+
+/// Status code and body of a raw HTTP/1.x response.
+fn parse_response(response: &str) -> Option<(u16, String)> {
+  let status = response.split_whitespace().nth(1)?.parse().ok()?;
+  let body = response.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or_default();
+  Some((status, body.to_string()))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Worker {
+  Busy,
+  Idle,
+}
+
+/// The `worker` field of a /readyz or /healthz body: "busy", "idle" (or "off", read as idle).
+fn parse_worker(body: &str) -> Option<Worker> {
+  let value: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
+  match value.get("worker")?.as_str()? {
+    "busy" => Some(Worker::Busy),
+    _ => Some(Worker::Idle),
+  }
+}
+
+/// What the server's job worker is doing. /readyz reports it; newer servers also put it on
+/// /healthz, which answers even while the store is slow. None when neither says.
+fn worker_state(port: u16) -> Option<Worker> {
+  ["/readyz", "/healthz"]
+    .iter()
+    .find_map(|path| http_request(port, "GET", path, &[]).and_then(|(_, body)| parse_worker(&body)))
 }
 
 /// Whether the server's job worker is mid-recording. This is what lets the app keep recording with
 /// the window closed, and what makes a quit wait for the walkthrough instead of killing it.
 fn recording(port: u16) -> bool {
-  http_get(port, "/healthz").is_some_and(|body| body.contains("\"worker\":\"busy\""))
+  worker_state(port) == Some(Worker::Busy)
+}
+
+/// POST /api/shutdown with this run's token. True when the server accepted it.
+fn request_shutdown(port: u16) -> bool {
+  let token = shutdown_token();
+  http_request(port, "POST", "/api/shutdown", &[("x-walkcast-shutdown", token)])
+    .is_some_and(|(status, _)| (200..300).contains(&status))
+}
+
+/// A fresh random token per app run, handed to the sidecar in its environment so only this
+/// process can ask it to shut down.
+fn shutdown_token() -> &'static str {
+  static TOKEN: OnceLock<String> = OnceLock::new();
+  TOKEN.get_or_init(|| random_hex(32))
+}
+
+fn random_hex(bytes: usize) -> String {
+  let mut buf = vec![0u8; bytes];
+  getrandom::fill(&mut buf).expect("the OS random source is available");
+  hex(&buf)
+}
+
+fn hex(bytes: &[u8]) -> String {
+  bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn is_master_key(value: &str) -> bool {
+  value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The key the server encrypts stored credentials and seals jobs with, kept in the OS keychain
+/// (Windows Credential Manager, macOS Keychain, Secret Service on Linux) rather than in a file next
+/// to the data it protects. Created on first run. None (and a warning) when there is no usable
+/// keychain: the server then falls back to its own key file.
+fn master_key() -> Option<&'static str> {
+  static KEY: OnceLock<Option<String>> = OnceLock::new();
+  KEY
+    .get_or_init(|| match load_or_create_master_key() {
+      Ok(key) => Some(key),
+      Err(e) => {
+        log::warn!("OS keychain unavailable ({e}); the app server keeps its own key file");
+        None
+      }
+    })
+    .as_deref()
+}
+
+fn load_or_create_master_key() -> Result<String, keyring::Error> {
+  let entry = keyring::Entry::new("walkcast", "master-key")?;
+  match entry.get_password() {
+    Ok(key) if is_master_key(&key) => return Ok(key),
+    Ok(_) => log::warn!("the keychain's master key is malformed; replacing it"),
+    Err(keyring::Error::NoEntry) => log::info!("creating the master key in the OS keychain"),
+    Err(e) => return Err(e),
+  }
+  let key = random_hex(32);
+  entry.set_password(&key)?;
+  // Read it back: a keychain that accepts a write but does not keep it (a locked or transient
+  // store) must not hand the server a key it will never see again.
+  match entry.get_password()? {
+    stored if stored == key => Ok(key),
+    _ => Err(keyring::Error::NoEntry),
+  }
 }
 
 /// 1280×820, but never larger than the screen it opens on: on a laptop at 125-150% scaling that
@@ -126,32 +273,59 @@ fn plain(path: PathBuf) -> PathBuf {
   }
 }
 
+/// Whether a sidecar stderr line reads as an error (a stack, an `"level":"error"` log line, an
+/// `ERR_*` code) rather than progress Node or a dependency happened to print there.
+fn looks_like_error(line: &str) -> bool {
+  line.contains("error") || line.contains("Error") || line.contains("ERR")
+}
+
 fn start_sidecar(app: &AppHandle, exited: Arc<AtomicBool>) -> Result<u16, Box<dyn std::error::Error>> {
   let port = free_port()?;
   let resources = plain(app.path().resource_dir()?).join("sidecar");
   let data = plain(app.path().app_data_dir()?);
   std::fs::create_dir_all(&data)?;
-  let loader = Url::from_file_path(resources.join("node_modules").join("tsx").join("dist").join("loader.mjs"))
-    .map_err(|_| "resource path is not absolute")?;
-  let entry = resources.join("apps").join("desktop").join("sidecar.ts");
-
-  let (mut events, child) = app
-    .shell()
-    .sidecar("walkcast-node")?
-    .args(["--import", loader.as_str()])
-    .arg(entry)
+  // The staging script pre-bundles the server into one ESM file, so plain Node starts it without
+  // transpiling hundreds of TypeScript files on every launch. A stage without the bundle (or one
+  // made by an older script) still runs the sources through tsx.
+  let bundle = resources.join("apps").join("desktop").join("sidecar.mjs");
+  let mut command = app.shell().sidecar("walkcast-node")?;
+  if bundle.is_file() {
+    command = command.arg(bundle);
+  } else {
+    log::warn!("no pre-bundled sidecar; running the sources through tsx");
+    let loader = Url::from_file_path(resources.join("node_modules").join("tsx").join("dist").join("loader.mjs"))
+      .map_err(|_| "resource path is not absolute")?;
+    command = command
+      .args(["--import", loader.as_str()])
+      .arg(resources.join("apps").join("desktop").join("sidecar.ts"));
+  }
+  let mut command = command
     .args(["--port", &port.to_string()])
     .current_dir(&data)
     .env("WALKCAST_PARENT_STDIN", "1")
-    .spawn()?;
-  app.state::<Sidecar>().0.lock().unwrap().replace(child);
+    .env("WALKCAST_DESKTOP", "1")
+    .env("WALKCAST_SHUTDOWN_TOKEN", shutdown_token());
+  if let Some(key) = master_key() {
+    command = command.env("WALKCAST_MASTER_KEY", key);
+  }
+  let (mut events, child) = command.spawn()?;
+  app.state::<Sidecar>().0.lock().unwrap().replace((child, exited.clone()));
 
   let app = app.clone();
   tauri::async_runtime::spawn(async move {
     while let Some(event) = events.recv().await {
       match event {
         CommandEvent::Stdout(line) => log::info!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
-        CommandEvent::Stderr(line) => log::warn!("sidecar: {}", String::from_utf8_lossy(&line).trim_end()),
+        // Node writes ordinary progress to stderr too; only lines that read as errors are errors.
+        CommandEvent::Stderr(line) => {
+          let line = String::from_utf8_lossy(&line);
+          let line = line.trim_end();
+          if looks_like_error(line) {
+            log::error!("sidecar: {line}");
+          } else {
+            log::info!("sidecar: {line}");
+          }
+        }
         CommandEvent::Terminated(status) => {
           exited.store(true, Ordering::SeqCst);
           if QUITTING.load(Ordering::SeqCst) {
@@ -498,25 +672,30 @@ fn show_window(app: &AppHandle) {
 /// Quit, but never mid-recording: a walkthrough takes minutes and killing the sidecar throws it
 /// away. While one is running the app stays alive, says so in the tray, and quits when it lands.
 fn request_quit(app: &AppHandle) {
-  let port = app.state::<Port>().0.lock().unwrap().to_owned();
-  if !recording(port) {
-    app.exit(0);
-    return;
+  static REQUESTED: AtomicBool = AtomicBool::new(false);
+  if REQUESTED.swap(true, Ordering::SeqCst) {
+    return; // already on its way out (a second click on Quit while waiting)
   }
-  log::info!("quit asked for during a recording; waiting for it to finish");
   let app = app.clone();
-  set_tray_tooltip(&app, "Walkcast — finishing the recording, then quitting…");
+  // Off the main thread: the waits below are seconds to minutes and the tray must stay live.
   std::thread::spawn(move || {
-    // Long enough for any walkthrough this build can start; past that, the person gave up on it.
-    let deadline = Instant::now() + Duration::from_secs(30 * 60);
-    while Instant::now() < deadline {
-      std::thread::sleep(Duration::from_secs(3));
-      if !recording(port) {
-        app.exit(0);
-        return;
+    let port = app.state::<Port>().0.lock().unwrap().to_owned();
+    if recording(port) {
+      log::info!("quit asked for during a recording; waiting for it to finish");
+      set_tray_tooltip(&app, "Walkcast — finishing the recording, then quitting…");
+      // Long enough for any walkthrough this build can start; past that, the person gave up on it.
+      let deadline = Instant::now() + Duration::from_secs(30 * 60);
+      while Instant::now() < deadline && recording(port) {
+        std::thread::sleep(Duration::from_secs(3));
+      }
+      if Instant::now() >= deadline {
+        log::warn!("gave up waiting for the recording; quitting");
       }
     }
-    log::warn!("gave up waiting for the recording; quitting");
+    // Shut the server down cleanly here rather than in the exit handler, so the event loop is not
+    // blocked while it goes. The exit handler then finds nothing left to stop.
+    set_tray_tooltip(&app, "Walkcast — quitting…");
+    stop_sidecar(&app);
     app.exit(0);
   });
 }
@@ -538,16 +717,43 @@ fn watch_recording(app: &AppHandle) {
     while !QUITTING.load(Ordering::SeqCst) {
       std::thread::sleep(Duration::from_secs(4));
       let port = app.state::<Port>().0.lock().unwrap().to_owned();
-      let now = recording(port);
+      // An unanswered poll (a restart in progress, a slow store) keeps the last known state rather
+      // than reading as "finished" and notifying about a job that is still running.
+      let Some(state) = worker_state(port) else { continue };
+      let now = state == Worker::Busy;
       if now != busy {
-        busy = now;
         set_tray_tooltip(
           &app,
           if now { "Walkcast — recording…" } else { "Walkcast" },
         );
+        if busy && !now && !QUITTING.load(Ordering::SeqCst) {
+          notify_job_finished(&app);
+        }
+        busy = now;
       }
     }
   });
+}
+
+/// A native notification when a job finishes, so a walkthrough recorded with the window closed or
+/// behind other windows does not go unnoticed. Skipped when the person is looking at the app.
+/// Clicking it: on Windows the toast activates the app, and the single-instance hand-off focuses
+/// the running window; elsewhere the OS brings the app forward.
+fn notify_job_finished(app: &AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
+      return;
+    }
+  }
+  if let Err(e) = app
+    .notification()
+    .builder()
+    .title("Walkthrough ready")
+    .body("Your Walkcast job finished. Open Walkcast to see it.")
+    .show()
+  {
+    log::warn!("could not show the job-finished notification: {e}");
+  }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -563,8 +769,16 @@ pub fn run() {
       }
     }))
     .plugin(tauri_plugin_deep_link::init())
-    .plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())
+    .plugin(
+      tauri_plugin_log::Builder::default()
+        .level(log::LevelFilter::Info)
+        // The sidecar logs every request and job step: unbounded, one file grew for months.
+        .max_file_size(5 * 1024 * 1024)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
+        .build(),
+    )
     .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
     .invoke_handler(tauri::generate_handler![check_update, install_update])

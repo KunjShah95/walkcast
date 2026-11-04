@@ -2,16 +2,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { BrowserSetup } from "./components/BrowserSetup.tsx";
+import { initTheme } from "./lib/theme.ts";
 import "./styles.css";
 
-try {
-  const saved = localStorage.getItem("lab-theme");
-  if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved);
-  else document.documentElement.setAttribute("data-theme", "dark");
-} catch {
-  /* storage unavailable: follow the system theme */
-  document.documentElement.setAttribute("data-theme", "dark");
-}
+// Follows the system theme (light when it can't be read) unless Settings holds an override.
+initTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

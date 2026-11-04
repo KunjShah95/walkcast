@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { Activity, AudioLines, Boxes, Bug, CirclePlay, Clock3, FlaskConical, LayoutDashboard, Library as LibraryIcon, ShieldAlert, Sparkles, Webhook, type LucideIcon } from "lucide-react";
+import { Activity, Boxes, Bug, CirclePlay, Clock3, FlaskConical, LayoutDashboard, Library as LibraryIcon, Settings as SettingsIcon, ShieldAlert, Sparkles, Webhook, type LucideIcon } from "lucide-react";
+import { ActiveJobChip } from "./components/ActiveJobChip.tsx";
 import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { CommandBar } from "./components/CommandBar.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
 import { type Me, isAuthError, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
-import { watchDeepLinks } from "./lib/deep-link.ts";
+import { watchDeepLinks, watchUrlDrops } from "./lib/deep-link.ts";
 import { AnalyticsTracker } from "./lib/analytics.tsx";
 import { ago, cn } from "./lib/format.ts";
 import type { LabIndex } from "./lib/types.ts";
@@ -71,21 +72,16 @@ function toHash(route: Route): string {
 }
 
 type NavItem = { view: Route["view"]; label: string; count?: (i: LabIndex) => number };
-const WORKSPACES: { name: string; items: NavItem[] }[] = [
+// Dashboard stands on its own above the groups; Lab comes right after Walkthroughs because the
+// two products are the point, and Automations (which drive either) follow.
+const WORKSPACES: { name: string | null; items: NavItem[] }[] = [
+  { name: null, items: [{ view: "dashboard", label: "Dashboard" }] },
   {
     name: "Walkthroughs",
     items: [
-      { view: "dashboard", label: "Dashboard" },
       { view: "record", label: "Record" },
       { view: "library", label: "Library", count: (i) => i.recordings?.length ?? 0 },
       { view: "launch", label: "Launch Studio" },
-    ],
-  },
-  {
-    name: "Automations",
-    items: [
-      { view: "schedules", label: "Schedules" },
-      { view: "webhooks", label: "Webhooks" },
     ],
   },
   {
@@ -96,6 +92,13 @@ const WORKSPACES: { name: string; items: NavItem[] }[] = [
       { view: "fixtures", label: "Fixtures", count: (i) => i.fixtures.length },
       { view: "experiments", label: "Experiments", count: (i) => i.experiments.length },
       { view: "simulator", label: "Fault replay" },
+    ],
+  },
+  {
+    name: "Automations",
+    items: [
+      { view: "schedules", label: "Schedules" },
+      { view: "webhooks", label: "Webhooks" },
     ],
   },
 ];
@@ -165,14 +168,21 @@ export function App() {
     window.addEventListener("popstate", onHash);
     // Browser sign-in can come back through walkcast:// instead of the loopback port. Handles the
     // URL the OS launched us with (cold start) and any that arrive while we are open.
+    // walkcast://record?url=… also lands here, and so does a link dropped onto the window: both
+    // open Record with the address filled in, never a recording already running.
     let stopDeepLinks: (() => void) | undefined;
+    let disposed = false;
     void watchDeepLinks().then((stop) => {
-      stopDeepLinks = stop;
+      if (disposed) stop();
+      else stopDeepLinks = stop;
     });
+    const stopDrops = isSnapshot ? () => {} : watchUrlDrops();
     return () => {
+      disposed = true;
       window.removeEventListener("hashchange", onHash);
       window.removeEventListener("popstate", onHash);
       stopDeepLinks?.();
+      stopDrops();
     };
   }, []);
 
@@ -271,7 +281,7 @@ export function App() {
         </AnimatePresence>
 
         <div className="min-w-0">
-          <header className="workspace-header sticky top-0 z-30 border-b backdrop-blur-xl" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <header className="workspace-header sticky top-0 z-30 border-b" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="flex h-[62px] items-center gap-3 px-4 sm:px-7">
               <button
                 type="button"
@@ -291,10 +301,10 @@ export function App() {
               )}
               {index && (
                 <span className="hidden font-mono text-[11px] text-ink-3 xl:inline" title="When the data on this page was read">
-                  {isSnapshot ? "snapshot" : "live"} · {ago(Date.parse(index.generatedAt))}
+                  {isSnapshot ? "snapshot" : "read"} · {ago(Date.parse(index.generatedAt))}
                 </span>
               )}
-              {!isSnapshot && <span className="hidden items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 py-1 text-[10px] font-semibold tracking-wide text-ink-3 xl:inline-flex"><span className="size-1.5 rounded-full bg-pass shadow-[0_0_9px_var(--pass)]" /> LIVE</span>}
+              {!isSnapshot && index && <ActiveJobChip go={go} />}
               <CommandBar index={index} go={go} />
             </div>
           </header>
@@ -355,9 +365,9 @@ function Sidebar({
   return (
     <nav aria-label="Workspaces" className="workspace-sidebar flex h-full flex-col border-r" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       <div className="flex h-[62px] items-center justify-between gap-2 border-b border-line px-5">
-        <button type="button" onClick={() => go({ view: "dashboard" })} className="flex items-center gap-3 rounded-lg">
-          <span className="workspace-brand grid size-8 place-items-center rounded-[11px] bg-signal"><Mark /></span>
-          <span className="grid text-left leading-none"><span className="text-[15px] font-bold tracking-[-.04em]">Walkcast</span><span className="mt-1 text-[9px] font-semibold tracking-[.18em] text-ink-3">DESKTOP STUDIO</span></span>
+        <button type="button" onClick={() => go({ view: "dashboard" })} className="flex items-center gap-3 rounded-lg" aria-label="Walkcast, go to the dashboard">
+          <span className="grid size-8 place-items-center rounded-lg"><Mark /></span>
+          <span className="text-[15px] font-bold tracking-[-.04em]">Walkcast</span>
         </button>
         {closable && (
           <button type="button" onClick={onClose} aria-label="Close menu" className="inline-flex h-8 items-center justify-center rounded-full px-2.5 text-ink-3 hover:bg-panel-2 lg:hidden">
@@ -368,8 +378,8 @@ function Sidebar({
 
       <div className="flex-1 overflow-y-auto px-3 pb-4">
         {WORKSPACES.map((ws) => (
-          <div key={ws.name} className="mt-7 first:mt-5">
-            <div className="px-2.5 pb-2 text-[9px] font-semibold uppercase tracking-[.18em] text-ink-3">{ws.name}</div>
+          <div key={ws.name ?? "home"} className="mt-6 first:mt-5">
+            {ws.name && <div className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[.12em] text-ink-3">{ws.name}</div>}
             <ul className="grid gap-1">
               {ws.items.map((n) => {
                 const on = active === n.view;
@@ -381,8 +391,8 @@ function Sidebar({
                       onClick={() => go({ view: n.view } as Route)}
                       aria-current={on ? "page" : undefined}
                       className={cn(
-                        "workspace-nav-link relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] transition-[background,color,box-shadow] duration-150",
-                        on ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
+                        "workspace-nav-link relative flex h-10 w-full items-center gap-3 rounded-full px-3 text-[13px] transition-[background,color,box-shadow] duration-150",
+                        on ? "text-ink" : "text-ink-2 hover:bg-panel-3 hover:text-ink",
                       )}
                     >
                       {(() => { const Icon = NAV_ICONS[n.view]; return Icon ? <Icon aria-hidden className="workspace-nav-icon size-[16px] shrink-0" strokeWidth={1.8} /> : null; })()}
@@ -403,13 +413,13 @@ function Sidebar({
           onClick={() => go({ view: "settings" })}
           aria-current={active === "settings" ? "page" : undefined}
           className={cn(
-            "workspace-nav-link flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] transition-colors",
-            active === "settings" ? "bg-panel text-ink shadow-[inset_0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-panel-3/60 hover:text-ink",
+            "workspace-nav-link flex h-10 w-full items-center gap-3 rounded-full px-3 text-[13px] transition-colors",
+            active === "settings" ? "text-ink" : "text-ink-2 hover:bg-panel-3 hover:text-ink",
           )}
         >
-          <AudioLines aria-hidden className="workspace-nav-icon size-4" strokeWidth={1.8} /> Settings
+          <SettingsIcon aria-hidden className="workspace-nav-icon size-4" strokeWidth={1.8} /> Settings
         </button>
-        <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-line bg-panel px-2 py-2">
+        <div className="mt-3 flex min-w-0 items-center gap-2 rounded-lg border border-line bg-panel px-2 py-2">
           <div className="min-w-0 flex-1">
             <Account me={me} ready={meReady} />
           </div>

@@ -72,7 +72,7 @@ const FFMPEG = process.env.LAB_FFMPEG ?? "ffmpeg";
  * Write the re-framed copy beside the recording and return its file name. A build of ffmpeg
  * without libass still gets the re-framed video, without burned captions, rather than nothing.
  */
-export async function socialExport(dir: string, shape: Shape): Promise<{ file: string; captions: boolean }> {
+export async function socialExport(dir: string, shape: Shape, signal?: AbortSignal): Promise<{ file: string; captions: boolean }> {
   const source = join(dir, "recording.mp4");
   if (!existsSync(source)) throw new Error("This walkthrough has no MP4 to re-frame yet.");
   const out = SHAPES[shape].file;
@@ -90,13 +90,13 @@ export async function socialExport(dir: string, shape: Shape): Promise<{ file: s
         "-movflags", "+faststart",
         out,
       ],
-      { cwd: dir, timeout: FFMPEG_TIMEOUT_MS, killSignal: "SIGKILL", windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+      { cwd: dir, timeout: FFMPEG_TIMEOUT_MS, killSignal: "SIGKILL", windowsHide: true, maxBuffer: 4 * 1024 * 1024, signal },
     );
   let burned = hasCaptions;
   try {
     await encode(hasCaptions ? "captions.vtt" : null);
   } catch (e) {
-    if (!hasCaptions) throw e;
+    if (!hasCaptions || signal?.aborted) throw e;
     burned = false;
     await encode(null);
   }

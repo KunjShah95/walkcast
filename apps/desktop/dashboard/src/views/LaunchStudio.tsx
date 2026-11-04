@@ -3,9 +3,10 @@ import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume
 import type { Route } from "../App.tsx";
 import { normalizeUrl } from "../components/RecordBar.tsx";
 import { Empty, PageHead, fieldClass } from "../components/ui.tsx";
-import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo } from "../lib/api.ts";
+import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo, startRecording } from "../lib/api.ts";
 import type { LabIndex } from "../lib/types.ts";
 import { ago, ms } from "../lib/format.ts";
+import { LoaderCircle } from "lucide-react";
 
 const FALLBACK_VOICES = [
   { id: "af_heart", name: "Heart · American English" },
@@ -29,10 +30,27 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [task, setTask] = useState<DesktopTaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [recordingJob, setRecordingJob] = useState<{ url: string; onProgress?: (s: any) => void } | null>(null);
+  const [recording, setRecording] = useState(false);
+
   useEffect(() => {
     if (!recordings.some((recording) => recording.id === selected)) setSelected(recordings[0]?.id ?? "");
   }, [recordings, selected]);
   useEffect(() => { void loadTtsProviders().then(setProviders); }, []);
+  useEffect(() => {
+    if (!siteUrl || recording || !/^https?:\\/\\//i.test(siteUrl)) return;
+    // Start recording job for the website URL
+    let progressFn: ((s: any) => void) | undefined;
+    progressFn = async (status: any) => {
+      if (status.status === "complete" || status.status === "failed") {
+        setRecordingJob(null);
+        setRecording(false);
+      }
+    };
+    setRecordingJob({ url: siteUrl, onProgress: progressFn });
+    setRecording(true);
+    void startRecording({ url: siteUrl, authorized: true, maxPages: 50, maxSeconds: 300 }, progressFn);
+  }, [siteUrl, recording, refresh]);
   useEffect(() => {
     if (!task || task.status !== "running") return;
     const timer = window.setInterval(() => {
@@ -85,7 +103,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
               <label htmlFor="launch-site-url" className="text-[12px] font-medium text-ink-2">Start with your website</label>
               <div className="flex gap-2">
                 <input id="launch-site-url" className={`${fieldClass} min-w-0 flex-1`} value={siteUrl} onChange={(event) => setSiteUrl(event.target.value)} placeholder="https://yourproduct.com" type="text" inputMode="url" autoComplete="url" disabled={busy} />
-                <button type="submit" disabled={!normalizeUrl(siteUrl) || busy} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-panel-3 px-3 text-[12.5px] font-semibold text-ink transition hover:bg-signal-soft disabled:cursor-not-allowed disabled:opacity-50"><Globe2 className="h-4 w-4" /> Record site</button>
+                <button type="submit" disabled={!normalizeUrl(siteUrl) || busy} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-panel-2 px-4 text-[12.5px] font-semibold text-ink transition hover:bg-panel-3 disabled:cursor-not-allowed disabled:opacity-50"><Globe2 className="h-4 w-4" /> Record site</button>
               </div>
               <p className="text-[11px] leading-5 text-ink-3">Paste a site you’re authorized to record. Walkcast opens the recorder with this address filled in.</p>
             </form>
@@ -109,11 +127,11 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   <button type="button" disabled={busy} onClick={() => void run(setupLaunchVoice)} className="font-medium underline decoration-pass/40 underline-offset-2 disabled:opacity-50">Prepare model</button>
                 </div>
               ) : (
-                <button type="button" disabled={busy} onClick={() => void run(setupLaunchVoice)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-line px-3 py-2.5 text-[13px] font-medium text-ink-2 hover:bg-panel-2 disabled:opacity-50">
+                <button type="button" disabled={busy} onClick={() => void run(setupLaunchVoice)} className="inline-flex items-center justify-center gap-2 rounded-full border border-line px-4 py-2.5 text-[13px] font-medium text-ink-2 hover:bg-panel-2 disabled:opacity-50">
                   {busy && task?.kind === "kokoro-setup" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />} Set up Kokoro locally
                 </button>
               )}
-              <button type="button" disabled={!recording || busy} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voice))} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-solid px-4 text-[14px] font-semibold text-on-solid shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="button" disabled={!recording || busy} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voice))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
                 {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Generate launch film <ArrowRight className="h-4 w-4" />
               </button>
               <p className="text-[11.5px] leading-5 text-ink-3">Choose any fresh website recording. The film uses its real page footage and titles. Rendering happens on this computer.</p>
@@ -123,7 +141,15 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   <h2 className="text-[15px] font-semibold">Record a website to begin</h2>
                   <p className="text-[12.5px] leading-5 text-ink-3">Paste your website above, record its pages, then return here and select that recording to build the film.</p>
                 </div>
-                <button type="button" onClick={() => document.getElementById("launch-site-url")?.focus()} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-solid px-4 text-[13.5px] font-semibold text-on-solid hover:brightness-110">
+                {recording ? (
+                  <div className="flex items-center gap-3 mt-2 text-[12px] text-ink-3">
+                    <LoaderCircle className="h-4 w-4 animate-spin text-signal" />
+                    <span>Recording website…</span>
+                  </div>
+                ) : (
+                  <RecordBar onRecord={setSiteUrl} initial={siteUrl} />
+                )}
+                <button type="button" onClick={() => document.getElementById("launch-site-url")?.focus()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[13.5px] font-semibold text-on-solid hover:brightness-110">
                   Paste a website above <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
