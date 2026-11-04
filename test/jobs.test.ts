@@ -122,7 +122,7 @@ for (const [name, open] of stores) {
     // deadline inside the test timeout, so a slow runner fails with the job state, never a hang.
     test(
       "sign up, submit twice with one idempotency key, poll the job, watch the result",
-      { timeout: 240_000 },
+      { timeout: 420_000 },
       async () => {
         const root = mkdtempSync(join(tmpdir(), "e2e-"));
         const store = await open();
@@ -177,7 +177,8 @@ for (const [name, open] of stores) {
             result?: { dir: string; id: string };
             error?: string;
           };
-          for (const until = Date.now() + 180_000; Date.now() < until && (job.status === "queued" || job.status === "running"); ) {
+          // A narrated 2-page recording on a shared runner, next to other test files, can pass 3 min.
+          for (const until = Date.now() + 360_000; Date.now() < until && (job.status === "queued" || job.status === "running"); ) {
             await new Promise((r) => setTimeout(r, 500));
             job = (
               (await (
