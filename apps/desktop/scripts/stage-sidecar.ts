@@ -1,16 +1,16 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { builtinModules } from "node:module";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { builtinModules, createRequire } from "node:module";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { bareImports, packageOf } from "./sidecar-imports.ts";
 
 /**
  * Stages what the desktop installer ships next to the Tauri binary:
  *
  *   src-tauri/sidecar/     the server's TypeScript sources in their repo layout, the built dashboard,
- *                          and production node_modules (run through tsx, so nothing is bundled and
- *                          every path the code resolves from its own location still holds)
+ *                          production node_modules, and apps/desktop/sidecar.mjs: the server
+ *                          pre-bundled for plain Node (see below; tsx stays shipped as a fallback)
  *   src-tauri/binaries/    this Node binary, named with the Rust target triple as Tauri expects
  *
  * Run by `tauri build` (beforeBuildCommand) after the dashboard is built.
@@ -37,6 +37,57 @@ for (const rel of [...SOURCES, DASHBOARD]) {
   mkdirSync(dirname(to), { recursive: true });
   if (statSync(from).isDirectory()) cpSync(from, to, { recursive: true });
   else copyFileSync(from, to);
+}
+
+// The server, pre-bundled into one ESM file next to sidecar.ts, so the installed app starts it with
+// plain Node instead of transpiling every TypeScript file through tsx on each launch. npm packages
+// stay external (they are installed below and include native and optional pieces: playwright, pg,
+// sharp, …); only the repo's own TypeScript is bundled. The sources are still staged above: they
+// carry the static files, migrations and launch templates the server reads by path, and the tsx
+// fallback in lib.rs runs them if the bundle is ever missing.
+//
+// Modules locate those files from their own `import.meta.url` (`../../../supabase/migrations` from
+// packages/core/src/store, …). In one bundle every module would share the bundle's URL and each of
+// those paths would be wrong, so each module's `import.meta.url` is rewritten to the URL its source
+// file has in the staged tree, relative to the bundle.
+const BUNDLE = join(OUT, "apps", "desktop", "sidecar.mjs");
+{
+  // esbuild comes with tsx (a pinned dependency); resolve it from there rather than adding one.
+  const requireFromTsx = createRequire(createRequire(import.meta.url).resolve("tsx/package.json"));
+  type OnLoad = (args: { path: string }) => { contents: string; loader: "ts" | "tsx" } | undefined;
+  type Esbuild = {
+    build(options: Record<string, unknown> & { plugins: { name: string; setup(build: { onLoad(o: { filter: RegExp }, cb: OnLoad): void }): void }[] }): Promise<{ errors: { text: string }[] }>;
+  };
+  // Not imported by name: esbuild is tsx's dependency, so the root typecheck cannot resolve its types.
+  const esbuild = (await import(pathToFileURL(requireFromTsx.resolve("esbuild")).href)) as Esbuild;
+  const bundleDir = dirname(BUNDLE);
+  const result = await esbuild.build({
+    entryPoints: [join(OUT, "apps", "desktop", "sidecar.ts")],
+    outfile: BUNDLE,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: `node${process.versions.node.split(".")[0]}`,
+    packages: "external",
+    sourcemap: "linked",
+    logLevel: "warning",
+    plugins: [
+      {
+        name: "walkcast-import-meta-url",
+        setup(build) {
+          build.onLoad({ filter: /\.[cm]?tsx?$/ }, (args) => {
+            const source = readFileSync(args.path, "utf8");
+            if (!source.includes("import.meta.url")) return undefined;
+            const rel = relative(bundleDir, args.path).split(sep).join("/");
+            const own = `new URL(${JSON.stringify(rel.startsWith(".") ? rel : `./${rel}`)}, import.meta.url).href`;
+            return { contents: source.replaceAll("import.meta.url", own), loader: args.path.endsWith("x") ? "tsx" : "ts" };
+          });
+        },
+      },
+    ],
+  });
+  if (result.errors.length) throw new Error(`bundling the sidecar failed: ${result.errors.map((e) => e.text).join("; ")}`);
+  console.log(`Bundled the server -> ${relative(REPO, BUNDLE)} (${Math.round(statSync(BUNDLE).size / 1024)} KB)`);
 }
 
 // Accounts: the Supabase project URL and its public anon (publishable) key, from the environment or

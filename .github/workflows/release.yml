@@ -104,7 +104,8 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Install Linux deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+        # libdbus-1-dev + pkg-config: the keyring crate's Secret Service backend (master key).
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
       - run: npm ci
       # Lint, typecheck and tests happen once in the `verify` job this build depends on; running
       # them per-platform is what hung the matrix.
@@ -120,11 +121,54 @@ jobs:
       # `binaries/walkcast-node-<triple>` doesn't exist" until the sidecar is staged.
       - name: Rust tests
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-      - name: Build Tauri (unsigned)
-        run: npx tauri build --target ${{ matrix.target }}
+      # Optional Windows code signing (docs/SIGNING.md). Runs only when the repository has the
+      # WINDOWS_CERTIFICATE (base64 .pfx) and WINDOWS_CERTIFICATE_PASSWORD secrets; without them the
+      # build is unsigned exactly as before. The certificate goes into the runner's user store and is
+      # used by thumbprint, so the password never appears on a command line. Signing happens inside
+      # `tauri build` (bundle.windows.signCommand), before the updater's minisign .sig is computed:
+      # signing the installer afterwards would change its bytes and break every in-app update.
+      - name: Prepare Windows code signing
+        id: winsign
+        if: runner.os == 'Windows'
+        shell: pwsh
         env:
-          # Shipped unsigned by design. Windows shows a SmartScreen "more info" prompt; no signing
-          # certificates are used or required.
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            echo "::notice::WINDOWS_CERTIFICATE secrets not set; building unsigned Windows installers"
+            echo "config=" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "walkcast-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found in the Windows SDK" }
+          $sign = "`"$($signtool.FullName)`" sign /sha1 $($cert.Thumbprint) /fd SHA256 /tr http://timestamp.digicert.com /td SHA256"
+          # The bundled Node (src-tauri/binaries) ships inside the installer: sign it before bundling.
+          Get-ChildItem apps/desktop/src-tauri/binaries -Filter *.exe | ForEach-Object {
+            & $signtool.FullName sign /sha1 $cert.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signing $($_.Name) failed" }
+          }
+          $config = Join-Path $env:RUNNER_TEMP "tauri.signing.json"
+          @{ bundle = @{ windows = @{ signCommand = "$sign %1" } } } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $config
+          echo "config=$config" >> $env:GITHUB_OUTPUT
+      - name: Build Tauri
+        shell: bash
+        run: |
+          # With signing prepared, merge in the signCommand; otherwise build unsigned as before.
+          if [ -n "${{ steps.winsign.outputs.config }}" ]; then
+            npx tauri build --target ${{ matrix.target }} --config "${{ steps.winsign.outputs.config }}"
+          else
+            npx tauri build --target ${{ matrix.target }}
+          fi
+        env:
+          # Unsigned unless the Windows signing secrets above exist (then SmartScreen reputation
+          # builds on the certificate). Linux packages are never OS-signed.
           TAURI_BUNDLE_ENABLED: "true"
           # Not OS code signing: the free minisign key the in-app updater verifies downloads with
           # (pubkey in tauri.conf.json). Produces a .sig next to each updatable installer.
@@ -146,6 +190,89 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
 
+  # Install the Windows installer this run built, on a clean runner, and check the app server it
+  # ships actually starts, before anyone can download it. What it proves:
+  #   1. the NSIS installer installs silently (per-user) and lays down walkcast.exe, the bundled
+  #      Node, the pre-bundled server (sidecar.mjs) and its node_modules;
+  #   2. that installed Node + server boot and answer /healthz and /readyz, and stop cleanly on
+  #      POST /api/shutdown (run directly, on a spare port, so this does not depend on a GUI);
+  #   3. best effort: walkcast.exe itself starts its server on 4317 (a GUI app on a CI desktop
+  #      can be flaky, so this one only warns);
+  #   4. the uninstaller removes it.
+  # It does not sign in, record, or exercise the in-app updater.
+  smoke:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: walkcast-x86_64-pc-windows-msvc
+          path: artifacts
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem artifacts -Recurse -Filter *-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer in the build artifact" }
+          echo "Installing $($setup.Name)"
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA", "$env:ProgramFiles" -Recurse -Depth 2 -Filter walkcast.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "walkcast.exe not found after install" }
+          echo "INSTALL_DIR=$($exe.DirectoryName)" >> $env:GITHUB_ENV
+          echo "Installed to $($exe.DirectoryName)"
+      - name: Installed server boots and shuts down cleanly
+        shell: pwsh
+        run: |
+          $dir = $env:INSTALL_DIR
+          $node = Get-ChildItem $dir -Filter "walkcast-node*.exe" | Select-Object -First 1
+          $bundle = Get-ChildItem $dir -Recurse -Filter sidecar.mjs | Select-Object -First 1
+          if (-not $node -or -not $bundle) { throw "bundled Node or sidecar.mjs missing from the install" }
+          $data = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP "walkcast-data")
+          $env:LAB_AUTH = "off"
+          $env:WALKCAST_SHUTDOWN_TOKEN = "smoke-token"
+          # Chromium downloads on first run; point it at an empty temp dir so it does not matter.
+          $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP "browsers"
+          $proc = Start-Process $node.FullName -ArgumentList "`"$($bundle.FullName)`"", "--port", "4399" -WorkingDirectory $data -PassThru -RedirectStandardOutput server.out -RedirectStandardError server.err
+          $ok = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            try { $h = Invoke-RestMethod http://127.0.0.1:4399/healthz -TimeoutSec 2; if ($h.ok) { $ok = $true; break } } catch {}
+            Start-Sleep 1
+          }
+          Get-Content server.out, server.err -ErrorAction SilentlyContinue | Select-Object -Last 30
+          if (-not $ok) { throw "/healthz never answered" }
+          Invoke-RestMethod http://127.0.0.1:4399/readyz | ConvertTo-Json -Compress
+          Invoke-RestMethod -Method Post http://127.0.0.1:4399/api/shutdown -Headers @{ "x-walkcast-shutdown" = "smoke-token" } | ConvertTo-Json -Compress
+          if (-not $proc.WaitForExit(30000)) { Stop-Process -Id $proc.Id -Force; throw "server did not exit after /api/shutdown" }
+          echo "server exited with $($proc.ExitCode)"
+      - name: The app starts its own server (best effort)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $env:WALKCAST_NO_AUTO_UPDATE = "1"
+          $app = Start-Process (Join-Path $env:INSTALL_DIR "walkcast.exe") -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            try { if ((Invoke-RestMethod http://127.0.0.1:4317/healthz -TimeoutSec 2).ok) { $ok = $true; break } } catch {}
+            Start-Sleep 1
+          }
+          Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          Get-Process walkcast-node -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { echo "::warning::walkcast.exe did not bring its server up on 4317 on the CI desktop"; exit 1 }
+          echo "walkcast.exe started its server on 4317"
+      - name: Uninstall
+        if: always() && env.INSTALL_DIR != ''
+        shell: pwsh
+        run: |
+          Get-Process walkcast, walkcast-node -ErrorAction SilentlyContinue | Stop-Process -Force
+          $uninstall = Join-Path $env:INSTALL_DIR "uninstall.exe"
+          if (-not (Test-Path $uninstall)) { throw "uninstall.exe missing" }
+          Start-Process $uninstall -ArgumentList "/S" -Wait
+          Start-Sleep 5
+          if (Test-Path (Join-Path $env:INSTALL_DIR "walkcast.exe")) { throw "walkcast.exe still present after uninstall" }
+
+  # Published as a draft: nothing is downloadable and releases/latest/download/latest.json (the
+  # in-app updater feed, and the website's download links) keeps pointing at the previous release
+  # until `promote` flips it. See docs/releases/v0.10.0-checklist.md for rollback.
   publish:
     needs: build
     runs-on: ubuntu-24.04
@@ -172,7 +299,28 @@ jobs:
           files: artifacts/**/*
           name: Walkcast ${{ github.ref_name }}
           body_path: .github/release-notes/${{ github.ref_name }}.md
-          draft: false
+          draft: true
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Only after the installer passed its smoke test: publish the draft and mark it latest, which is
+  # the moment every installed app's updater and the website's download links move to it.
+  promote:
+    needs: [publish, smoke]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish the draft as latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false --prerelease=false --latest
+      - name: Updater feed points at this release
+        run: |
+          for i in 1 2 3 4 5 6; do
+            version=$(curl -fsSL "https://github.com/${{ github.repository }}/releases/latest/download/latest.json" | jq -r .version) || true
+            [ "v$version" = "${{ github.ref_name }}" ] && echo "latest.json -> $version" && exit 0
+            sleep 10
+          done
+          echo "::error::releases/latest/download/latest.json does not report ${{ github.ref_name }}"
+          exit 1

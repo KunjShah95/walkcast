@@ -58,19 +58,8 @@ fn stop_sidecar(app: &AppHandle) {
     } else {
       // A server without /api/shutdown (or one that refused): at least don't cut a job off
       // mid-step if it is about to finish, then fall through to the kill.
-      log::warn!("the app server did not accept a shutdown request; waiting for /readyz");
-      while Instant::now() < deadline && !exited.load(Ordering::SeqCst) {
-        let ready = http_request(port, "GET", "/readyz", &[])
-          .map(|(_, body)| {
-            serde_json::from_str::<serde_json::Value>(body.trim())
-              .ok()
-              .map_or(false, |v| v.get("ok").copied().unwrap_or(false))
-          });
-        if ready.unwrap_or(false)
-          || !worker_state(port).map_or(true, |s| s == Worker::Busy)
-        {
-          break;
-        }
+      log::warn!("the app server did not accept a shutdown request; waiting for its worker to go idle");
+      while Instant::now() < deadline && !exited.load(Ordering::SeqCst) && worker_state(port) == Some(Worker::Busy) {
         std::thread::sleep(Duration::from_millis(500));
       }
     }
@@ -244,7 +233,27 @@ fn open_window(app: &AppHandle, url: WebviewUrl) -> tauri::Result<WebviewWindow>
     .min_inner_size(720.0, 520.0)
     .resizable(true)
     .visible(false)
+    // Tauri's native file-drop handler swallows HTML5 drag-and-drop on Windows; the dashboard
+    // takes dropped URLs itself, and nothing here listens for native drop events.
+    .disable_drag_drop_handler()
     .build()?;
+  // Closing the window hides it: the recording runs in the sidecar, so closing mid-walkthrough
+  // used to throw it away. The tray's "Quit Walkcast" is the way out, and it waits for a job.
+  // (Attached here, where the window is made: `setup` used to look the window up before it
+  // existed, so the handler was never installed and closing the window quit the app.)
+  {
+    let (handle, on_window) = (app.clone(), window.clone());
+    window.on_window_event(move |event| {
+      if let WindowEvent::CloseRequested { api, .. } = event {
+        // Nothing is running yet (the server failed to start): closing really means closing.
+        if handle.state::<Port>().0.lock().unwrap().to_owned() == 0 {
+          return;
+        }
+        api.prevent_close();
+        let _ = on_window.hide();
+      }
+    });
+  }
   if let Ok(Some(monitor)) = window.current_monitor() {
     let scale = monitor.scale_factor();
     let area = monitor.work_area().size;
@@ -788,21 +797,6 @@ pub fn run() {
     .setup(|app| {
       let handle = app.handle().clone();
       build_tray(&handle)?;
-      // Closing the window hides it: the recording runs in the sidecar, so closing mid-walkthrough
-      // used to throw it away. The tray's "Quit Walkcast" is the way out, and it waits for a job.
-      if let Some(window) = app.get_webview_window("main") {
-        let (handle, on_window) = (handle.clone(), window.clone());
-        window.on_window_event(move |event| {
-          if let WindowEvent::CloseRequested { api, .. } = event {
-            // Nothing is running yet (the server failed to start): closing really means closing.
-            if handle.state::<Port>().0.lock().unwrap().to_owned() == 0 {
-              return;
-            }
-            api.prevent_close();
-            let _ = on_window.hide();
-          }
-        });
-      }
       if cfg!(debug_assertions) {
         open_window(&handle, WebviewUrl::External(Url::parse(DEV_URL)?))?;
         return Ok(());
@@ -885,29 +879,83 @@ mod tests {
 
   use tauri_utils::acl::RemoteUrlPattern;
 
-  /// The dashboard is served by the sidecar, not from the bundle, so the capability that grants it
-  /// `check_update`/`install_update` is scoped by `remote.urls`. Tauri resolves that with
-  /// `RemoteUrlPattern::test`, and a pattern that quietly fails to match would leave the app
-  /// exactly as broken as it was with no pattern at all -- so the real matcher is exercised here,
-  /// against the string in capabilities/updates.json.
-  const REMOTE_URL_PATTERN: &str = "http://127.0.0.1:*";
+  use super::*;
 
-  fn matches(url: &str) -> bool {
-    let pattern = RemoteUrlPattern::from_str(REMOTE_URL_PATTERN).expect("capability pattern parses");
-    pattern.test(&url.parse().expect("a valid url"))
+  /// The dashboard is served by the sidecar, not from the bundle, so the capabilities that grant it
+  /// IPC are scoped by `remote.urls`. Tauri resolves those with `RemoteUrlPattern::test`, and a
+  /// pattern that quietly fails to match would leave the app as broken as no pattern at all -- so
+  /// the real matcher is exercised here, against the patterns in the shipped capability files.
+  fn patterns(file: &str) -> Vec<RemoteUrlPattern> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities").join(file);
+    let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    json["remote"]["urls"]
+      .as_array()
+      .expect("remote.urls")
+      .iter()
+      .map(|u| RemoteUrlPattern::from_str(u.as_str().unwrap()).expect("capability pattern parses"))
+      .collect()
+  }
+
+  fn matches(file: &str, url: &str) -> bool {
+    let url = url.parse().expect("a valid url");
+    patterns(file).iter().any(|p| p.test(&url))
   }
 
   #[test]
-  fn loopback_pattern_covers_the_sidecar_and_dev_urls() {
-    // PREFERRED_PORT, a free-port fallback, and the `tauri dev` server.
-    for url in ["http://127.0.0.1:4317/app", "http://127.0.0.1:53124/app", "http://127.0.0.1:4320/app"] {
-      assert!(matches(url), "the updater capability must apply to {url}");
+  fn capabilities_cover_every_port_the_sidecar_can_take() {
+    for file in ["updates.json", "deep-link.json"] {
+      for port in PORT_RANGE {
+        for path in ["/app", "/app/library", "/login"] {
+          let url = format!("http://127.0.0.1:{port}{path}");
+          assert!(matches(file, &url), "{file} must apply to {url}");
+        }
+      }
+      // The `tauri dev` server.
+      assert!(matches(file, DEV_URL), "{file} must apply to {DEV_URL}");
     }
   }
 
   #[test]
-  fn loopback_pattern_is_not_a_blanket_grant() {
-    assert!(!matches("http://example.com:4317/app"), "must not match another host");
-    assert!(!matches("http://localhost:4317/app"), "must not match another host name");
+  fn capabilities_are_not_a_blanket_grant() {
+    for file in ["updates.json", "deep-link.json"] {
+      assert!(!matches(file, "http://example.com:4317/app"), "must not match another host");
+      assert!(!matches(file, "http://localhost:4317/app"), "must not match another host name");
+      assert!(!matches(file, "http://127.0.0.1:53124/app"), "must not match a port outside the range");
+      assert!(!matches(file, "http://127.0.0.1:4327/app"), "must not match a port outside the range");
+    }
+  }
+
+  #[test]
+  fn worker_state_is_read_from_json() {
+    assert_eq!(parse_worker(r#"{"ok":true,"store":"local","media":"local","worker":"busy"}"#), Some(Worker::Busy));
+    assert_eq!(parse_worker(r#"{ "ok": true, "worker": "idle" }"#), Some(Worker::Idle));
+    assert_eq!(parse_worker(r#"{"ok":true,"worker":"off"}"#), Some(Worker::Idle));
+    // Today's /healthz carries no worker field: unknown, not idle.
+    assert_eq!(parse_worker(r#"{"ok":true}"#), None);
+    assert_eq!(parse_worker("not json"), None);
+  }
+
+  #[test]
+  fn responses_split_into_status_and_body() {
+    let raw = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\n\r\n{\"ok\":false}";
+    assert_eq!(parse_response(raw), Some((503, "{\"ok\":false}".to_string())));
+    assert_eq!(parse_response(""), None);
+  }
+
+  #[test]
+  fn keys_and_tokens_are_32_bytes_of_hex() {
+    let token = random_hex(32);
+    assert!(is_master_key(&token));
+    assert_ne!(token, random_hex(32));
+    assert!(!is_master_key("abc"));
+    assert!(!is_master_key(&"g".repeat(64)));
+  }
+
+  #[test]
+  fn stderr_lines_are_errors_only_when_they_say_so() {
+    assert!(looks_like_error(r#"{"level":"error","event":"http.error"}"#));
+    assert!(looks_like_error("TypeError: x is not a function"));
+    assert!(looks_like_error("code: 'ERR_MODULE_NOT_FOUND'"));
+    assert!(!looks_like_error("Downloading Chromium 140.0 - 12% of 150 MB"));
   }
 }

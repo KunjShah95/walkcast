@@ -1,61 +1,37 @@
-import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
-import { basename, dirname, extname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LabData, type LabIndex, type LaunchVideo, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
-import { type TaskId, allScenarios, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
-import { agentDailyLimit, agentExposure, allAgents, resolveAgent } from "../../../packages/core/src/agents/registry.ts";
-import { budgetLimitsFor } from "../../../packages/core/src/llm/budget.ts";
-import { masterKey, openAtRest, seal, sealAtRest, sharedKeyConfigured, useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
+import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
+import { useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
-import { findChrome } from "../../../packages/core/src/lab/chrome.ts";
 import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
-import { PROVIDERS, apiKey, baseURL, configuredProviders } from "../../../packages/core/src/llm/providers.ts";
 import { createMedia, type MediaStore } from "../../../packages/core/src/media/store.ts";
-import { browserNotReady, browserSetup, installChromium } from "../../../packages/core/src/record/browser-install.ts";
-import { VOICES, canNarrate, isVoice, renarrate, voiceover, voicePreview, cloudVoicePreview, clearVoicePreviews, generateCaptionsFromAudio, buildSilentCopy } from "../../../packages/core/src/record/media.ts";
-import { configuredCloudProviders, engineFor, kokoroAvailable, kokoroReady, refreshKokoro } from "../../../packages/core/src/record/voice.ts";
-import { credentialFor, defaultLanguageFor, defaultVoiceFor, isCloudProvider, needsLanguageInput, providerLabel, voicesFor } from "../../../packages/core/src/record/voices.ts";
 import { log } from "../../../packages/core/src/ops/log.ts";
-import { Auth, AuthError, publicUser, safeNext, type User } from "./auth.ts";
+import { Auth, AuthError, type User } from "./auth.ts";
+import { DesktopTasks, sweepLaunchWork } from "./desktop-tasks.ts";
 import { SupabaseAuth, supabaseAuthConfig } from "./supabase-auth.ts";
-import { FAVICON, fontPath } from "../../../packages/brand/src/index.ts";
-import { openExternal } from "./open-external.ts";
-import { authPage, continueInBrowserPage, embedPage, messagePage, notFoundPage, sharePage } from "./pages.ts";
-import { newShareToken } from "./share.ts";
-import { webManifest, SERVICE_WORKER } from "./pwa.ts";
-import { createStore, type Job, type QueuePosition, type Store } from "../../../packages/core/src/store/index.ts";
-import { importLegacyWebhooks, startWebhookDispatcher, webhookUrlProblem } from "../../../packages/core/src/webhooks.ts";
-import { blockedHost } from "../../../packages/core/src/record/ssrf.ts";
-import { analyzeRecording, hostOf } from "../../../packages/core/src/record/insights.ts";
-import { chaptersOf, toSrt, toVtt, transcriptMarkdown } from "../../../packages/core/src/record/transcript.ts";
-import { guideHtml, guideMarkdown, guideSteps } from "../../../packages/core/src/record/guide.ts";
-import { providerHealth } from "../../../packages/core/src/llm/health.ts";
-import { liveDirForJob, LIVE_MAX_SESSIONS, liveSessionCount } from "../../../packages/core/src/record/live-view.ts";
-import { isShape, socialExport } from "../../../packages/core/src/record/social.ts";
-import type { TraceEvent } from "../../../packages/core/src/capture/recorder.ts";
-import { configuredSttProviders } from "../../../packages/core/src/record/stt.ts";
+import { notFoundPage } from "./pages.ts";
+import { createStore, type Job, type Store } from "../../../packages/core/src/store/index.ts";
+import { importLegacyWebhooks, startWebhookDispatcher } from "../../../packages/core/src/webhooks.ts";
+import { startQueueMonitor } from "../../../packages/core/src/ops/queue-monitor.ts";
+import { importLegacySchedules, startScheduler } from "../../../packages/core/src/schedules.ts";
 import { loadPlugins } from "../../../packages/core/src/plugins.ts";
-import { checkForUpdate } from "../../../packages/core/src/ops/updates.ts";
-import { alarmState, queueAlarmMs, startQueueMonitor } from "../../../packages/core/src/ops/queue-monitor.ts";
-import { importLegacySchedules, newSchedule, startScheduler } from "../../../packages/core/src/schedules.ts";
+import { applyCredentialsFile } from "./credentials.ts";
+import { withTimeout } from "./http.ts";
+import { SHUTDOWN_GRACE_MS } from "./routes/health.ts";
+import { APP_ROUTES, PRE_CSRF_ROUTES, PUBLIC_ROUTES } from "./routes/index.ts";
+import { type ServerDeps, createContext, dispatch, signInRequired } from "./routes/router.ts";
+
+// Moved out when the routes became a table; still importable from here.
+export { CREDENTIAL_ALIASES, CREDENTIAL_KEYS, type CredentialGroup, applyCredentialsFile, cleanCredential, credentialSet, readCredentials } from "./credentials.ts";
+export { demoSiteEnabled, validateRun } from "./job-input.ts";
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "dashboard", "dist", "index.html");
 const APP_SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const TYPES: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webm": "video/webm",
-  ".mp4": "video/mp4",
-  ".wav": "audio/wav",
-  ".vtt": "text/vtt; charset=utf-8",
-  ".json": "application/json",
-  ".m3u8": "application/vnd.apple.mpegurl",
-  ".ts": "video/mp2t",
-};
+/** Files bundled with the app (the walkthrough video), next to this module. */
+const STATIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "static");
 
 function dashboardHtml(path = DIST): string {
   if (!existsSync(path)) throw new Error("Dashboard not built. Run: npm run ui:build");
@@ -91,6 +67,13 @@ export interface ServeOptions {
   desktop?: boolean;
   /** How the desktop server opens a URL in the system browser (tests pass a stub). */
   openExternal?: (url: string) => void;
+  /** How the desktop server shows a file in the OS file manager (tests pass a stub). */
+  reveal?: (path: string) => void;
+  /**
+   * Called once POST /api/shutdown has closed everything (default: exit the process with 0).
+   * Tests pass a stub so the test runner survives.
+   */
+  onShutdown?: () => void;
 }
 
 /** The request handler and what it owns, without a listening socket (a serverless function). */
@@ -103,6 +86,10 @@ export interface App {
   requireAuth: boolean;
   /** Refuse new jobs and fail readiness: the process is shutting down. */
   drain(): void;
+  /** Kill every running desktop task (Launch Studio render, Kokoro setup) and its process tree. */
+  killTasks(): void;
+  /** Set by serveDashboard: what POST /api/shutdown runs after answering 202. */
+  shutdown?: () => Promise<void>;
 }
 
 export interface Running {
@@ -110,310 +97,6 @@ export interface Running {
   store: Store;
   /** Stop accepting requests, let in-flight work finish (or hand it back to the queue), close. */
   close(graceMs?: number): Promise<void>;
-}
-
-/** Per-user limits on expensive work (shared across instances through the store). */
-const LIMITS = {
-  activeJobsPerUser: Number(process.env.LAB_MAX_ACTIVE_JOBS ?? 1),
-  recordingsPerDay: Number(process.env.LAB_RECORDINGS_PER_DAY ?? 20),
-  runsPerDay: Number(process.env.LAB_RUNS_PER_DAY ?? 100),
-  /** Most recordings one batch-render job may re-export at once. */
-  maxBatchRenderItems: Number(process.env.LAB_MAX_BATCH_RENDER_ITEMS ?? 10),
-};
-
-/**
- * The web server: the public landing page and crawler files at /, accounts under /auth, and the
- * dashboard at /app. Expensive work (recordings, lab runs) goes on the job queue: the request
- * returns 202 with a job id at once and the browser polls /api/jobs/:id, so nothing depends on a
- * request staying open for minutes behind a load balancer.
- */
-/** What a credential is for, so the panel groups them instead of running one long list. */
-export type CredentialGroup = "Model" | "Voice" | "Storage";
-
-export const CREDENTIAL_KEYS: { env: string; label: string; group: CredentialGroup }[] = [
-  { env: "ANTHROPIC_API_KEY", label: "Anthropic API key", group: "Model" },
-  { env: "OPENAI_API_KEY", label: "OpenAI API key", group: "Model" },
-  { env: "OPENROUTER_API_KEY", label: "OpenRouter API key", group: "Model" },
-  { env: "AI_GATEWAY_API_KEY", label: "Vercel AI Gateway key", group: "Model" },
-  { env: "GEMINI_API_KEY", label: "Google Gemini API key", group: "Model" },
-  { env: "GOOGLE_API_KEY", label: "Google API key (alt)", group: "Model" },
-  { env: "GROQ_API_KEY", label: "Groq API key", group: "Model" },
-  { env: "MISTRAL_API_KEY", label: "Mistral API key", group: "Model" },
-  { env: "DEEPSEEK_API_KEY", label: "DeepSeek API key", group: "Model" },
-  { env: "HF_TOKEN", label: "Hugging Face token", group: "Model" },
-  { env: "XAI_API_KEY", label: "xAI API key", group: "Model" },
-  { env: "TOGETHER_API_KEY", label: "Together AI API key", group: "Model" },
-  { env: "FIREWORKS_API_KEY", label: "Fireworks API key", group: "Model" },
-  { env: "CEREBRAS_API_KEY", label: "Cerebras API key", group: "Model" },
-  { env: "OLLAMA_API_KEY", label: "Ollama API key (local models)", group: "Model" },
-  { env: "SARVAM_API_KEY", label: "Sarvam API key", group: "Voice" },
-  { env: "BHASHINI_API_KEY", label: "Bhashini API key", group: "Voice" },
-  { env: "BHASHINI_USER_ID", label: "Bhashini user id", group: "Voice" },
-  { env: "ELEVENLABS_API_KEY", label: "ElevenLabs API key", group: "Voice" },
-  { env: "GOOGLE_TTS_API_KEY", label: "Google Cloud TTS API key", group: "Voice" },
-  { env: "AZURE_TTS_KEY", label: "Azure TTS key", group: "Voice" },
-  { env: "AZURE_TTS_REGION", label: "Azure TTS region", group: "Voice" },
-  { env: "AWS_ACCESS_KEY_ID", label: "AWS access key id (Polly and S3)", group: "Voice" },
-  { env: "AWS_SECRET_ACCESS_KEY", label: "AWS secret access key (Polly and S3)", group: "Voice" },
-  { env: "AWS_SESSION_TOKEN", label: "AWS session token (temporary keys only)", group: "Voice" },
-  { env: "AWS_REGION", label: "AWS region (Polly)", group: "Voice" },
-  { env: "MEDIA_S3_BUCKET", label: "Media bucket (S3 storage)", group: "Storage" },
-  { env: "MEDIA_S3_REGION", label: "Media region (S3 storage)", group: "Storage" },
-  { env: "MURF_API_KEY", label: "Murf API key", group: "Voice" },
-  { env: "REVERIE_API_KEY", label: "Reverie API key", group: "Voice" },
-  { env: "REVERIE_APP_ID", label: "Reverie app id", group: "Voice" },
-  { env: "LAB_TTS_API_KEY", label: "Custom TTS API key", group: "Voice" },
-  { env: "LAB_TTS_ENDPOINT", label: "Custom TTS endpoint", group: "Voice" },
-  { env: "LAB_STT_BASE_URL", label: "Custom speech-to-text base URL", group: "Voice" },
-  { env: "LAB_STT_API_KEY", label: "Custom speech-to-text API key", group: "Voice" },
-  { env: "LAB_CUSTOM_API_KEY", label: "Custom LLM API key", group: "Model" },
-  { env: "LAB_CUSTOM_BASE_URL", label: "Custom LLM base URL", group: "Model" },
-];
-
-/**
- * Names the same credential goes by.
- *
- * A provider reads one name; people paste the key under another. A key saved as
- * GOOGLE_CLOUD_API_KEY worked while the Settings row for it said "not set", and the Google voice
- * picker showed the provider as unconfigured while the recording spoke with it perfectly well.
- * Saving a credential therefore writes every name in its group, and clearing it clears them all.
- */
-export const CREDENTIAL_ALIASES: Record<string, string[]> = {
-  AI_GATEWAY_API_KEY: ["VERCEL_OIDC_TOKEN"],
-  HF_TOKEN: ["HUGGINGFACE_HUB_TOKEN"],
-  BHASHINI_API_KEY: ["ULCA_API_KEY"],
-  BHASHINI_USER_ID: ["ULCA_USER_ID"],
-  GOOGLE_TTS_API_KEY: ["GOOGLE_CLOUD_API_KEY"],
-  AZURE_TTS_KEY: ["AZURE_SPEECH_KEY"],
-  AZURE_TTS_REGION: ["AZURE_SPEECH_REGION"],
-  ANTHROPIC_API_KEY: ["ANTHROPIC_AUTH_TOKEN"],
-};
-
-/** Every name a credential is known by: its own, plus the aliases it answers to. */
-function credentialNames(env: string): string[] {
-  return [env, ...(CREDENTIAL_ALIASES[env] ?? [])];
-}
-
-/** Whether a credential is set, under any of the names it is known by. */
-export function credentialSet(env: string): boolean {
-  return credentialNames(env).some((name) => Boolean(process.env[name]));
-}
-
-/**
- * The providers the person themselves connected, which live on their account rather than in the
- * server's environment.
- *
- * The capabilities payload said "no providers" to someone who had signed in to OpenRouter, so
- * the app quietly fell back to the scripted model and told them their key was missing. The key
- * is theirs and it works; it just is not in this process's environment.
- */
-function connectedProviders(user: { openrouterKey?: string; chatgpt?: { refreshToken?: string } } | null): string[] {
-  const out: string[] = [];
-  if (user?.openrouterKey) out.push("openrouter");
-  if (user?.chatgpt?.refreshToken) out.push("chatgpt");
-  return out;
-}
-
-/** Every narration provider the dashboard may select, local ones first. */
-const TTS_PROVIDERS = ["kokoro", "flite", "none", "elevenlabs", "openai", "google", "azure", "awspolly", "sarvam", "bhashini", "murf", "reverie", "custom", "custom-voice"] as const;
-
-const TTS_PROVIDER_LABEL: Record<string, string> = {
-  kokoro: "Kokoro (natural, offline)",
-  flite: "Basic offline voice (robotic, works offline)",
-  none: "No voice (captions only)",
-  sarvam: "Sarvam (Indian)",
-  bhashini: "Bhashini (Indian, govt)",
-  custom: "Custom / Maya",
-  "custom-voice": "Custom voice (uploaded sample)",
-  ...Object.fromEntries(["elevenlabs", "openai", "google", "azure", "awspolly", "murf", "reverie"].map((p) => [p, providerLabel(p)])),
-};
-
-function credentialsPath(root: string): string {
-  return join(root, ".walkcast-credentials.json");
-}
-
-/** The same credentials, encrypted under WALKCAST_MASTER_KEY: written instead of the plaintext file when that key is set. */
-function encryptedCredentialsPath(root: string): string {
-  return join(root, ".walkcast-credentials.enc");
-}
-
-function parseCredentials(text: string): Record<string, string> {
-  try {
-    const v = JSON.parse(text) as unknown;
-    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    return Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === "string"));
-  } catch {
-    return {};
-  }
-}
-
-/** Write a file readable by its owner only, atomically: a crash mid-write must not lose every saved key. */
-function writePrivateFile(p: string, body: string): void {
-  const tmp = `${p}.${process.pid}.tmp`;
-  writeFileSync(tmp, body, { mode: 0o600 });
-  try {
-    chmodSync(tmp, 0o600);
-  } catch {
-    /* a filesystem without POSIX permissions (Windows) has nothing to tighten */
-  }
-  renameSync(tmp, p);
-}
-
-/**
- * The saved credentials.
- *
- * With WALKCAST_MASTER_KEY set they live encrypted in .walkcast-credentials.enc. A plaintext
- * .walkcast-credentials.json from before is folded in, re-saved encrypted, and then deleted, so
- * the keys stop sitting on disk in the clear. An encrypted file that this key can't open throws
- * rather than reading as empty: saving over it would silently drop every other saved key.
- * Without the master key nothing changes: the plaintext file, owner-readable only.
- */
-export function readCredentials(root: string): Record<string, string> {
-  const plain = credentialsPath(root);
-  const enc = encryptedCredentialsPath(root);
-  if (!masterKey()) {
-    if (!existsSync(plain)) {
-      if (existsSync(enc)) log.warn("credentials.locked", { reason: "WALKCAST_MASTER_KEY is not set, so the encrypted credentials file can't be read" });
-      return {};
-    }
-    return parseCredentials(readFileSync(plain, "utf8"));
-  }
-  let data: Record<string, string> = {};
-  if (existsSync(enc)) {
-    try {
-      data = parseCredentials(openAtRest(readFileSync(enc, "utf8")));
-    } catch (e) {
-      throw new Error(`The saved credentials can't be opened with this WALKCAST_MASTER_KEY (${e instanceof Error ? e.message : String(e)}).`);
-    }
-  }
-  if (existsSync(plain)) {
-    // Migration: the encrypted copy wins where both name a key (it was written later).
-    data = { ...parseCredentials(readFileSync(plain, "utf8")), ...data };
-    writePrivateFile(enc, sealAtRest(JSON.stringify(data)));
-    // Only once the encrypted copy is on disk and opens again.
-    if (JSON.stringify(parseCredentials(openAtRest(readFileSync(enc, "utf8")))) === JSON.stringify(data)) {
-      rmSync(plain, { force: true });
-      log.info("credentials.encrypted", { keys: Object.keys(data).length });
-    }
-  }
-  return data;
-}
-
-function writeCredentials(root: string, data: Record<string, string>): void {
-  if (masterKey()) {
-    writePrivateFile(encryptedCredentialsPath(root), sealAtRest(JSON.stringify(data)));
-    rmSync(credentialsPath(root), { force: true });
-    return;
-  }
-  // The file holds the keys in plain text, so it is readable by its owner only.
-  writePrivateFile(credentialsPath(root), JSON.stringify(data, null, 2));
-}
-
-/**
- * Read the saved credentials into this process's environment.
- *
- * Exported because a worker that runs on its own (the web service with LAB_WORKER=off) never
- * calls createApp, and so never saw the keys the person saved in Settings: the recording came
- * out with no voice, and the run said the provider was unconfigured. The file is the one the
- * Settings panel writes; the worker reads the same one.
- */
-export function applyCredentialsFile(root: string): void {
-  try {
-    for (const [k, v] of Object.entries(readCredentials(root))) {
-      if (CREDENTIAL_KEYS.some((c) => c.env === k)) setCredential(k, v);
-    }
-  } catch (e) {
-    log.warn("credentials.unreadable", { error: e instanceof Error ? e.message : String(e) });
-  }
-}
-
-/**
- * A key as people paste it: copied with its quotes from a .env file, with "Bearer " from a curl
- * example, or with a trailing newline. Providers reject all of those, and the key then looked
- * saved but never worked.
- */
-export function cleanCredential(value: string): string {
-  let v = value.trim();
-  const quoted = /^(["'`])([\s\S]*)\1$/.exec(v);
-  if (quoted) v = quoted[2]!.trim();
-  return v.replace(/^Bearer\s+/i, "").trim();
-}
-
-/**
- * Put a credential into the environment under every name it is known by.
- *
- * The Anthropic pair is the awkward one: ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are two
- * different ways to authenticate, and a request carrying both is rejected. So the two are
- * mutually exclusive — setting one clears the other — while every other alias is the same key
- * under a second name, and gets the same value.
- */
-function setCredential(env: string, value: string): void {
-  const names = credentialNames(env);
-  process.env[env] = value;
-  for (const name of names.slice(1)) {
-    if (env === "ANTHROPIC_API_KEY" && name === "ANTHROPIC_AUTH_TOKEN") delete process.env[name];
-    else process.env[name] = value;
-  }
-}
-
-/** Remove a credential, under every name it is known by. */
-function clearCredential(env: string): void {
-  for (const name of credentialNames(env)) delete process.env[name];
-}
-
-function saveCredential(root: string, env: string, value: string): void {
-  const data = readCredentials(root);
-  if (value) data[env] = value; else delete data[env];
-  writeCredentials(root, data);
-  if (value) setCredential(env, value); else clearCredential(env);
-  // Capabilities depend on which credentials are set; drop cached responses, and voice samples
-  // spoken with the old key.
-  capabilitiesCache.clear();
-  clearVoicePreviews();
-}
-
-/** The narration provider each voice credential belongs to (OpenAI's key is checked as a model key). */
-const TTS_FOR_KEY: Record<string, string> = {
-  ELEVENLABS_API_KEY: "elevenlabs", GOOGLE_TTS_API_KEY: "google", AZURE_TTS_KEY: "azure", AZURE_TTS_REGION: "azure",
-  AWS_ACCESS_KEY_ID: "awspolly", AWS_SECRET_ACCESS_KEY: "awspolly", AWS_SESSION_TOKEN: "awspolly", AWS_REGION: "awspolly",
-  SARVAM_API_KEY: "sarvam", BHASHINI_API_KEY: "bhashini", BHASHINI_USER_ID: "bhashini", MURF_API_KEY: "murf",
-  REVERIE_API_KEY: "reverie", REVERIE_APP_ID: "reverie", LAB_TTS_API_KEY: "custom", LAB_TTS_ENDPOINT: "custom",
-};
-
-/**
- * Ask the provider whether a saved key works: list models for a model key (free), speak one short
- * sample for a voice key. "Saved" only ever meant "present"; a mistyped key used to surface minutes
- * into a recording or a run.
- */
-async function testCredential(env: string): Promise<{ ok: boolean; message: string }> {
-  const llm = Object.values(PROVIDERS).find((p) => p.apiKeyEnv.includes(env) || (p.id === "custom" && env === "LAB_CUSTOM_BASE_URL"));
-  if (llm && llm.kind !== "chatgpt-responses") {
-    const key = apiKey(llm);
-    if (!key && !llm.keyOptional) return { ok: false, message: `No ${env} saved.` };
-    const url = llm.kind === "anthropic" ? `${(process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/models` : `${(baseURL(llm) ?? "").replace(/\/$/, "")}/models`;
-    if (!/^https?:\/\//.test(url)) return { ok: false, message: `${llm.label} has no base URL set.` };
-    const headers: Record<string, string> = llm.kind === "anthropic" ? { "x-api-key": key ?? "", "anthropic-version": "2023-06-01" } : key ? { authorization: `Bearer ${key}` } : {};
-    try {
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
-      if (res.ok) return { ok: true, message: `${llm.label} accepted the key.` };
-      const body = await res.text().catch(() => "");
-      const why = /"message"\s*:\s*"([^"]{1,200})"/.exec(body)?.[1] ?? body.slice(0, 200);
-      return { ok: false, message: `${llm.label} refused the key (${res.status})${why ? `: ${why}` : "."}` };
-    } catch (e) {
-      return { ok: false, message: `Couldn't reach ${llm.label}: ${e instanceof Error ? e.message : String(e)}` };
-    }
-  }
-  const tts = TTS_FOR_KEY[env];
-  if (tts) {
-    if (!configuredCloudProviders().includes(tts)) return { ok: false, message: `${providerLabel(tts)} needs ${credentialFor(tts)}; something is still missing.` };
-    try {
-      await cloudVoicePreview(tts);
-      return { ok: true, message: `${providerLabel(tts)} spoke a test line with this key.` };
-    } catch (e) {
-      return { ok: false, message: e instanceof Error ? e.message : String(e) };
-    }
-  }
-  return { ok: credentialSet(env), message: credentialSet(env) ? "Saved. This one can't be tested from here." : `No ${env} saved.` };
 }
 
 async function freePort(host: string): Promise<number> {
@@ -458,14 +141,22 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
   process.once("exit", () => server.closeAllConnections());
   const address = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${resolvedPort}`;
   log.info("server.started", { url: address, store: store.kind, media: media.kind, worker: Boolean(worker), auth: app.requireAuth ? app.auth : "off" });
-  return {
+  let closing: Promise<void> | null = null;
+  const running: Running = {
     url: address,
     store,
-    async close(graceMs = 30_000) {
+    close(graceMs = 30_000) {
+      closing ??= closeNow(graceMs);
+      return closing;
+    },
+  };
+  async function closeNow(graceMs: number): Promise<void> {
       app.drain();
       // Stop accepting; idle keep-alive sockets close now, active requests finish.
       const closed = new Promise<void>((r) => server.close(() => r()));
       server.closeIdleConnections();
+      // A launch film's renderer (and its Chromium) must not outlive the server that started it.
+      app.killTasks();
       await worker?.stop(graceMs);
       const grace = await withTimeout(closed, 10_000).catch(() => server.closeAllConnections());
       // closeAllConnections() is async in newer Node versions; wait for it so the process has no
@@ -475,8 +166,18 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
       await grace;
       if (!o.store) await store.close();
       log.info("server.stopped", {});
-    },
+  }
+  // POST /api/shutdown: the desktop shell asks for an orderly exit instead of killing the process
+  // mid-recording. The running job gets SHUTDOWN_GRACE_MS to finish, else it goes back to the queue.
+  app.shutdown = async () => {
+    log.info("server.shutdown_requested", {});
+    try {
+      await running.close(SHUTDOWN_GRACE_MS);
+    } finally {
+      (o.onShutdown ?? (() => process.exit(0)))();
+    }
   };
+  return running;
 }
 
 /**
@@ -485,7 +186,9 @@ export async function serveDashboard(port: number, options: ServeOptions | strin
  */
 export function createApp(o: ServeOptions = {}): App {
   const root = o.root ?? process.cwd();
-  const desktopTasks = new Map<string, DesktopTask>();
+  const desktopTasks = new DesktopTasks();
+  // Working folders of renders that died with an earlier process (none are running yet).
+  sweepLaunchWork(root);
   applyCredentialsFile(root);
   const host = o.host ?? process.env.LAB_HOST ?? "127.0.0.1";
   const siteUrl = (o.siteUrl ?? process.env.LAB_SITE_URL ?? "http://127.0.0.1:4320").replace(/\/$/, "");
@@ -519,7 +222,10 @@ export function createApp(o: ServeOptions = {}): App {
         { ...(await auth.options()), openrouter: false, chatgpt: false, ...(o.desktop ? { forgot: false } : {}) }
       : { google: Boolean(auth.google), openrouter: true, chatgpt: true, forgot: false, confirmEmail: false, signupDisabled: false };
   const html = dashboardHtml(o.dashboardHtml);
+  const appCsp = dashboardCsp(inlineScriptHashes(html));
   const exposed = !["127.0.0.1", "localhost", "::1"].includes(host);
+  // Assigned at the end, once the handler it carries exists: POST /api/shutdown reads its hook.
+  const self = {} as App;
   const allowLiveRuns = !exposed || process.env.LAB_ALLOW_LIVE_RUNS === "1";
   const worker = (o.worker ?? process.env.LAB_WORKER !== "off") ? new Worker({ store, media, root }).start() : null;
   // Both run on every instance: the store hands each due schedule and each delivery to exactly
@@ -530,8 +236,8 @@ export function createApp(o: ServeOptions = {}): App {
   const scheduler = startScheduler(store, { blockPrivate, onEnqueued: () => worker?.poke() });
   const queueMonitor = startQueueMonitor(store);
 
-  let draining = false;
-  let shuttingDown = false;
+  // Flipped by drain() and POST /api/shutdown; read by /readyz and the job routes.
+  const state = { draining: false, shuttingDown: false };
 
   const handler = (req: IncomingMessage, res: ServerResponse) => {
     const started = Date.now();
@@ -539,9 +245,8 @@ export function createApp(o: ServeOptions = {}): App {
     const requestId = String(req.headers["x-amzn-trace-id"] ?? req.headers["x-request-id"] ?? randomUUID());
     res.setHeader("X-Request-Id", requestId);
     res.on("finish", () => {
-      const path = (req.url ?? "/").split("?")[0];
-      if (path === "/healthz") return;
-      log.info("http", { id: requestId, method: req.method, path, status: res.statusCode, ms: Date.now() - started });
+      const path = (req.url ?? "/").split("?")[0] ?? "/";
+      log[requestLogLevel(req.method, path)]("http", { id: requestId, method: req.method, path, status: res.statusCode, ms: Date.now() - started });
     });
     handle(req, res).catch((error: unknown) => {
       const status = error instanceof AuthError ? error.status : 500;
@@ -554,106 +259,64 @@ export function createApp(o: ServeOptions = {}): App {
     });
   };
 
+  // What the route handlers used to close over, built once here (see routes/router.ts).
+  const deps: ServerDeps = {
+    o,
+    root,
+    appSourceRoot: APP_SOURCE_ROOT,
+    staticDir: STATIC_DIR,
+    store,
+    media,
+    data,
+    worker,
+    auth,
+    authOptions,
+    requireAuth,
+    exposed,
+    siteUrl,
+    siteUrlConfigured,
+    credentialsEditable,
+    allowLiveRuns,
+    blockPrivate,
+    desktopTasks,
+    html,
+    appCsp,
+    self,
+    state,
+    listRecordings,
+    findRecording,
+    saveRecordingSummary,
+    failureFor,
+    runFailureFor,
+    noteRefusal,
+  };
+
+  /**
+   * The request pipeline. The order is the contract: canonical-URL redirects, the loopback Host
+   * check, health (no CSRF, no session), the CSRF check, the session, the public routes, the
+   * sign-in gate for /api/ and /files/, the app routes, and the 404 page.
+   */
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? "/", "http://localhost");
-    const json = (status: number, value: unknown) => {
-      res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      res.end(JSON.stringify(value));
-    };
-    // HTTPS + security headers, only when this deployment is served over TLS. Local http dev is
-    // left alone: HSTS on a plain-http host strands the browser.
-    const secure = siteUrl.startsWith("https://");
-    const securityHeaders: Record<string, string> = {
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "X-Frame-Options": "SAMEORIGIN",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-      ...(secure ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
-    };
-    const send = (status: number, type: string, body: string, cache = "no-cache") => {
-      res.writeHead(status, { "Content-Type": type, "Cache-Control": cache, ...securityHeaders });
-      res.end(body);
-    };
-    const redirect = (location: string) => {
-      res.writeHead(302, { Location: location, ...securityHeaders });
-      res.end();
-    };
-    /**
-     * Send a recording's step-by-step guide.
-     *
-     * Built from the summary the store already holds, not from the media folder: on object
-     * storage that folder is a presigned redirect, and a guide is a document, not a download.
-     * Pictures are linked through `imageBase`; when the media store answers a picture with a
-     * redirect, the CSP has to name the storage origin or the browser blocks every image.
-     */
-    const sendGuide = async (id: string, summary: RecordingSummary, format: string, imageBase: string) => {
-      const steps = guideSteps(summary.pages ?? [], summary.actions ?? []);
-      const doc = { url: summary.url ?? "", steps, createdAt: summary.createdAt };
-      if (format === "md" || format === "markdown") {
-        // Pasted elsewhere, a relative picture link points nowhere: spell out this server. Its
-        // configured address when it has one, never the Host header of a request from outside.
-        // A loopback-only server with nothing configured is only reached by its own machine, and
-        // there the Host header is the one address that is sure to be right.
-        const origin = siteUrlConfigured || exposed ? siteUrl : `${secure ? "https" : "http"}://${req.headers.host ?? "127.0.0.1"}`;
-        const body = guideMarkdown({ ...doc, imageBase: `${origin}${imageBase}` });
-        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
-        return void res.end(body);
-      }
-      if (format === "html") {
-        // A picture request goes to imageBase, is redirected to the media store, and the final
-        // URL is what CSP checks. Ask the store where the first picture really lives.
-        let imgSrc = "'self'";
-        const first = steps.find((s) => s.image)?.image;
-        if (first) {
-          const where = await media.locate(id, first);
-          if (where && "redirect" in where) {
-            try {
-              imgSrc += ` ${new URL(where.redirect).origin}`;
-            } catch {
-              /* a malformed redirect is the store's problem; 'self' is the safe default */
-            }
-          }
-        }
-        res.writeHead(200, {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff",
-          // The page holds text from the recorded site. It is escaped, and even so it may run
-          // nothing and load nothing but its own pictures.
-          "Content-Security-Policy": `default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
-          "X-Robots-Tag": "noindex, nofollow",
-          ...securityHeaders,
-        });
-        return void res.end(guideHtml({ ...doc, imageBase }));
-      }
-      return json(400, { error: "unknown format" });
-    };
+    const ctx = createContext(deps, req, res);
+    const { url, json, redirect, securityHeaders } = ctx;
 
     // Canonical host + scheme: one URL per page, https, no trailing-slash duplicates.
-    if (secure && req.headers["x-forwarded-proto"] === "http") {
+    if (ctx.secure && req.headers["x-forwarded-proto"] === "http") {
       return redirect(`${siteUrl}${url.pathname}${url.search}`);
     }
     if ((req.method === "GET" || req.method === "HEAD") && url.pathname !== "/" && url.pathname.endsWith("/") && !url.pathname.startsWith("/app")) {
       return redirect(`${url.pathname.replace(/\/+$/, "")}${url.search}`);
     }
 
+    // DNS rebinding: a loopback-only server answers only to the names loopback has. The Origin
+    // check below can't catch this, because to the browser the rebound page *is* same-origin.
+    // LAB_ALLOWED_HOSTS adds names (comma-separated host:port), e.g. the Vite dev proxy's.
+    if (!exposed && !allowedLoopbackHost(req.headers.host, req.socket.localPort) && !extraAllowedHosts().includes(String(req.headers.host ?? "").toLowerCase())) {
+      return json(421, { error: "This server only answers to its loopback address." });
+    }
+
     // ---------------------------------------------------------------- health
-    // Liveness: the process answers. Readiness: it can reach its database and isn't shutting down.
-    if (url.pathname === "/healthz") {
-      // Public liveness, readable cross-origin so the mobile companion can check an address
-      // before opening it. Carries nothing but { ok: true }.
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      return json(200, { ok: true });
-    }
-    if (url.pathname === "/readyz") {
-      if (draining) return json(503, { ok: false, reason: "shutting down" });
-      try {
-        await withTimeout(store.ping(), 2000);
-        return json(200, { ok: true, store: store.kind, media: media.kind, worker: worker ? (worker.busy ? "busy" : "idle") : "off" });
-      } catch (e) {
-        return json(503, { ok: false, reason: `store unreachable: ${e instanceof Error ? e.message : String(e)}` });
-      }
-    }
+    if (await dispatch(PRE_CSRF_ROUTES, ctx)) return;
 
     // Cross-site state changes are refused (the session cookie is SameSite=Lax as a second line).
     // This has to cover every mutating verb: DELETE /api/credentials and friends were unprotected
@@ -668,1270 +331,21 @@ export function createApp(o: ServeOptions = {}): App {
       }
       if (!sameSite) return json(403, { error: "Cross-site request refused." });
     }
-    const user = await auth.user(req);
+    ctx.user = await auth.user(req);
+    ctx.owner = ctx.user?.id ?? null;
 
-    // ---------------------------------------------------------------- app shell
-    if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) return redirect("/app");
-    if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") return send(200, "image/svg+xml", FAVICON, "max-age=86400");
-    if (url.pathname === "/manifest.webmanifest" || url.pathname === "/manifest.json") return send(200, "application/manifest+json; charset=utf-8", webManifest({ siteUrl }), "max-age=3600");
-    if (url.pathname === "/sw.js") return send(200, "application/javascript; charset=utf-8", SERVICE_WORKER, "no-cache");
-    if (url.pathname.startsWith("/assets/")) {
-      const font = fontPath(url.pathname.slice("/assets/".length));
-      if (!font) return json(404, { error: "not found" });
-      return streamFile(req, res, font, "font/woff2", "public, max-age=86400");
-    }
-    if (url.pathname === "/signup" || url.pathname === "/login" || url.pathname === "/forgot" || url.pathname === "/reset") {
-      const mode = url.pathname.slice(1) as "signup" | "login" | "forgot" | "reset";
-      if ((mode === "forgot" || mode === "reset") && auth.kind !== "supabase") return send(404, "text/plain; charset=utf-8", "Password reset needs Supabase Auth on this server.");
-      const target = url.searchParams.get("url");
-      const next = safeNext(url.searchParams.get("next") ?? (target ? `/app#record?url=${encodeURIComponent(target)}` : null));
-      if (user && mode !== "reset") return redirect(next);
-      const opts = await authOptions();
-      const notice = url.searchParams.get("notice") ?? undefined;
-      return send(
-        200,
-        "text/html; charset=utf-8",
-        authPage(mode, { skip: Boolean(o.desktop) && !requireAuth, google: opts.google, openrouter: opts.openrouter, chatgpt: opts.chatgpt, forgot: opts.forgot, provider: auth.kind, next, ...(target ? { url: target } : {}), ...(notice ? { notice: notice.slice(0, 300) } : {}) }),
-      );
-    }
-
-    // ---------------------------------------------------------------- accounts
-    if (url.pathname === "/auth/signup" && req.method === "POST") {
-      const b = await readJson(req);
-      const next = safeNext(typeof b.next === "string" ? b.next : null);
-      const name = typeof b.name === "string" ? b.name : undefined;
-      if (auth.kind === "supabase") {
-        const r = await auth.signUp(res, String(b.email ?? ""), String(b.password ?? ""), name, clientIp(req), next);
-        // The confirmation link necessarily opens in the mail client's browser, which does not share this
-        // app's cookies, so telling the user to open it "in this browser" sent them to a dead-end
-        // 400 page. The address is confirmed by opening it anywhere; they then sign in here.
-        if ("confirmEmail" in r) return json(200, { message: "Check your email: we sent you a link to confirm your address. Open the link in your normal browser, then sign in here with your email and password." });
-        await auth.startSession(res, r.user);
-        return json(201, { user: publicUser(r.user), next });
-      }
-      const created = await auth.signUp(String(b.email ?? ""), String(b.password ?? ""), name, clientIp(req));
-      await auth.startSession(res, created);
-      return json(201, { user: publicUser(created), next });
-    }
-    if (url.pathname === "/auth/login" && req.method === "POST") {
-      const b = await readJson(req);
-      const found = await auth.signIn(String(b.email ?? ""), String(b.password ?? ""), clientIp(req));
-      await auth.startSession(res, found);
-      return json(200, { user: publicUser(found), next: safeNext(typeof b.next === "string" ? b.next : null) });
-    }
-    if (url.pathname === "/auth/forgot" && req.method === "POST" && auth.kind === "supabase") {
-      const b = await readJson(req);
-      await auth.forgot(res, String(b.email ?? ""), clientIp(req));
-      return json(200, { message: "If an account exists for that address, we've emailed a link to reset the password. Open it in this browser." });
-    }
-    if (url.pathname === "/auth/reset" && req.method === "POST" && auth.kind === "supabase") {
-      const b = await readJson(req);
-      const updated = await auth.resetPassword(req, res, String(b.password ?? ""));
-      await auth.startSession(res, updated);
-      return json(200, { user: publicUser(updated), next: "/app#record" });
-    }
-    if (url.pathname === "/auth/logout" && req.method === "POST") {
-      // POST only. As a GET this was a cross-site request forgery: any page could sign the user
-      // out with an <img src=".../auth/logout">, and SameSite=Lax does not help because a
-      // top-level navigation is exactly the case that still sends the cookie.
-      await auth.endSession(req, res);
-      return redirect("/");
-    }
-    if (url.pathname === "/auth/google") {
-      if (auth.kind === "supabase" && !(await auth.options()).google) throw new AuthError(503, "Google sign-in isn't turned on in this Supabase project.");
-      if (o.desktop && auth.kind === "supabase") {
-        const flow = auth.desktopGoogleStart(url.searchParams.get("next") ?? "/app#record");
-        (o.openExternal ?? openExternal)(flow.url);
-        if (flow.mode === "link") {
-          // Nothing is listening on this tab: the browser is about to be handed to the OS, which
-          // opens Walkcast with the code. Tell the user what to expect instead of showing the
-          // loopback "waiting" page, which would never finish.
-          return send(200, "text/html; charset=utf-8", messagePage("Check Walkcast", "Sign-in continues in the Walkcast window. You can close this tab.", { ok: true }));
-        }
-        return send(200, "text/html; charset=utf-8", continueInBrowserPage(flow.state, flow.url));
-      }
-      return auth.googleRedirect(res, url.searchParams.get("next") ?? "/app#record");
-    }
-    if (url.pathname === "/auth/openrouter") {
-      if (auth.kind !== "local") throw new AuthError(503, "OpenRouter sign-in requires the local auth mode (not Supabase).");
-      return auth.openrouterRedirect(res, url.searchParams.get("next") ?? "/app#record");
-    }
-    if (url.pathname === "/auth/chatgpt") {
-      if (auth.kind !== "local") throw new AuthError(503, "ChatGPT sign-in requires the local auth mode (not Supabase).");
-      return auth.chatgptRedirect(res, url.searchParams.get("next") ?? "/app#record");
-    }
-    // Supabase Auth sends the browser back here after Google, an email confirmation or a reset link.
-    // ---------------------------------------------------------------- desktop sign-in via the system browser
-    const desktopCallback = /^\/auth\/desktop\/callback\/([\w-]{20,64})$/.exec(url.pathname);
-    if (desktopCallback && o.desktop && auth.kind === "supabase") {
-      try {
-        await auth.desktopCallback(desktopCallback[1]!, url);
-        return send(200, "text/html; charset=utf-8", messagePage("You're signed in", "Go back to Walkcast: it has carried on without you. You can close this tab.", { ok: true }));
-      } catch (e) {
-        if (!(e instanceof AuthError)) throw e;
-        return send(400, "text/html; charset=utf-8", messagePage("Sign-in didn't finish", `${e.message} Go back to Walkcast to try again.`, { ok: false }));
-      }
-    }
-    const desktopPoll = /^\/auth\/desktop\/poll\/([\w-]{20,64})$/.exec(url.pathname);
-    if (desktopPoll && req.method === "POST" && o.desktop && auth.kind === "supabase") {
-      const claim = auth.desktopClaim(desktopPoll[1]!);
-      if (!claim) return json(404, { error: "This sign-in has expired. Start again." });
-      if ("pending" in claim) return json(202, { pending: true });
-      if ("error" in claim) return json(400, { error: claim.error });
-      await auth.startSession(res, claim.user);
-      return json(200, { next: safeNext(claim.next) });
-    }
-    // The walkcast:// return, delivered by the OS to the app window. Same-origin, so the session
-    // cookie this sets is one the app already sends.
-    if (url.pathname === "/auth/desktop/exchange" && req.method === "POST" && o.desktop && auth.kind === "supabase") {
-      const b = await readJson(req);
-      const state = String(b.state ?? "");
-      const code = String(b.code ?? "");
-      if (!/^[\w-]{20,64}$/.test(state) || !code) return json(400, { error: "That sign-in link is incomplete." });
-      try {
-        const r = await auth.desktopDeepLinkCallback(state, code);
-        await auth.startSession(res, r.user);
-        return json(200, { next: safeNext(r.next) });
-      } catch (e) {
-        if (!(e instanceof AuthError)) throw e;
-        return json(400, { error: e.message });
-      }
-    }
-    if (url.pathname === "/auth/callback" && auth.kind === "supabase") {
-      try {
-        const r = await auth.callback(req, res, url);
-        if ("recovery" in r) return redirect("/reset");
-        await auth.startSession(res, r.user);
-        return redirect(safeNext(r.next));
-      } catch (e) {
-        if (!(e instanceof AuthError)) throw e;
-        // Desktop: email links open in the system browser, not the app; say what to do next there.
-        if (o.desktop) return send(400, "text/html; charset=utf-8", messagePage("Back to Walkcast", `${e.message} Do that in the Walkcast app.`, { ok: true }));
-        return redirect(`/login?notice=${encodeURIComponent(e.message)}`);
-      }
-    }
-    if (url.pathname === "/auth/google/callback" && auth.kind === "local") {
-      try {
-        const { user: signedIn, next } = await auth.googleCallback(req, url);
-        await auth.startSession(res, signedIn);
-        return redirect(safeNext(next));
-      } catch (e) {
-        if (res.headersSent) return void res.end();
-        return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
-      }
-    }
-    if (url.pathname === "/auth/openrouter/callback" && auth.kind === "local") {
-      try {
-        const { user: signedIn, next } = await auth.openrouterCallback(req, url);
-        await auth.startSession(res, signedIn);
-        return redirect(safeNext(next));
-      } catch (e) {
-        if (res.headersSent) return void res.end();
-        return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
-      }
-    }
-    if (url.pathname === "/auth/chatgpt/callback" && auth.kind === "local") {
-      try {
-        const { user: signedIn, next } = await auth.chatgptCallback(req, url);
-        await auth.startSession(res, signedIn);
-        return redirect(safeNext(next));
-      } catch (e) {
-        if (res.headersSent) return void res.end();
-        return send(e instanceof AuthError ? e.status : 500, "text/plain; charset=utf-8", e instanceof Error ? e.message : String(e));
-      }
-    }
-    if (url.pathname === "/api/me") return json(200, { user: publicUser(user), google: (await authOptions()).google, openrouter: (await authOptions()).openrouter, chatgpt: (await authOptions()).chatgpt, provider: auth.kind, authRequired: requireAuth });
+    // ---------------------------------------------------------------- app shell and accounts
+    if (await dispatch(PUBLIC_ROUTES, ctx)) return;
 
     // Everything below is the dashboard: its data (recordings of signed-in pages, traces) and its
     // actions need an account when accounts are on.
-    if (requireAuth && !user && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))) {
-      return json(401, { error: "Sign in to use the dashboard.", signIn: `/login?next=${encodeURIComponent("/app")}` });
+    if (requireAuth && !ctx.user && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))) {
+      return signInRequired(ctx);
     }
-    // A recording is visible to the account that made it; ones made from the CLI (no owner) only
-    // on a server that isn't reachable from other machines.
-    const canSee = (owner: string | null | undefined) => (owner ? !requireAuth || owner === user?.id : !exposed);
-    const owner = user?.id ?? null;
-    // Lab output (runs, fixtures, experiments) made for an account is stamped as theirs and shown
-    // only to them. Unstamped output (the CLI's, published results) stays visible as it always was.
-    const canSeeLab = (path: string) => {
-      const stamped = data.ownerOf(path);
-      return stamped === null || canSee(stamped);
-    };
 
     // ---------------------------------------------------------------- dashboard API
-    if (url.pathname === "/api/index") {
-      const limit = clampInt(url.searchParams.get("limit"), 1, 2000, 500);
-      const index = data.index(limit);
-      const scope = requireAuth ? (user?.id ?? "-") : null;
-      const failed = await Promise.all([store.failedJobs(scope, "record", 200), store.failedJobs(scope, "run", 200)]).then((l) => l.flat(), () => []);
-      return json(200, {
-        ...index,
-        runs: index.runs.filter((r) => canSeeLab(r.dir)),
-        fixtures: index.fixtures.filter((f) => canSeeLab(f.dir)),
-        experiments: index.experiments.filter((e) => canSeeLab(e.dir)),
-        recordings: (await listRecordings(user)).filter((r) => canSee(r.owner)),
-        failedRecordings: failed.filter((j) => canSee(j.owner)).length,
-      });
-    }
-    // Recordings that failed, for the Lab: the job's error and last stage, plus the report and
-    // evidence (screenshot, partial video, pages reached) the worker kept when it could.
-    if (url.pathname === "/api/failures" && req.method === "GET") {
-      const scope = requireAuth ? (user?.id ?? "-") : null;
-      const [jobs, runs] = await Promise.all([store.failedJobs(scope, "record", 200), store.failedJobs(scope, "run", 200)]);
-      return json(200, { failures: jobs.filter((j) => canSee(j.owner)).map((j) => failureFor(j)), runs: runs.filter((j) => canSee(j.owner)).map((j) => runFailureFor(j)) });
-    }
-    const failureFile = /^\/api\/failures\/([0-9a-f-]{36})\/(failure\.png|video\.webm)$/i.exec(url.pathname);
-    if (failureFile && (req.method === "GET" || req.method === "HEAD")) {
-      const [, id, file] = failureFile as unknown as [string, string, string];
-      const job = await store.job(id);
-      if (!job || job.kind !== "record" || !canSee(job.owner)) return json(404, { error: "not found" });
-      const abs = join(failureDir(root, id), file);
-      if (!existsSync(abs)) return json(404, { error: "not found" });
-      return streamFile(req, res, abs, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
-    }
-    // The recording browser's first-run download (desktop app); "unmanaged" everywhere else.
-    if (url.pathname === "/api/browser" && (req.method === "GET" || req.method === "HEAD")) return json(200, browserSetup());
-    if (url.pathname === "/api/browser/install" && req.method === "POST") {
-      if (browserSetup().state === "unmanaged") return json(409, { error: "This server does not manage its browser." });
-      return json(202, installChromium());
-    }
-    if (url.pathname === "/api/capabilities") {
-      const cacheKey = user?.id ?? "__anon__";
-      const cached = capabilitiesCache.get(cacheKey);
-      if (cached && Date.now() - cached.at < CAPABILITIES_TTL_MS) {
-        // LRU touch: re-insert so recently used entries survive eviction.
-        capabilitiesCache.delete(cacheKey);
-        capabilitiesCache.set(cacheKey, cached);
-        return json(200, cached.payload);
-      }
-      const payload = {
-        live: true,
-        running: worker?.busy ? "a job" : null,
-        queue: await store.queueDepth().catch(() => null),
-        user: publicUser(user),
-        authRequired: requireAuth,
-        stagehand: findChrome() !== null,
-        liveModels: allowLiveRuns,
-        providers: [...new Set([...configuredProviders().map((p) => p.id), ...connectedProviders(user)])],
-        sttProviders: configuredSttProviders(),
-        demoSite: demoSiteEnabled(exposed),
-        agents: allAgents().map((a) => ({ id: a.id, kind: a.kind, description: a.description, exposure: agentExposure(a), dailyLimit: agentDailyLimit(a), budget: budgetLimitsFor(a.id) })),
-        scenarios: allScenarios("pairs"),
-        limits: LIMITS,
-        usage: { recordingsToday: (await listRecordings(user)).filter((r) => canSee(r.owner) && Date.now() - Date.parse(r.createdAt) < 86_400_000).length },
-        voices: { available: canNarrate(), list: VOICES, editable: media.kind === "local" },
-        tts: { providers: TTS_PROVIDERS, configured: configuredCloudProviders() },
-        jobsUnavailable: o.jobsUnavailable ?? null,
-      };
-      if (capabilitiesCache.size >= CAPABILITIES_CACHE_MAX) {
-        const first = capabilitiesCache.keys().next().value;
-        if (first) capabilitiesCache.delete(first);
-      }
-      capabilitiesCache.set(cacheKey, { payload, at: Date.now() });
-      return json(200, payload);
-    }
-    // ---------------------------------------------------------------- credentials
-    if (url.pathname === "/api/credentials" && req.method === "GET") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      return json(200, { editable: credentialsEditable, keys: CREDENTIAL_KEYS.map((k) => ({ env: k.env, label: k.label, group: k.group, set: credentialSet(k.env) })) });
-    }
-    if (url.pathname === "/api/credentials" && req.method === "POST") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      if (!credentialsEditable) return json(403, { error: "Server credentials are set by the operator of this server." });
-      const b = await readJson(req);
-      const env = String(b.env ?? "");
-      const value = String(b.value ?? "");
-      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
-      saveCredential(root, env, cleanCredential(value));
-      return json(200, { ok: true, set: credentialSet(env) });
-    }
-    if (url.pathname === "/api/credentials/test" && req.method === "POST") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      const env = String((await readJson(req)).env ?? "");
-      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
-      return json(200, await testCredential(env));
-    }
-    if (url.pathname === "/api/credentials" && req.method === "DELETE") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      if (!credentialsEditable) return json(403, { error: "Server credentials are set by the operator of this server." });
-      const env = url.searchParams.get("env") ?? "";
-      if (!CREDENTIAL_KEYS.some((k) => k.env === env)) return json(400, { error: "Unknown credential." });
-      saveCredential(root, env, "");
-      return json(200, { ok: true });
-    }
+    if (await dispatch(APP_ROUTES, ctx)) return;
 
-    // ---------------------------------------------------------- local product-launch video studio
-    const taskView = (task: DesktopTask) => ({
-      id: task.id, kind: task.kind, recordingId: task.recordingId, status: task.status,
-      progress: task.progress, message: task.message, startedAt: task.startedAt,
-      updatedAt: task.updatedAt, error: task.error, video: task.video,
-    });
-    if (url.pathname === "/api/launch-videos/setup" && req.method === "POST") {
-      if (!o.desktop) return json(403, { error: "Kokoro setup is available from the local desktop app." });
-      if (process.platform !== "win32") return json(501, { error: "Run the documented Kokoro setup command on this platform, then return to Launch Studio." });
-      const active = [...desktopTasks.values()].find((task) => task.kind === "kokoro-setup" && task.status === "running");
-      if (active) return json(202, { task: taskView(active) });
-      const id = randomUUID();
-      const task: DesktopTask = {
-        id, kind: "kokoro-setup", owner: owner ?? null, status: "running", progress: 2,
-        message: "Preparing Kokoro and its local voice model…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      };
-      const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
-      mkdirSync(cache, { recursive: true });
-      const script = join(APP_SOURCE_ROOT, "scripts", "setup-kokoro.ps1");
-      desktopTasks.start(task, "powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-WarmModel", "-CachePath", cache], APP_SOURCE_ROOT, {
-        ...process.env, PYTHONUTF8: "1", WALKCAST_KOKORO_CACHE: cache,
-      }, async () => {
-        if (!(await refreshKokoro())) throw new Error("Kokoro setup finished, but Walkcast still cannot find its Python packages.");
-      });
-      log.info("launch_video.kokoro_setup_started", { task: id, owner });
-      return json(202, { task: taskView(task) });
-    }
-    const launchTaskMatch = /^\/api\/launch-videos\/jobs\/([\w-]+)$/.exec(url.pathname);
-    if (launchTaskMatch && req.method === "GET") {
-      const task = desktopTasks.get(launchTaskMatch[1]!);
-      if (!task || !canSee(task.owner)) return json(404, { error: "Launch video job not found." });
-      return json(200, { task: taskView(task) });
-    }
-    const launchMatch = /^\/api\/recordings\/([\w.-]+)\/launch-videos$/.exec(url.pathname);
-    if (launchMatch && req.method === "POST") {
-      if (!o.desktop) return json(403, { error: "Launch Studio is available in the local desktop app." });
-      const id = launchMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "Recording not found." });
-      if (media.kind !== "local") return json(501, { error: "Launch films need the recording saved on this computer." });
-      let sourceUrl: URL;
-      try { sourceUrl = new URL(row.summary.url); } catch { return json(400, { error: "This recording has an invalid website address." }); }
-      if (!(sourceUrl.protocol === "https:" || sourceUrl.protocol === "http:") || row.summary.durationMs < 15_000 || !row.summary.pages.length) {
-        return json(400, { error: "Choose a website recording with at least 15 seconds of footage and one visited page." });
-      }
-      const voice = String((await readJson(req, 20_000)).voice ?? "af_heart").trim();
-      if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
-      if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
-      if ([...desktopTasks.values()].some((task) => task.kind === "launch-video" && task.status === "running" && task.recordingId === id && task.owner === (owner ?? null))) {
-        return json(409, { error: "A launch video is already rendering from this recording." });
-      }
-      const recordingDir = join(root, "recordings", id);
-      const summaryFile = join(recordingDir, "recording.json");
-      if (!existsSync(summaryFile)) return json(404, { error: "Recording files are missing." });
-      const diskSummary = JSON.parse(readFileSync(summaryFile, "utf8")) as RecordingSummary & Record<string, unknown>;
-      const captureCandidates = [join(recordingDir, "recording.mp4"), diskSummary.media?.mp4 && join(recordingDir, basename(diskSummary.media.mp4)), diskSummary.media?.video && join(recordingDir, basename(diskSummary.media.video))]
-        .filter((file): file is string => typeof file === "string");
-      const capture = captureCandidates.find((file) => existsSync(file));
-      if (!capture) return json(404, { error: "The fresh recording video is missing. Record the site again in Walkcast." });
-
-      const taskId = randomUUID();
-      const taskRoot = join(root, "launch-video-work", taskId);
-      const workDir = join(taskRoot, "docs", "launch", "source");
-      const outputDir = join(taskRoot, "rendered");
-      const captionsPath = join(outputDir, "Site-Launch-Film.vtt");
-      const siteConfigPath = join(taskRoot, "site-film.json");
-      mkdirSync(taskRoot, { recursive: true });
-      const pages = row.summary.pages.map((page) => {
-        let pathname = "";
-        try { pathname = new URL(page.url).pathname; } catch { /* invalid event URL; title remains useful */ }
-        return { title: String(page.title || pathname || sourceUrl.hostname).trim().slice(0, 60), url: page.url };
-      }).filter((page, index, all) => all.findIndex((other) => other.url === page.url) === index).slice(0, 8);
-      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs }));
-      const task: DesktopTask = {
-        id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
-        message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
-      };
-      const builder = join(APP_SOURCE_ROOT, "docs", "launch", "source", "build-site-film.mjs");
-      const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
-      desktopTasks.start(task, process.execPath, [builder, capture], APP_SOURCE_ROOT, {
-        ...process.env,
-        KOKORO_VOICE: voice,
-        WALKCAST_KOKORO_CACHE: cache,
-        WALKCAST_LAUNCH_WORK_DIR: workDir,
-        WALKCAST_LAUNCH_OUTPUT_DIR: outputDir,
-        WALKCAST_LAUNCH_CAPTIONS_PATH: captionsPath,
-        WALKCAST_LAUNCH_SITE_CONFIG: siteConfigPath,
-        ...(findChrome() ? { PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: findChrome()! } : {}),
-      }, async () => {
-        const video = `launch-video-${taskId}.mp4`;
-        const poster = `launch-video-${taskId}-poster.jpg`;
-        const captions = `launch-video-${taskId}.vtt`;
-        copyFileSync(join(outputDir, "Site-Launch-Film.mp4"), join(recordingDir, video));
-        copyFileSync(join(outputDir, "Site-Launch-Film-poster.jpg"), join(recordingDir, poster));
-        copyFileSync(captionsPath, join(recordingDir, captions));
-        const made: LaunchVideo = { id: taskId, video, poster, captions, voice, createdAt: new Date().toISOString() };
-        const fresh = rereadSummary(summaryFile, diskSummary);
-        fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
-        writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));
-        await saveRecordingSummary(id, row.owner, fresh);
-        task.video = made;
-      });
-      log.info("launch_video.started", { task: taskId, recording: id, voice, owner });
-      return json(202, { task: taskView(task) });
-    }
-    // ---------------------------------------------------------------- custom voice upload/list
-    const voicesDir = join(root, "data", "voices");
-    // A voice sample is a recording of somebody's voice: it belongs to whoever uploaded it. The
-    // uploader is kept beside the file (<id>.owner); samples from before that existed have none
-    // and stay visible on a local server, never on a shared one.
-    const voiceOwner = (id: string): string | null => {
-      try {
-        return readFileSync(join(voicesDir, `${id}.owner`), "utf8").trim() || null;
-      } catch {
-        return null;
-      }
-    };
-    const mayUseVoice = (id: string) => {
-      const o = voiceOwner(id);
-      return o === null ? !exposed : canSee(o);
-    };
-    const voiceFiles = (id?: string) =>
-      existsSync(voicesDir) ? readdirSync(voicesDir).filter((f) => /\.(wav|mp3|ogg|m4a)$/i.test(f) && (id === undefined || basename(f, extname(f)) === id)) : [];
-    if (url.pathname === "/api/voices/custom" && req.method === "GET") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      const voices = voiceFiles()
-        .filter((f) => mayUseVoice(basename(f, extname(f))))
-        .map((f) => ({ id: basename(f, extname(f)), name: f, url: `/api/voices/custom/${basename(f, extname(f))}` }));
-      return json(200, { voices });
-    }
-    if (url.pathname === "/api/voices/custom" && req.method === "POST") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      const tmp = await readBodyToTemp(req, 40_000_000, "voice");
-      const nameHeader = String(req.headers["x-file-name"] ?? "");
-      const ext = /^\.(wav|mp3|ogg|m4a)$/i.test(extname(nameHeader)) ? extname(nameHeader).toLowerCase() : ".wav";
-      const id = randomUUID();
-      mkdirSync(voicesDir, { recursive: true });
-      const dest = join(voicesDir, `${id}${ext}`);
-      moveFile(tmp, dest);
-      if (owner) writeFileSync(join(voicesDir, `${id}.owner`), owner);
-      capabilitiesCache.clear();
-      return json(201, { id, name: basename(dest), url: `/api/voices/custom/${id}` });
-    }
-    const customVoiceMatch = /^\/api\/voices\/custom\/([\w-]+)$/.exec(url.pathname);
-    if (customVoiceMatch && (req.method === "GET" || req.method === "HEAD")) {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      const id = customVoiceMatch[1]!;
-      const files = voiceFiles(id);
-      if (files.length === 0 || !mayUseVoice(id)) return json(404, { error: "Not found." });
-      const abs = join(voicesDir, files[0]!);
-      const ct = TYPES[extname(abs).toLowerCase()] ?? "application/octet-stream";
-      return void streamFile(req, res, abs, ct, "private, max-age=3600");
-    }
-    if (customVoiceMatch && req.method === "DELETE") {
-      if (requireAuth && !user) return json(401, { error: "Sign in first." });
-      const id = customVoiceMatch[1]!;
-      const files = voiceFiles(id);
-      if (files.length === 0 || !mayUseVoice(id)) return json(404, { error: "Not found." });
-      for (const f of files) rmSync(join(voicesDir, f), { force: true });
-      rmSync(join(voicesDir, `${id}.owner`), { force: true });
-      capabilitiesCache.clear();
-      return json(200, { ok: true });
-    }
-
-    // ---------------------------------------------------------------- voice preview (cloud providers)
-    // The voice catalog the TTS picker renders: each provider's voices, its default, and whether
-    // the server holds credentials for it. Providers with no public list (Murf, custom) are typed in.
-    if (url.pathname === "/api/voices" && req.method === "GET") {
-      // Kokoro's first import is expensive, so report its package presence with the non-blocking
-      // readiness probe instead of making an installed voice disappear during app startup.
-      await kokoroReady();
-      return json(200, {
-        providers: TTS_PROVIDERS.map((p) => {
-          const cloud = isCloudProvider(p);
-          const voices = voicesFor(p);
-          return {
-            id: p,
-            label: TTS_PROVIDER_LABEL[p] ?? p,
-            cloud,
-            /** A provider with credentials (or, for Kokoro, a working local install), so a choice
-             *  here can actually speak. */
-            configured: p === "kokoro" ? kokoroAvailable() : !cloud || configuredCloudProviders().includes(p),
-            /** False when the provider's voice ids aren't a public list: the picker takes a text box. */
-            hasList: voices.length > 0,
-            defaultVoice: cloud || p === "kokoro" ? defaultVoiceFor(p) : (p === "flite" ? VOICES[0] : ""),
-            /** The language the default voice speaks, and whether the picker asks for one. */
-            defaultLanguage: cloud ? defaultLanguageFor(p) : "",
-            needsLanguage: cloud && needsLanguageInput(p),
-            voices,
-          };
-        }),
-      });
-    }
-    if (url.pathname === "/api/voices/preview" && (req.method === "GET" || req.method === "HEAD")) {
-      const provider = (url.searchParams.get("provider") ?? "").trim();
-      const voice = (url.searchParams.get("voice") ?? "").trim();
-      const language = (url.searchParams.get("language") ?? "").trim().slice(0, 20);
-      if (!provider) return json(400, { error: "provider is required." });
-      if (!/^[\w:.-]{1,80}$/.test(voice || "x") || !/^[\w-]{0,20}$/.test(language)) return json(400, { error: "That voice or language is not one a provider names." });
-      // Every new preview is a paid synthesis on the operator's key: 30 an hour per account.
-      if ((await store.hit(`preview:${owner ?? clientIp(req)}`, 3_600_000)) > 30) return json(429, { error: "Too many voice previews this hour. Try again later." });
-      try {
-        const buf = await cloudVoicePreview(provider, voice, language || undefined);
-        const ct = buf.length >= 4 && buf.toString("ascii", 0, 4) === "RIFF" ? "audio/wav"
-          : buf.length >= 3 && buf.toString("ascii", 0, 3) === "ID3" ? "audio/mpeg"
-          : buf.length >= 4 && buf.toString("ascii", 0, 4) === "OggS" ? "audio/ogg"
-          : "audio/wav";
-        res.writeHead(200, { "Content-Type": ct, "Content-Length": buf.length, "Cache-Control": "private, max-age=300" });
-        return void res.end(buf);
-      } catch (e) {
-        return json(503, { error: e instanceof Error ? e.message : String(e) });
-      }
-    }
-    // ---------------------------------------------------------------- narration
-    const voiceMatch = /^\/api\/voices\/(\w+)\.wav$/.exec(url.pathname);
-    if (voiceMatch) {
-      if (!isVoice(voiceMatch[1])) return json(404, { error: "Unknown voice." });
-      if (!canNarrate()) return json(503, { error: "Voice previews need ffmpeg, plus its flite voice or Windows speech." });
-      const wav = await voicePreview(voiceMatch[1]);
-      res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length, "Cache-Control": "private, max-age=86400" });
-      return void res.end(wav);
-    }
-    const narrationMatch = /^\/api\/recordings\/([\w.-]+)\/(narration|voiceover)$/.exec(url.pathname);
-    if (narrationMatch && req.method === "POST") {
-      const [, id, what] = narrationMatch as unknown as [string, string, "narration" | "voiceover"];
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      if (media.kind !== "local") return json(501, { error: "Editing narration needs recordings kept on this server's disk." });
-      const dir = join(root, "recordings", id);
-      const file = join(dir, "recording.json");
-      if (!existsSync(file)) return json(404, { error: "Recording not found." });
-      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
-      let result;
-      let captions: RecordingSummary["captions"] | undefined;
-      if (what === "narration") {
-        const b = await readJson(req, 500_000);
-        captions = validateCaptions(b.captions);
-        const voice = isVoice(b.voice) ? b.voice : "slt";
-        // Re-speak with the voice the recording was made in ("elevenlabs:<voice id>"), so fixing
-        // one line doesn't swap a natural voice for the offline one.
-        const spoke = typeof (summary as { narration?: { spoke?: unknown } }).narration?.spoke === "string" ? String((summary as { narration: { spoke: string } }).narration.spoke) : "";
-        const [spokeProvider = "", ...spokeVoice] = spoke.split(":");
-        const cloud = spokeProvider && isCloudProvider(spokeProvider) ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined) : null;
-        result = await renarrate(dir, captions, voice, cloud);
-      } else {
-        const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");
-try {
-  result = await voiceover(dir, audioPath, summary.captions);
-} finally {
-  rmSync(audioPath, { force: true });
-}
-      }
-      // Re-voicing takes a while. Read the summary again and change only what it made, so a share
-      // link or note created in the meantime is not written over by the copy read at the start.
-      const fresh = rereadSummary(file, summary);
-      if (captions) fresh.captions = captions;
-      fresh.media = { ...fresh.media, ...result, video: fresh.media.video };
-      writeFileSync(file, JSON.stringify(fresh, null, 2));
-      await saveRecordingSummary(id, row.owner, fresh);
-      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
-    }
-    // The walkthrough re-framed for a feed: 9:16 or 1:1, captions burned in. Made on request,
-    // because most walkthroughs never need one and each takes an encode.
-    const exportMatch = /^\/api\/recordings\/([\w.-]+)\/export$/.exec(url.pathname);
-    if (exportMatch && req.method === "POST") {
-      const id = exportMatch[1]!;
-      const shape = url.searchParams.get("shape");
-      if (!isShape(shape)) return json(400, { error: "shape must be vertical or square" });
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      if (media.kind !== "local") return json(501, { error: "Exports need recordings kept on this server's disk." });
-      const dir = join(root, "recordings", id);
-      const file = join(dir, "recording.json");
-      if (!existsSync(file)) return json(404, { error: "Recording not found." });
-      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
-      let made: { file: string; captions: boolean };
-      try {
-        made = await socialExport(dir, shape);
-      } catch (e) {
-        return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
-      }
-      // The encode takes a while: change only what it made, on a fresh read of the summary.
-      const fresh = rereadSummary(file, summary);
-      fresh.media = { ...fresh.media, exports: { ...fresh.media.exports, [shape]: made.file } };
-      writeFileSync(file, JSON.stringify(fresh, null, 2));
-      await saveRecordingSummary(id, row.owner, fresh);
-      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
-    }
-    // Re-export several existing recordings in one background job: the per-item work is exactly
-    // what POST /api/recordings/:id/export does, run sequentially so one bad recording doesn't
-    // sink the rest. The whole batch counts as one active job, same ceiling as a single run.
-    if (url.pathname === "/api/recordings/batch-render" && req.method === "POST") {
-      const b = (await readJson(req).catch(() => ({}))) as { recordingIds?: unknown; shape?: unknown };
-      const recordingIds = Array.isArray(b.recordingIds) ? b.recordingIds.filter((x): x is string => typeof x === "string" && x.length > 0) : null;
-      if (!recordingIds || recordingIds.length === 0) return json(400, { error: "recordingIds must be a non-empty array of recording ids." });
-      if (recordingIds.length > LIMITS.maxBatchRenderItems) return json(400, { error: `A batch render can include at most ${LIMITS.maxBatchRenderItems} recordings.` });
-      if (!isShape(b.shape)) return json(400, { error: "shape must be vertical or square" });
-      // Fail the whole request up front if any id is missing or not this account's: the user must
-      // know which one was bad before anything runs, not after the job half-finishes.
-      for (const id of recordingIds) {
-        const row = await findRecording(id);
-        if (!row || !canSee(row.owner)) return json(404, { error: `Recording ${id} not found.` });
-      }
-      if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) return json(429, { error: "You already have a job running. Wait for it to finish." });
-      const job = await store.enqueueLimited({ kind: "batch-render", owner, input: { recordingIds, shape: b.shape } }, LIMITS.activeJobsPerUser);
-      if (!job) return json(429, { error: "You already have a job running. Wait for it to finish." });
-      worker?.poke();
-      log.info("job.enqueued", { job: job.id, kind: "batch-render", owner, items: recordingIds.length });
-      return json(202, { jobId: job.id });
-    }
-    // A download of the same walkthrough with no narration track, for a recording that was
-    // made with a voice but is wanted without one (sharing with sound off, dubbing it elsewhere).
-    // Built once per recording and reused after that, the same way an export is.
-    const silentMatch = /^\/api\/recordings\/([\w.-]+)\/no-voice$/.exec(url.pathname);
-    if (silentMatch && req.method === "POST") {
-      const id = silentMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      if (media.kind !== "local") return json(501, { error: "A no-voice download needs the recording kept on this server's disk." });
-      const dir = join(root, "recordings", id);
-      const file = join(dir, "recording.json");
-      if (!existsSync(file)) return json(404, { error: "Recording not found." });
-      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
-      let silent: string;
-      try {
-        silent = await buildSilentCopy(dir);
-      } catch (e) {
-        return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
-      }
-      const fresh = rereadSummary(file, summary);
-      fresh.media = { ...fresh.media, silent };
-      writeFileSync(file, JSON.stringify(fresh, null, 2));
-      await saveRecordingSummary(id, row.owner, fresh);
-      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
-    }
-    // Share a walkthrough: a link that plays it for whoever has it, until it expires.
-    //
-    // The token is the permission and it lives in the walkthrough's own summary, so revoking
-    // a link is removing it from there. There is no account on the other side of the link:
-    // that is the whole point of sending someone one.
-    const shareApi = /^\/api\/recordings\/([\w.-]+)\/share$/.exec(url.pathname);
-    if (shareApi && (req.method === "POST" || req.method === "DELETE")) {
-      const id = shareApi[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      const summary = row.summary ?? (await listRecordings(user)).find((r) => r.id === id);
-      if (!summary) return json(404, { error: "Recording not found." });
-      const shares = (summary.shares ?? []).filter((s) => Date.parse(s.expiresAt) > Date.now());
-      if (req.method === "DELETE") {
-        const token = url.searchParams.get("token");
-        const kept = token ? shares.filter((s) => s.token !== token) : [];
-        summary.shares = kept;
-        await saveRecordingSummary(id, row.owner, summary);
-        return json(200, { ok: true, shares: kept });
-      }
-      const body = (await readJson(req).catch(() => ({}))) as { days?: number; includeNotes?: boolean; silent?: boolean };
-      const days = clampInt(body.days, 1, 90, 7);
-      // Notes are the owner's private reading of the walkthrough. They go on a link only when
-      // the owner asks for it, and each link carries its own answer.
-      const includeNotes = body.includeNotes === true;
-      // A link made with no narration: build the no-voice copy now if nobody has asked for one
-      // yet, same as the Library's own "Download (no voice)" button does.
-      const wantsSilent = body.silent === true;
-      if (wantsSilent && !summary.media.silent) {
-        if (media.kind !== "local") return json(501, { error: "A no-voice link needs the recording kept on this server's disk." });
-        const dir = join(root, "recordings", id);
-        try {
-          summary.media = { ...summary.media, silent: await buildSilentCopy(dir) };
-        } catch (e) {
-          return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
-        }
-      }
-      const share = { token: newShareToken(), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(), includeNotes, ...(wantsSilent ? { silent: true } : {}) };
-      summary.shares = [...shares, share];
-      await saveRecordingSummary(id, row.owner, summary);
-      log.info("recording.shared", { id, owner, until: share.expiresAt });
-      return json(200, { share, url: `${siteUrl}/share/${encodeURIComponent(id)}/${share.token}`, shares: summary.shares });
-    }
-    // The public side of a share link: the page, and the media it plays.
-    const shareView = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/?$/.exec(url.pathname);
-    const shareGuide = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/guide\/?$/.exec(url.pathname);
-    const shareFile = /^\/share\/([\w.-]+)\/([A-Za-z0-9_-]{20,64})\/([\w.-]+)$/.exec(url.pathname);
-    // A shared walkthrough can also be read as a step-by-step guide. The token is the permission,
-    // exactly as it is for the video: a reader who was sent the link needs no account for either.
-    if (shareGuide && (req.method === "GET" || req.method === "HEAD")) {
-      const [, id, token] = shareGuide as unknown as [string, string, string];
-      const found = await findRecording(id);
-      const summary = found?.summary;
-      const share = summary && (summary.shares ?? []).find((s) => sameToken(s.token, token));
-      if (!summary || !share || Date.parse(share.expiresAt) <= Date.now()) return json(404, { error: "This link has expired." });
-      return sendGuide(id, summary, (url.searchParams.get("format") ?? "html").toLowerCase(), `/share/${encodeURIComponent(id)}/${token}/`);
-    }
-    if ((shareView || shareFile) && (req.method === "GET" || req.method === "HEAD")) {
-      const [, id, token, file] = (shareFile ?? shareView) as unknown as [string, string, string, string | undefined];
-      const found = await findRecording(id);
-      const summary = found?.summary;
-      if (!summary) return json(404, { error: "This link is not valid." });
-      const share = (summary.shares ?? []).find((s) => sameToken(s.token, token));
-      if (!share || Date.parse(share.expiresAt) <= Date.now()) return json(404, { error: "This link has expired." });
-      if (file) {
-        // Only the files this walkthrough published can be fetched through the link.
-        const allowed = new Set(
-          [
-            summary.media.mp4,
-            summary.media.webm,
-            summary.media.video,
-            summary.media.silent,
-            summary.media.captions,
-            summary.media.audio,
-            ...summary.pages.map((p) => p.screenshot),
-            ...(summary.actions ?? []).map((a) => a.shot),
-          ].filter((f): f is string => Boolean(f)),
-        );
-        if (!allowed.has(file)) return json(404, { error: "not found" });
-        const where = await media.locate(id, file);
-        if (!where) return json(404, { error: "not found" });
-        if ("redirect" in where) return redirect(where.redirect);
-        return streamFile(req, res, where.path, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
-      }
-      const base = `/share/${encodeURIComponent(id)}/${token}`;
-      // A link made with no narration plays the no-voice copy only: the narrated mp4/webm sitting
-      // next to it on disk is exactly what this link was asked to leave out.
-      const sources = share.silent && summary.media.silent
-        ? [{ url: `${base}/${summary.media.silent}`, type: "video/mp4" }]
-        : [
-            summary.media.mp4 ? { url: `${base}/${summary.media.mp4}`, type: "video/mp4" } : null,
-            summary.media.webm ? { url: `${base}/${summary.media.webm}`, type: "video/webm" } : null,
-            summary.media.mp4 || summary.media.webm ? null : summary.media.video ? { url: `${base}/${summary.media.video}`, type: "video/webm" } : null,
-          ].filter((s): s is { url: string; type: string } => s !== null);
-      if (sources.length === 0) return json(404, { error: "This walkthrough has no video to share." });
-      const captions = summary.captions ?? [];
-      // A chapter starts where the recorder opened a page, exactly as it does in the app.
-      const chapters = chaptersOf(captions, hostOf(summary.url));
-      // A picture of each page: the page says what the walkthrough contains, not only that it
-      // exists. Only the pictures this walkthrough took are offered.
-      const pictures = summary.pages.filter((p) => Boolean(p.screenshot)).map((p) => ({ url: `${base}/${p.screenshot}`, title: p.title || p.url }));
-      // The owner's notes, when this link was made to carry them.
-      const notes = share.includeNotes ? (await store.annotations(id, found?.owner ?? null)).map((a) => ({ at: a.at, text: a.text })) : [];
-      const page = {
-        title: hostOf(summary.url),
-        host: summary.url,
-        recorded: readableWhen(summary.createdAt),
-        pages: summary.pages.length,
-        durationMs: summary.durationMs,
-        sources,
-        captions: summary.media.captions ? `${base}/${summary.media.captions}` : null,
-        poster: pictures[0]?.url ?? null,
-        pictures,
-        chapters,
-        transcript: captions.map((c) => ({ start: c.start, text: c.text })),
-        notes,
-        guideUrl: `${base}/guide`,
-        expiresAt: share.expiresAt.slice(0, 10),
-        ...(summary.media.note && /failed|instead|could not reach/i.test(summary.media.note) ? { note: summary.media.note } : {}),
-      };
-      // The embed is the same walkthrough without the page around it: a player to drop into
-      // somebody else's site, with nothing of Walkcast's shell in the way.
-      if (url.searchParams.get("embed") === "1") {
-        // The one page meant to live in another site's iframe, so it drops X-Frame-Options and
-        // names who may frame it instead: anyone, or the sites listed in LAB_EMBED_ANCESTORS.
-        const { "X-Frame-Options": _xfo, ...framable } = securityHeaders;
-        const ancestors = (process.env.LAB_EMBED_ANCESTORS ?? "").trim() || "*";
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", ...framable, "Content-Security-Policy": `frame-ancestors ${ancestors}` });
-        return void res.end(embedPage({ ...page, openUrl: `${siteUrl}${base}` }));
-      }
-      return send(200, "text/html; charset=utf-8", sharePage(page));
-    }
-    // What the recorder found on the site while it walked it.
-    //
-    // A walkthrough made now carries its insights in its summary. One made before this existed
-    // still has its trace on disk, and the trace is where the truth is: the same analysis runs
-    // over it here, so an old walkthrough is not a blank page.
-    const insightsMatch = /^\/api\/recordings\/([\w.-]+)\/insights$/.exec(url.pathname);
-    if (insightsMatch && req.method === "GET") {
-      const id = insightsMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      const summary = (await listRecordings(user)).find((r) => r.id === id);
-      if (summary?.insights) return json(200, { insights: summary.insights });
-      if (media.kind !== "local") return json(501, { error: "This walkthrough's trace is not on this server, so it cannot be read here." });
-      const trace = join(root, "recordings", id, "trace.jsonl");
-      if (!existsSync(trace)) return json(404, { error: "This walkthrough has no trace to read." });
-      const facts = {
-        id,
-        url: summary?.url ?? "",
-        createdAt: summary?.createdAt,
-        durationMs: summary?.durationMs ?? 0,
-        pages: summary?.pages ?? [],
-        skipped: summary?.skipped ?? [],
-        stopped: summary?.stopped,
-      };
-      const events = readFileSync(trace, "utf8")
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          try {
-            return JSON.parse(line) as TraceEvent;
-          } catch {
-            return null; // a half-written line is not a reason to fail the whole read
-          }
-        })
-        .filter((e): e is TraceEvent => e !== null);
-      return json(200, { insights: analyzeRecording(facts, events) });
-    }
-    // Notes pinned to a moment in a walkthrough.
-    //
-    // The walkthrough is the evidence; the note is its owner's reading of it. Notes belong to
-    // the recording's owner and are nobody else's business: they are listed, added and removed
-    // through this one route, and a note only reaches a share link when its owner says so.
-    const annotationsMatch = /^\/api\/recordings\/([\w.-]+)\/annotations$/.exec(url.pathname);
-    if (annotationsMatch && (req.method === "GET" || req.method === "POST")) {
-      const id = annotationsMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      if (req.method === "GET") return json(200, { annotations: await store.annotations(id, row.owner ?? null) });
-      const body = (await readJson(req).catch(() => ({}))) as { at?: unknown; text?: unknown };
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text) return json(400, { error: "A note needs some text." });
-      if (text.length > 2000) return json(400, { error: "That note is too long (2000 characters at the most)." });
-      const at = Number(body.at);
-      if (!Number.isFinite(at) || at < 0) return json(400, { error: "A note needs a position in the video." });
-      const annotation = {
-        id: randomUUID(),
-        recordingId: id,
-        owner: row.owner ?? null,
-        at: Math.round(at * 1000) / 1000,
-        text,
-        createdAt: new Date().toISOString(),
-      };
-      await store.addAnnotation(annotation);
-      return json(201, { annotation });
-    }
-    const annotationMatch = /^\/api\/recordings\/([\w.-]+)\/annotations\/([\w-]+)$/.exec(url.pathname);
-    if (annotationMatch && req.method === "DELETE") {
-      const [, id, noteId] = annotationMatch as unknown as [string, string, string];
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      const removed = await store.removeAnnotation(noteId, row.owner ?? null);
-      return removed ? json(200, { ok: true }) : json(404, { error: "Note not found." });
-    }
-    // Delete a recording: its files (local folder, or its objects in the bucket) and its index row.
-    const deleteMatch = /^\/api\/recordings\/([\w.-]+)$/.exec(url.pathname);
-    if (deleteMatch && req.method === "DELETE") {
-      const id = deleteMatch[1]!;
-      if (id.startsWith(".")) return json(404, { error: "Recording not found." }); // never "..": this ends in a delete
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      // The files it published (worker.ts): the media names in its summary, plus recording.json.
-      const summary = (await listRecordings(user)).find((r) => r.id === id);
-      const m = (summary?.media ?? {}) as Partial<Record<"mp4" | "webm" | "video" | "audio" | "captions", string | null>>;
-      const files = [m.mp4, m.webm, m.video, m.audio, m.captions, "recording.json"].filter((f): f is string => Boolean(f));
-      try {
-        await media.remove(id, files);
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        // Windows: the video is still open (playing in a tab). The index row stays, so nothing is half-deleted.
-        if (code === "EBUSY" || code === "EPERM") return json(409, { error: "The recording is in use and couldn't be deleted. Stop playing it and try again." });
-        return json(502, { error: `Couldn't delete the recording's files: ${e instanceof Error ? e.message : String(e)}` });
-      }
-      await store.deleteRecording(id);
-      capabilitiesCache.clear();
-      log.info("recording.deleted", { id, owner });
-      return json(200, { ok: true });
-    }
-    const sttMatch = /^\/api\/recordings\/([\w.-]+)\/captions\/stt$/.exec(url.pathname);
-    if (sttMatch && req.method === "POST") {
-      const id = sttMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
-      if (media.kind !== "local") return json(501, { error: "STT needs recordings kept on this server's disk." });
-      const dir = join(root, "recordings", id);
-      const file = join(dir, "recording.json");
-      if (!existsSync(file)) return json(404, { error: "Recording not found." });
-      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
-      const b = await readJson(req).catch(() => ({}));
-      const language = typeof (b as any)?.language === "string" ? (b as any).language : "unknown";
-      let audioFile = (summary.media as any)?.audio ?? "narration.wav";
-      if (!existsSync(join(dir, audioFile))) {
-        if (existsSync(join(dir, "video.webm"))) audioFile = "video.webm";
-        else return json(400, { error: "No audio available for this recording." });
-      }
-      // No speech-to-text key is the person's to fix in Settings, not a server failure.
-      if (configuredSttProviders().length === 0) return json(400, { error: "Auto-captions need a speech-to-text key. Add an OpenAI, Groq, ElevenLabs or Sarvam key in Settings." });
-      try {
-        const captions = await generateCaptionsFromAudio(join(dir, audioFile), language, typeof (b as any)?.provider === "string" ? (b as any).provider : null);
-        const { toWebVtt } = await import("../../../packages/core/src/record/narration.ts");
-        writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions as any));
-        // Speech-to-text takes a while: change only the captions on a fresh read (see narration).
-        const fresh = rereadSummary(file, summary);
-        fresh.captions = captions;
-        fresh.media = { ...fresh.media, captions: "captions.vtt" };
-        writeFileSync(file, JSON.stringify(fresh, null, 2));
-        await saveRecordingSummary(id, row.owner, fresh);
-        return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions });
-      } catch (e) {
-        return json(500, { error: e instanceof Error ? e.message : String(e) });
-      }
-    }
-    if ((url.pathname === "/api/run" || url.pathname === "/api/record") && req.method === "POST") {
-      const kind = url.pathname === "/api/run" ? "run" : "record";
-      const b = await readJson(req);
-      // A recording turned away before it could start is still a failed recording to the person
-      // who asked: keep it, so the Lab lists it with the reason. Quotas and "already running" are
-      // not failures of the site and aren't kept.
-      const refuse = async (status: number, error: string): Promise<void> => {
-        if (kind === "record") await noteRefusal(owner, b.demo === true ? "" : String(b.url ?? ""), error, b.demo === true).catch((e) => log.warn("job.refusal_not_kept", { error: String(e) }));
-        return json(status, { error });
-      };
-      if (draining) return refuse(503, "The server is restarting. Try again in a moment.");
-      if (o.jobsUnavailable) return refuse(503, o.jobsUnavailable);
-      const notReady = browserNotReady();
-      if (notReady) return refuse(503, notReady);
-      let input: Record<string, unknown>;
-      try {
-        input = kind === "run" ? validateRun(b, allowLiveRuns, root) : validateRecord(b, exposed);
-      } catch (e) {
-        // An unfinished form (no URL, box not ticked) is not a failed recording; a bad address is.
-        if (e instanceof AuthError && e.status === 400) return /^(Confirm that you own|Paste the site's URL)/.test(e.message) ? json(400, { error: e.message }) : refuse(400, e.message);
-        throw e;
-      }
-      // Another account's fixture is as good as absent: replaying it would read their run.
-      if (kind === "run" && typeof input.fixture === "string" && !canSeeLab(input.fixture)) return json(400, { error: "That fixture doesn't exist here." });
-      // A cloud voice this process can't reach would quietly ship with no voice, which reads as "I picked ElevenLabs and got something else". When we hold the worker we can say so up front,
-      // instead of returning a video in the wrong voice minutes later.
-      if (kind === "record" && worker && typeof input.ttsProvider === "string" && isCloudProvider(input.ttsProvider) && !configuredCloudProviders().includes(input.ttsProvider)) {
-        const id = TTS_PROVIDER_LABEL[input.ttsProvider] ?? input.ttsProvider;
-        const env = credentialFor(input.ttsProvider);
-        return refuse(400, `${id} is selected but this server has no ${env}, so the recording would not use it. Add the key in Settings, or pick the basic offline voice.`);
-      }
-      // Kokoro needs a local Python install with the kokoro package; without it the recording
-      // would silently fall back to the robotic voice, which reads the same as the cloud case above.
-      if (kind === "record" && worker && input.ttsProvider === "kokoro" && !(await kokoroReady())) {
-        return refuse(400, "Kokoro is selected but this server has no working Python + kokoro install, so the recording would not use it. Install kokoro, or pick the basic offline voice.");
-      }
-      // A custom voice sample is the uploader's. Naming somebody else's id in the form would
-      // narrate in a stranger's voice, so it is refused rather than quietly swapped for a default.
-      if (kind === "record" && input.ttsProvider === "custom-voice" && typeof input.ttsVoice === "string" && !mayUseVoice(input.ttsVoice)) {
-        return json(400, { error: "That voice sample belongs to another account. Upload your own in Settings." });
-      }
-      // A retried submit (double-click, network retry) gets the job it already created.
-      const idempotencyKey = typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"].slice(0, 100) : null;
-      if (idempotencyKey) {
-        const existing = await store.jobByKey(owner, idempotencyKey);
-        if (existing) return json(202, { job: await withQueue(store, existing) });
-      }
-      // Per-user limits, enforced atomically in the store so they hold across instances: the
-      // daily quota and the active-job ceiling are single statements, not reads the caller races.
-      // Refuse "already running" before charging the daily quota: a click while a job runs used to
-      // spend one of the day's recordings on a request that was turned away. enqueueLimited below
-      // still enforces the ceiling atomically; this only keeps the common case from costing quota.
-      if ((await store.activeJobs(owner)) >= LIMITS.activeJobsPerUser) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
-      const perDay = kind === "record" ? LIMITS.recordingsPerDay : LIMITS.runsPerDay;
-      // Every quota this request was charged, so a request turned away below gets them back:
-      // a refusal must not cost one of the day's runs.
-      const charged: string[] = [];
-      const refund = () => Promise.all(charged.map((k) => store.unhit(k).catch((e) => log.warn("quota.refund_failed", { key: k, error: String(e) }))));
-      let job: Awaited<ReturnType<typeof store.enqueueLimited>>;
-      try {
-        job = await (async () => {
-          const dayKey = `quota:${kind}:${owner ?? "local"}`;
-          const usedToday = await store.hit(dayKey, 86_400_000);
-          charged.push(dayKey);
-          if (usedToday > perDay) {
-            throw new AuthError(429, `Daily limit reached (${perDay} ${kind === "record" ? "recordings" : "runs"}). Try again tomorrow.`);
-          }
-          if (kind === "run") {
-            // Model-backed agents spend provider tokens on a live run: they get their own ceiling.
-            const spec = resolveAgent(String(input.agent));
-            const perAgent = agentDailyLimit(spec);
-            const free = input.modelMode === "replay" || input.modelMode === "scripted";
-            if (perAgent !== null && !free) {
-              const agentKey = `quota:agent:${spec.id}:${owner ?? "local"}`;
-              const usedByAgent = await store.hit(agentKey, 86_400_000);
-              charged.push(agentKey);
-              if (usedByAgent > perAgent) {
-                throw new AuthError(429, `Daily limit reached for agent ${spec.id} (${perAgent} runs). Try again tomorrow, or replay a fixture instead (no model cost).`);
-              }
-            }
-          }
-          let secret: string | null = null;
-          if (kind === "record" && typeof b.password === "string" && b.password) {
-            if (!worker && !sharedKeyConfigured()) throw new AuthError(503, "This server is missing LAB_SECRET_KEY, which separate workers need to receive sign-in details. Ask the operator to set it.");
-            secret = seal(b.password);
-          }
-          const queued = await store.enqueueLimited({ kind, owner, input, secret, idempotencyKey }, LIMITS.activeJobsPerUser);
-          if (!queued) throw new AuthError(429, "You already have a job running. Wait for it to finish.");
-          return queued;
-        })();
-      } catch (e) {
-        await refund();
-        throw e;
-      }
-      worker?.poke();
-      log.info("job.enqueued", { job: job.id, kind, owner });
-      return json(202, { job: await withQueue(store, job) });
-    }
-    // Cancel a queued or running job (its owner only). The worker aborts at once when it is in this
-    // process, else at its next heartbeat; the partial recording is discarded.
-    const liveMatch = /^\/api\/jobs\/([\w-]+)\/live\/([\w.-]+)$/.exec(url.pathname);
-    if (liveMatch) {
-      const [, id, file] = liveMatch as unknown as [string, string, string];
-      const job = await store.job(id);
-      if (!job || (requireAuth && job.owner !== owner)) return json(404, { error: "job not found" });
-      const dir = liveDirForJob(id);
-      const type = TYPES[extname(file).toLowerCase()];
-      // Only the manifest and its own segments; no path outside this job's own live/ directory.
-      if (!dir || !type) return json(404, { error: "no live preview for this job" });
-      const abs = join(dir, "live", file);
-      if (!existsSync(abs)) return json(404, { error: "not found" });
-      // Rewritten by ffmpeg every few seconds: a cached manifest would show stale segments, and a
-      // cached, since-deleted segment would 404 forever once the player tried it again.
-      return streamFile(req, res, abs, type, "no-store");
-    }
-    const cancelMatch = /^\/api\/jobs\/([\w-]+)\/cancel$/.exec(url.pathname);
-    if (cancelMatch && req.method === "POST") {
-      const id = cancelMatch[1]!;
-      const job = await store.job(id);
-      if (!job || (requireAuth && job.owner !== owner)) return json(404, { error: "job not found" });
-      const cancelled = await store.cancel(id);
-      if (!cancelled) return json(409, { error: `The job already ${job.status}.`, job: await withQueue(store, job) });
-      worker?.cancel(id);
-      statusCache.delete(id);
-      capabilitiesCache.delete(user?.id ?? "__anon__");
-      log.info("job.cancelled", { job: id, owner });
-      return json(200, { job: await withQueue(store, cancelled) });
-    }
-    // The owner's own queued or running job, if any: how a client that lost track of a job id
-    // (a page it left and came back to, a reload) finds its way back to a recording that never
-    // stopped rather than showing a blank form as if it had. Matched before jobMatch, whose
-    // `[\w-]+` would otherwise read "mine" as a job id and 404.
-    if (url.pathname === "/api/jobs/mine" && req.method === "GET") {
-      const kind = url.searchParams.get("kind") === "run" ? "run" : "record";
-      const job = await store.activeJob(owner, kind);
-      if (!job) return json(200, { job: null });
-      return json(200, { job: { ...(await withQueue(store, job)), live: job.status === "running" && Boolean(liveDirForJob(job.id)) } });
-    }
-    const jobMatch = /^\/api\/jobs\/([\w-]+)$/.exec(url.pathname);
-    if (jobMatch) {
-      const id = jobMatch[1]!;
-      const ifNone = req.headers["if-none-match"];
-      const cached = statusCache.get(id);
-      // The cache is shared by every caller, so a hit is only served to the job's owner; anyone
-      // else falls through to the store lookup and its 404.
-      if (cached && Date.now() - cached.at < STATUS_TTL_MS && (!requireAuth || cached.owner === owner)) {
-        if (ifNone && String(ifNone).trim() === cached.etag) {
-          res.writeHead(304, { ...securityHeaders, ETag: cached.etag, "Cache-Control": "private, max-age=1" });
-          return void res.end();
-        }
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: cached.etag, "Cache-Control": "private, max-age=1" });
-        return void res.end(cached.body);
-      }
-      const job = await store.job(id);
-      if (!job || (requireAuth && job.owner !== owner)) {
-        statusCache.delete(id);
-        return json(404, { error: "job not found" });
-      }
-      // A finished job changes "recordings used today": drop this viewer's cached capabilities so
-      // the next read isn't up to 5 s stale.
-      if (job.status === "succeeded" || job.status === "failed") capabilitiesCache.delete(user?.id ?? "__anon__");
-      // A live preview manifest exists only while the job's own recordSite() call is running.
-      const payload = { job: { ...(await withQueue(store, job)), live: job.status === "running" && Boolean(liveDirForJob(id)) } };
-      const body = JSON.stringify(payload);
-      const etag = `"${createHash("sha1").update(body).digest("hex").slice(0, 16)}"`;
-      setStatusCache(id, body, etag, job.owner ?? null);
-      if (ifNone && String(ifNone).trim() === etag) {
-        res.writeHead(304, { ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
-        return void res.end();
-      }
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", ...securityHeaders, ETag: etag, "Cache-Control": "private, max-age=1" });
-      return void res.end(body);
-    }
-    if (url.pathname === "/api/update" && req.method === "GET") {
-      // The newest published release vs. what this server runs. The desktop app installs updates
-      // itself (Tauri updater); servers and source checkouts get a link to the release.
-      return json(200, await checkForUpdate());
-    }
-    if (url.pathname === "/api/agents/usage" && req.method === "GET") {
-      let windowMs = 86_400_000;
-      const q = url.searchParams.get("windowMs");
-      if (q) {
-        const n = Number(q);
-        if (!Number.isFinite(n) || n <= 0 || n > 31 * 86_400_000) return json(400, { error: "windowMs must be 1ms..31 days" });
-        windowMs = n;
-      }
-      // Aggregate counts per agent id across every account: no inputs, owners or results.
-      const usage = await store.agentUsage(windowMs);
-      const known = new Map(allAgents().map((a) => [a.id, a]));
-      return json(200, {
-        windowMs,
-        agents: usage.map((u) => {
-          const spec = known.get(u.agent);
-          return { ...u, kind: spec?.kind ?? "unknown", exposure: spec ? agentExposure(spec) : "unknown", dailyLimit: spec ? agentDailyLimit(spec) : null, budget: spec ? budgetLimitsFor(spec.id) : null };
-        }),
-      });
-    }
-    if (url.pathname === "/api/metrics") {
-      let windowMs = 86_400_000;
-      const q = url.searchParams.get("windowMs");
-      if (q) {
-        const n = Number(q);
-        if (!Number.isFinite(n) || n <= 0 || n > 31 * 86_400_000) return json(400, { error: "windowMs must be 1ms..31 days" });
-        windowMs = n;
-      }
-      const snap = await store.metrics(windowMs);
-      const alarmMs = queueAlarmMs();
-      // Open to operators; authed users only see queue-level aggregates (no per-tenant content).
-      // How each model provider has been answering this process's live calls (llm/health.ts).
-      return json(200, {
-        ...snap,
-        alarm: { state: alarmState(snap.queue.oldestQueuedMs, alarmMs), thresholdMs: alarmMs },
-        providers: providerHealth(windowMs),
-        // A live preview is an x264 encoder this process is running; at fleet scale it is real
-        // CPU the capacity math in docs/SCALING.md has to account for, so it is counted here.
-        live: { previews: liveSessionCount(), limit: LIVE_MAX_SESSIONS },
-      });
-    }
-    // ---------------------------------------------------------------- webhooks (owner-scoped)
-    if (url.pathname === "/api/webhooks" && req.method === "GET") {
-      const items = await store.webhooks(owner);
-      return json(200, { webhooks: items.map((w) => w.url), items });
-    }
-    if (url.pathname === "/api/webhooks" && req.method === "POST") {
-      const b = await readJson(req);
-      const u = String((b as any)?.url ?? "").trim();
-      if (!u) return json(400, { error: "url required" });
-      const problem = await webhookUrlProblem(u, blockPrivate);
-      if (problem) return json(400, { error: problem });
-      if ((await store.webhooks(owner)).length >= 10) return json(400, { error: "At most 10 webhooks per account." });
-      const webhook = await store.addWebhook(owner, u);
-      const items = await store.webhooks(owner);
-      return json(201, { webhook, webhooks: items.map((w) => w.url), items });
-    }
-    if (url.pathname === "/api/webhooks/deliveries" && req.method === "GET") {
-      return json(200, { deliveries: await store.deliveries(owner, clampInt(url.searchParams.get("limit"), 1, 200, 50)) });
-    }
-    const webhookDeleteMatch = /^\/api\/webhooks(?:\/(.+))?$/.exec(url.pathname);
-    if (webhookDeleteMatch && req.method === "DELETE") {
-      const target = webhookDeleteMatch[1] ? decodeURIComponent(webhookDeleteMatch[1]) : String(((await readJson(req).catch(() => ({}))) as any)?.url ?? "").trim();
-      if (!target) return json(400, { error: "url or id required" });
-      const removed = await store.removeWebhook(owner, target);
-      const items = await store.webhooks(owner);
-      return json(removed ? 200 : 404, { webhooks: items.map((w) => w.url), items, ...(removed ? {} : { error: "webhook not found" }) });
-    }
-    // ---------------------------------------------------------------- schedules (owner-scoped)
-    if (url.pathname === "/api/schedules" && req.method === "GET") {
-      return json(200, { schedules: await store.schedules(owner) });
-    }
-    if (url.pathname === "/api/schedules" && req.method === "POST") {
-      const b = (await readJson(req).catch(() => ({}))) as any;
-      let sched;
-      try {
-        sched = newSchedule(owner, { url: b?.url, interval: b?.interval ?? b?.cron ?? b?.every, intervalMs: b?.intervalMs, authorized: b?.authorized === true });
-      } catch (e) {
-        return json(400, { error: e instanceof Error ? e.message : String(e) });
-      }
-      if (blockPrivate) {
-        const blocked = await blockedHost(new URL(sched.url).hostname);
-        if (blocked) return json(400, { error: blocked });
-      }
-      // Exposed servers: a schedule must not recur faster than every 15 minutes or exceed 20 per account.
-      if (exposed && sched.intervalMs < 15 * 60_000) return json(400, { error: "Schedules on a shared server run at most every 15 minutes." });
-      if ((await store.schedules(owner)).length >= 20) return json(400, { error: "At most 20 schedules per account." });
-      await store.addSchedule(sched);
-      return json(201, { schedule: sched, schedules: await store.schedules(owner) });
-    }
-    const scheduleDeleteMatch = /^\/api\/schedules(?:\/(.+))?$/.exec(url.pathname);
-    if (scheduleDeleteMatch && req.method === "DELETE") {
-      const id = scheduleDeleteMatch[1] ? decodeURIComponent(scheduleDeleteMatch[1]) : String(((await readJson(req).catch(() => ({}))) as any)?.id ?? url.searchParams.get("id") ?? "");
-      if (!id) return json(400, { error: "id required" });
-      const removed = await store.removeSchedule(id, owner);
-      return json(removed ? 200 : 404, { schedules: await store.schedules(owner), ...(removed ? {} : { error: "schedule not found" }) });
-    }
-    if (url.pathname === "/api/run") {
-      const dir = url.searchParams.get("dir") ?? "";
-      const detail = canSeeLab(dir) ? data.run(dir) : null;
-      return detail ? json(200, detail) : json(404, { error: "run not found" });
-    }
-    const transcriptMatch = /^\/api\/recordings\/([\w.-]+)\/transcript$/.exec(url.pathname);
-    if (transcriptMatch && req.method === "GET") {
-      const id = transcriptMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "not found" });
-      // The summary is the recording's own document wherever the media lives. Reading it from
-      // the store keeps transcripts working when recording.json is in object storage, where a
-      // locate() is a redirect to a file the browser would download instead of the server read.
-      const summary: RecordingSummary = row.summary;
-      const caps = summary.captions ?? [];
-      const format = (url.searchParams.get("format") ?? "json").toLowerCase();
-      if (format === "json") return json(200, { captions: caps });
-      if (format === "srt") {
-        const body = toSrt(caps);
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
-        return void res.end(body);
-      }
-      if (format === "vtt") {
-        const body = toVtt(caps);
-        res.writeHead(200, { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
-        return void res.end(body);
-      }
-      if (format === "md" || format === "markdown") {
-        // The whole visit as one document: the pages it opened, the narration it spoke, the
-        // owner's notes and what the recorder found. Meant to be pasted somewhere else.
-        const notes = await store.annotations(id, row.owner ?? null);
-        const body = transcriptMarkdown({
-          url: summary.url ?? "",
-          createdAt: summary.createdAt,
-          durationMs: summary.durationMs ?? 0,
-          pages: summary.pages ?? [],
-          captions: caps,
-          notes: notes.map((n) => ({ at: n.at, text: n.text })),
-          findings: summary.insights?.findings ?? [],
-        });
-        res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders });
-        return void res.end(body);
-      }
-      return json(400, { error: "unknown format" });
-    }
-    // The same visit as a step-by-step guide: every page it opened and every click and fill,
-    // each with a picture of the screen at that moment. HTML to read or print, Markdown to paste.
-    const guideMatch = /^\/api\/recordings\/([\w.-]+)\/guide$/.exec(url.pathname);
-    if (guideMatch && req.method === "GET") {
-      const id = guideMatch[1]!;
-      const row = await findRecording(id);
-      if (!row || !canSee(row.owner)) return json(404, { error: "not found" });
-      if (!row.summary) return json(404, { error: "not found" });
-      return sendGuide(id, row.summary, (url.searchParams.get("format") ?? "html").toLowerCase(), `/files/recordings/${encodeURIComponent(id)}/`);
-    }
-
-    if (url.pathname.startsWith("/files/")) {
-      let rel: string;
-      try {
-        rel = decodeURIComponent(url.pathname.slice("/files/".length));
-      } catch {
-        return json(400, { error: "bad path" });
-      }
-      // Accept a backslash as a separator too: recordings indexed before this was normalised on
-      // Windows carry "recordings\<id>" in their `dir`, and those are already on disk.
-      const rec = /^recordings[\\/]([^\\/]+)[\\/]([^\\/]+)$/.exec(rel);
-      if (rec) {
-        const [, id, file] = rec as unknown as [string, string, string];
-        const row = await findRecording(id);
-        if (!row || !canSee(row.owner)) return json(404, { error: "not found" });
-        const where = await media.locate(id, file);
-        if (!where) return json(404, { error: "not found" });
-        if ("redirect" in where) return redirect(where.redirect);
-        return streamFile(req, res, where.path, TYPES[extname(file).toLowerCase()] ?? "application/octet-stream", "private, max-age=3600");
-      }
-      const abs = data.safe(rel);
-      const type = abs ? TYPES[extname(abs).toLowerCase()] : undefined;
-      const inRecordings = !!abs && (abs === join(data.root, "recordings") || abs.startsWith(join(data.root, "recordings") + sep));
-      if (!abs || !type || !existsSync(abs) || inRecordings || !canSeeLab(abs)) return json(404, { error: "not found" });
-      return streamFile(req, res, abs, type, "private, max-age=3600");
-    }
-    if (url.pathname === "/walkthrough.mp4" || url.pathname === "/walkthrough.vtt") {
-      // The product walkthrough video, bundled with the desktop app so new users can watch it
-      // before they've made their first recording. Served from the app's own static directory.
-      const abs = join(dirname(fileURLToPath(import.meta.url)), "static", url.pathname.slice(1));
-      const type = TYPES[extname(abs).toLowerCase()] ?? "application/octet-stream";
-      return streamFile(req, res, abs, type, "public, max-age=86400, immutable");
-    }
-    if (url.pathname === "/app" || url.pathname === "/app/") {
-      // Nothing of the app is shown before sign-in when accounts are required: not even the shell.
-      if (requireAuth && !user) return redirect(`/login?next=${encodeURIComponent("/app")}`);
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "X-Content-Type-Options": "nosniff",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
-        "X-Robots-Tag": "noindex, nofollow",
-      });
-      return void res.end(html);
-    }
     {
       res.writeHead(404, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", ...securityHeaders, "X-Robots-Tag": "noindex, follow" });
       return void res.end(notFoundPage());
@@ -2039,7 +453,7 @@ try {
     }
   }
 
-  return {
+  Object.assign(self, {
     handler,
     store,
     media,
@@ -2047,338 +461,76 @@ try {
     auth: auth.kind,
     requireAuth,
     drain() {
-      draining = true;
+      state.draining = true;
       webhookDispatcher.stop();
       scheduler.stop();
       queueMonitor.stop();
     },
-  };
-}
-
-const STATUS_TTL_MS = Number(process.env.LAB_STATUS_TTL_MS ?? 1500);
-const STATUS_CACHE_MAX = 20_000;
-const statusCache = new Map<string, { body: string; etag: string; owner: string | null; at: number }>();
-
-const CAPABILITIES_TTL_MS = Number(process.env.LAB_CAPABILITIES_TTL_MS ?? process.env.CAPABILITIES_TTL_MS ?? 5000);
-const CAPABILITIES_CACHE_MAX = 100;
-const capabilitiesCache = new Map<string, { payload: unknown; at: number }>();
-
-function setStatusCache(id: string, body: string, etag: string, owner: string | null) {
-  if (statusCache.size >= STATUS_CACHE_MAX) {
-    const first = statusCache.keys().next().value;
-    if (first) statusCache.delete(first);
-  }
-  statusCache.set(id, { body, etag, owner, at: Date.now() });
-}
-
-function publicJob(job: Job) {
-  const { secret: _secret, input, ...rest } = job;
-  // Never echo a password back; the URL and settings are fine to show to their owner.
-  return { ...rest, input: { ...input } };
+    killTasks() {
+      desktopTasks.killAll();
+    },
+  } satisfies App);
+  return self;
 }
 
 /**
- * A queued job also carries its place in line, so the app can say "1 job ahead of you" instead of
- * showing an indefinite spinner. The position is a nicety: a job's status must never fail because
- * the queue counters could not be read.
+ * How a request is logged. The dashboard polls job status, health and the live preview every
+ * second or two; at info those lines buried everything else in the log, so they go at debug.
  */
-async function withQueue(store: Store, job: Job) {
-  const base = publicJob(job);
-  if (job.status !== "queued") return base;
-  try {
-    const { ahead, oldestQueuedMs }: QueuePosition = await store.queuePosition(job.createdAt);
-    return { ...base, queue: { ahead, oldestQueuedMs, waitingMs: Math.max(0, Date.now() - Date.parse(job.createdAt)) } };
-  } catch {
-    return base;
-  }
-}
-
-/** Compare a share token in constant time, so response timing says nothing about how close a guess was. */
-function sameToken(stored: string, given: string): boolean {
-  const a = Buffer.from(stored);
-  const b = Buffer.from(given);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** A recording's summary as it is on disk now, or `fallback` when it can no longer be read. */
-function rereadSummary<T extends RecordingSummary>(file: string, fallback: T): T {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-const LIVE_RUNS_OFF = "Live model runs are disabled on this server (they cost money). Set LAB_ALLOW_LIVE_RUNS=1 to allow them.";
-
-/** An agent whose turns are model calls, so a live run of it spends provider credits. */
-function isModelBacked(agentId: string): boolean {
-  return allAgents().some((a) => a.id === agentId && a.kind === "stagehand");
-}
-
-/** Whether replaying `fixture` with `agent` would play recorded calls rather than call the model. */
-function replaysRecordedCalls(root: string, fixture: string, agent: string): boolean {
-  try {
-    const manifest = JSON.parse(readFileSync(join(root, fixture, "manifest.json"), "utf8")) as { original?: { agent?: { id?: string }; model?: { cassette?: string } } };
-    const cassette = manifest.original?.model?.cassette;
-    return manifest.original?.agent?.id === agent && typeof cassette === "string" && existsSync(join(root, fixture, cassette));
-  } catch {
-    return false;
-  }
-}
-
-export function validateRun(b: Record<string, unknown>, allowLiveRuns: boolean, root = process.cwd()): Record<string, unknown> {
-  const op = b.op === undefined ? "run" : String(b.op);
-  if (!["run", "replay", "experiment"].includes(op)) throw new AuthError(400, `Unknown lab operation "${op}".`);
-  const known = (id: string) => allAgents().some((a) => a.id === id);
-  const trials = Math.max(1, Math.min(5, Math.trunc(Number(b.trials ?? (op === "replay" ? 3 : 1)) || 1)));
-  if (op === "replay") {
-    // A fixture the index listed: a relative path under fixtures/, runs/_fixtures/ or results/<exp>/fixtures/.
-    const fixture = String(b.fixture ?? "").replace(/\\/g, "/");
-    if (!/^(fixtures|runs\/_fixtures|results\/[\w.-]+\/fixtures)\/[\w.+-]+$/.test(fixture) || !existsSync(join(root, fixture, "manifest.json"))) {
-      throw new AuthError(400, "That fixture doesn't exist here.");
-    }
-    const agent = String(b.agent ?? "v1");
-    if (!known(agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
-    // How the agent's model answers: the recorded calls, the deterministic stand-in, or a live
-    // model. Without this the choice was made for the person — a browser agent whose fixture
-    // holds no recorded calls was pushed into a live run, which needs a key and costs money,
-    // and the replay could not be tried at all without one.
-    const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
-    if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
-    if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, LIVE_RUNS_OFF);
-    // No mode given: a model-backed agent replays the fixture's recorded calls when it is the
-    // agent that made them, and otherwise goes live (lab/fixture.ts). Decide that here, where the
-    // live-run switch is checked, so leaving the field out is never a way past it.
-    if (modelMode === undefined && isModelBacked(agent) && !allowLiveRuns) {
-      if (!replaysRecordedCalls(root, fixture, agent)) throw new AuthError(403, `${LIVE_RUNS_OFF} This fixture has no recorded model calls for agent ${agent}, so replaying it would call the model live.`);
-      return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead", modelMode: "replay" };
-    }
-    return { op, fixture, agent, trials, fault: "none", seed: 1, task: "create-lead", ...(modelMode ? { modelMode } : {}) };
-  }
-  if (op === "experiment") {
-    // Scripted agents only: an experiment is dozens of runs, and from the app it must never spend
-    // model credits by accident.
-    const scripted = (id: string) => allAgents().some((a) => a.id === id && a.kind === "scripted");
-    const baseline = String(b.baseline ?? "v0");
-    const candidates = (Array.isArray(b.candidates) ? b.candidates : ["v1", "v2"]).map(String).filter((c) => c !== baseline).slice(0, 4);
-    for (const id of [baseline, ...candidates]) if (!scripted(id)) throw new AuthError(400, `Experiments from the app use the scripted agents only; "${id}" isn't one.`);
-    if (candidates.length === 0) throw new AuthError(400, "Pick at least one candidate agent to compare with the baseline.");
-    const seeds = Math.max(1, Math.min(3, Math.trunc(Number(b.seeds ?? 1)) || 1));
-    const task: TaskId = isTaskId(String(b.task ?? "")) ? (b.task as TaskId) : "create-lead";
-    return { op, baseline, candidates, trials: Math.min(trials, 3), seed: seeds, agent: baseline, fault: "none", task };
-  }
-  const agent = String(b.agent ?? "v0");
-  if (!allAgents().some((a) => a.id === agent)) throw new AuthError(400, `Unknown agent "${agent}".`);
-  const modelMode = b.modelMode === undefined ? undefined : String(b.modelMode);
-  if (modelMode !== undefined && !["live", "replay", "scripted"].includes(modelMode)) throw new AuthError(400, `Unknown model mode "${modelMode}".`);
-  if (modelMode === "live" && !allowLiveRuns) throw new AuthError(403, LIVE_RUNS_OFF);
-  // A model-backed agent with no mode runs live (lab/runner.ts): the same switch applies.
-  if (modelMode === undefined && isModelBacked(agent) && !allowLiveRuns) {
-    throw new AuthError(403, `${LIVE_RUNS_OFF} Pick the scripted or replay model mode for agent ${agent}.`);
-  }
-  let fault: string;
-  try {
-    fault = normalizeScenario(String(b.fault ?? "none"));
-  } catch (e) {
-    throw new AuthError(400, e instanceof Error ? e.message : String(e));
-  }
-  const task: TaskId = isTaskId(String(b.task ?? "")) ? (b.task as TaskId) : "create-lead";
-  const seed = Number.isFinite(Number(b.seed)) ? Math.trunc(Number(b.seed)) : 1;
-  return { agent, fault, task, seed, ...(modelMode ? { modelMode } : {}) };
-}
-
-/** Sample-site recordings: always on the desktop, opt-in (LAB_DEMO_SITE=1) on a shared server. */
-export function demoSiteEnabled(exposed: boolean): boolean {
-  return !exposed || process.env.LAB_DEMO_SITE === "1";
-}
-
-function validateRecord(b: Record<string, unknown>, exposed: boolean): Record<string, unknown> {
-  const pagesIn = Number(b.maxPages);
-  if (b.demo === true) {
-    // The worker starts its own sample CRM and records that: no user-supplied URL, nothing the
-    // SSRF guard needs to judge, and it works when the worker is a separate machine.
-    if (!demoSiteEnabled(exposed)) throw new AuthError(403, "The sample site is turned off on this server.");
-    return {
-      demo: true,
-      url: "sample:minicrm",
-      maxPages: Number.isFinite(pagesIn) ? Math.max(1, Math.min(10, Math.trunc(pagesIn))) : 5,
-      ...(isVoice(b.voice) ? { voice: b.voice } : {}),
-      // The sample site narrates with the voice the person picked, like any other recording.
-      ...voiceBlock(b),
-      ...lengthBlock(b),
-      ...(b.zoom === false ? { zoom: false } : {}),
-      ...(b.narration === "plain" ? { narration: "plain" } : {}),
-      blockPrivate: false,
-    };
-  }
-  if (b.authorized !== true) throw new AuthError(400, "Confirm that you own this site or are authorized to test it.");
-  if (typeof b.url !== "string" || !b.url.trim()) throw new AuthError(400, "Paste the site's URL.");
-  let url: URL;
-  try {
-    url = new URL(b.url.trim());
-  } catch {
-    throw new AuthError(400, "That doesn't look like a web address. Paste the full link, starting with https://");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") throw new AuthError(400, "Only http(s) addresses can be recorded.");
-  return {
-    url: url.toString(),
-    ...(typeof b.username === "string" && b.username ? { username: b.username.slice(0, 200) } : {}),
-    maxPages: Number.isFinite(Number(b.maxPages)) ? Math.max(1, Math.min(30, Math.trunc(Number(b.maxPages)))) : 8,
-    ...lengthBlock(b),
-    ...(isVoice(b.voice) ? { voice: b.voice } : {}),
-    ...voiceBlock(b),
-    ...journeyBlock(b),
-    ...(b.zoom === false ? { zoom: false } : {}),
-    ...(b.narration === "plain" ? { narration: "plain" } : {}),
-    blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
-  };
+export function requestLogLevel(method: string | undefined, path: string): "debug" | "info" {
+  if (path === "/healthz" || path === "/readyz") return "debug";
+  if ((method === "GET" || method === "HEAD") && (path.startsWith("/api/jobs/") || path.startsWith("/api/launch-videos/jobs/"))) return "debug";
+  return "info";
 }
 
 /**
- * A journey: the path through the site to record, one step per line.
- *
- * Only the text is taken; the steps are read by the recorder itself, so a line that cannot be
- * read is reported in the walkthrough rather than refused here.
+ * The Host values a loopback-only server answers to. Anything else is a DNS-rebinding attempt: a
+ * page on evil.example re-pointed its own name at 127.0.0.1, so the browser treats the request as
+ * same-origin to evil.example — the Origin check alone can't tell.
  */
-function journeyBlock(b: Record<string, unknown>): { journey?: string } {
-  const journey = typeof b.journey === "string" ? b.journey.trim() : "";
-  if (!journey) return {};
-  return { journey: journey.slice(0, 4000) };
+export function allowedLoopbackHost(hostHeader: string | undefined, port: number | undefined): boolean {
+  if (!hostHeader || !port) return false;
+  const h = hostHeader.trim().toLowerCase();
+  const names = ["127.0.0.1", "localhost", "[::1]"];
+  return names.some((n) => h === `${n}:${port}` || (port === 80 && h === n));
 }
 
-/** The length cap in seconds, or nothing for "as many pages as it reaches". */
-function lengthBlock(b: Record<string, unknown>): { maxSeconds?: number } {
-  const asked = Number(b.maxSeconds);
-  return Number.isFinite(asked) && asked > 0 ? { maxSeconds: Math.max(15, Math.min(3600, Math.trunc(asked))) } : {};
+function extraAllowedHosts(): string[] {
+  return (process.env.LAB_ALLOWED_HOSTS ?? "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 }
 
-/** The provider, its voice and its language, validated against what that provider actually has. */
-function voiceBlock(b: Record<string, unknown>): { ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string } {
-  // "polly" and "maya" are older aliases of two providers still in the list.
-  const allowed = [...TTS_PROVIDERS, "polly", "maya"];
-  const ttsProvider = typeof b.ttsProvider === "string" && allowed.includes(b.ttsProvider.toLowerCase() as typeof allowed[number]) ? b.ttsProvider.toLowerCase() : undefined;
-  if (!ttsProvider) return {};
-  // A chosen voice must be one this provider actually has, unless the provider has no public list
-  // (Murf, a custom endpoint), where the id is passed through as typed.
-  const chosen = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
-  const list = voicesFor(ttsProvider);
-  const ttsVoice = chosen && (list.length === 0 || list.some((v) => v.id === chosen)) ? chosen : undefined;
-  // A language is only meaningful where the provider needs one and the voice doesn't carry it.
-  const asked = typeof b.ttsLanguage === "string" ? b.ttsLanguage.trim().slice(0, 20) : "";
-  const ttsLanguage = /^[a-z]{2,3}([-_][A-Za-z]{2,4})?$/i.test(asked) ? asked.replace("_", "-") : undefined;
-  return { ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}) };
-}
-
-async function readBodyToTemp(req: IncomingMessage, limit: number, _prefix: string): Promise<string> {
-  const fs = await import("node:fs");
-  const os = await import("node:os");
-  const path = await import("node:path");
-  const tmpDir = path.join(os.tmpdir(), "walkcast-voiceover");
-  fs.mkdirSync(tmpDir, { recursive: true });
-  const file = path.join(tmpDir, `${randomUUID()}.bin`);
-  const { createWriteStream } = await import("node:fs");
-  // Pipe chunks to disk instead of buffering, so a 40 MB voice doesn't pin the event loop.
-  const out = createWriteStream(file);
-  let size = 0;
-  try {
-    for await (const chunk of req as AsyncIterable<Buffer>) {
-      size += chunk.length;
-      if (size > limit) throw new AuthError(413, "That recording is too large.");
-      if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
-    }
-    out.end();
-    await new Promise<void>((resolve, reject) => {
-      out.on("finish", () => resolve());
-      out.on("error", reject);
-    });
-  } catch (e) {
-    fs.rmSync(file, { force: true });
-    if (out && !out.destroyed) out.destroy();
-    throw e;
+/** The inline scripts of the dashboard page, as CSP hashes, so script-src needs no 'unsafe-inline'. */
+export function inlineScriptHashes(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    out.push(`'sha256-${createHash("sha256").update(m[1]!, "utf8").digest("base64")}'`);
   }
-  if (!size) {
-    fs.rmSync(file, { force: true });
-    throw new AuthError(400, "No audio received.");
-  }
-  return file;
-}
-function validateCaptions(raw: unknown): { start: number; end: number; text: string }[] {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) throw new AuthError(400, "The script needs between 1 and 500 lines.");
-  return raw.map((c, i) => {
-    const x = c as { start?: unknown; end?: unknown; text?: unknown };
-    const start = Number(x.start);
-    const end = Number(x.end);
-    const text = typeof x.text === "string" ? x.text.replace(/\s+/g, " ").trim().slice(0, 400) : "";
-    if (!Number.isFinite(start) || start < 0 || !Number.isFinite(end) || !text) throw new AuthError(400, `Line ${i + 1} of the script is empty or has no time.`);
-    return { start, end: Math.max(end, start), text };
-  });
+  return [...new Set(out)];
 }
 
-async function readJson(req: IncomingMessage, limit = 100_000): Promise<Record<string, unknown>> {
-  let body = "";
-  for await (const chunk of req) {
-    body += chunk;
-    if (body.length > limit) throw new AuthError(413, "Request body too large.");
-  }
-  try {
-    const value = JSON.parse(body || "{}") as unknown;
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
-    return value as Record<string, unknown>;
-  } catch {
-    throw new AuthError(400, "Request body must be a JSON object.");
-  }
-}
-
-/** A moment in words: "20 Oct 2026, 10:00". A raw timestamp tells a reader nothing. */
-function readableWhen(iso: string): string {
-  const when = new Date(iso);
-  if (Number.isNaN(when.getTime())) return iso;
-  return `${when.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}, ${when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
-}
-
-function clampInt(raw: string | number | null | undefined, min: number, max: number, fallback: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && raw !== null && raw !== undefined && raw !== "" ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
-}
-
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms))]);
-}
-
-/** The client's address; behind a reverse proxy set LAB_TRUST_PROXY=1 to use X-Forwarded-For. */
-function clientIp(req: IncomingMessage): string {
-  const forwarded = process.env.LAB_TRUST_PROXY === "1" ? String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim() : "";
-  return forwarded || req.socket.remoteAddress || "?";
-}
-
-/** Serve a file with byte-range support, so video players can seek. */
-function streamFile(req: IncomingMessage, res: ServerResponse, abs: string, type: string, cache: string): void {
-  let size: number;
-  try {
-    const st = statSync(abs);
-    if (!st.isFile()) { res.writeHead(404); res.end(); return; }
-    size = st.size;
-  } catch {
-    res.writeHead(404); res.end(); return;
-  }
-  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
-  if (range && (range[1] || range[2])) {
-    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
-    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
-    if (start > end || start >= size) {
-      res.writeHead(416, { "Content-Range": `bytes */${size}` });
-      res.end();
-      return;
-    }
-    res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Cache-Control": cache });
-    const s = createReadStream(abs, { start, end }).on("error", () => { if (!res.headersSent) { res.writeHead(500); } res.end(); });
-    s.pipe(res);
-    return;
-  }
-  res.writeHead(200, { "Content-Type": type, "Cache-Control": cache, "Accept-Ranges": "bytes", "Content-Length": size });
-  const s = createReadStream(abs).on("error", () => { if (!res.headersSent) { res.writeHead(500); } res.end(); });
-  s.pipe(res);
+/**
+ * The dashboard's Content-Security-Policy. The page is one self-contained file (vite single-file:
+ * the bundle is an inline module script, assets are data: URIs), so scripts are pinned by hash.
+ * Styles stay 'unsafe-inline': the bundle inlines its stylesheet and components set style
+ * attributes. hls.js plays the live preview through blob: URLs and a blob: worker; recordings in
+ * object storage are presigned https: redirects. The desktop shell's IPC is ipc:/ipc.localhost.
+ */
+export function dashboardCsp(scriptHashes: string[]): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${scriptHashes.join(" ")}`.trim(),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' ipc: http://ipc.localhost",
+    "worker-src 'self' blob:",
+    "frame-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join("; ");
 }
 
 export interface ExportOptions {
@@ -2441,15 +593,4 @@ export function exportDashboard(options: ExportOptions): { path: string; runs: n
   }
   writeFileSync(options.out, html);
   return { path: options.out, runs: Object.keys(details).length, bytes: Buffer.byteLength(html) };
-}
-
-/** Move a file, across filesystems too: a rename between two mounts or drives fails with EXDEV. */
-function moveFile(from: string, to: string): void {
-  try {
-    renameSync(from, to);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
-    copyFileSync(from, to);
-    rmSync(from, { force: true });
-  }
 }

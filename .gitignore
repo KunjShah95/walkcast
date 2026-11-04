@@ -3,6 +3,8 @@ node_modules
 # slash: the old ".walkcast-credentials.json/" only matched a *directory* of that name and let
 # the file itself through to `git add -A`.
 .walkcast-credentials.json
+.walkcast-credentials.enc
+secret.key
 .walkcast/
 chrome/
 runs/

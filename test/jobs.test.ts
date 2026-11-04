@@ -116,12 +116,13 @@ if (process.env.TEST_DATABASE_URL) {
 
 for (const [name, open] of stores) {
   describe(`queued recording end to end (${name} store)`, () => {
-    // These real-browser queue tests pass locally but leave jobs running past the bounded polling
-    // window on GitHub-hosted runners (issue #6). Keep them active locally; quarantine only in CI
-    // until the runner-specific timing issue is resolved. Each request has its own timeout.
+    // Issue #6: on slow CI runners the recording outlived the old fixed 200-poll window, and the
+    // finally block then hung in srv.close() because Worker.stop() waited unboundedly for an
+    // aborted job to unwind. stop() now bounds that wait (abortWaitMs) and the poll below runs to a
+    // deadline inside the test timeout, so a slow runner fails with the job state, never a hang.
     test(
       "sign up, submit twice with one idempotency key, poll the job, watch the result",
-      { timeout: 240_000, skip: process.env.CI === "true" ? "Quarantined: GitHub runner timing issue #6" : false },
+      { timeout: 240_000 },
       async () => {
         const root = mkdtempSync(join(tmpdir(), "e2e-"));
         const store = await open();
@@ -176,7 +177,7 @@ for (const [name, open] of stores) {
             result?: { dir: string; id: string };
             error?: string;
           };
-          for (let i = 0; i < 200 && (job.status === "queued" || job.status === "running"); i++) {
+          for (const until = Date.now() + 180_000; Date.now() < until && (job.status === "queued" || job.status === "running"); ) {
             await new Promise((r) => setTimeout(r, 500));
             job = (
               (await (
@@ -243,10 +244,9 @@ for (const [name, open] of stores) {
 }
 
 if (process.env.TEST_DATABASE_URL) {
-  // Same runner-specific timing issue as the queued-recording tests above; still runs locally.
   test(
     "production shape: web-only server + a separate worker process sharing Postgres",
-    { timeout: 240_000, skip: process.env.CI === "true" ? "Quarantined: GitHub runner timing issue #6" : false },
+    { timeout: 240_000 },
     async () => {
       const { Worker } = await import("../packages/core/src/jobs/worker.ts");
       const { randomBytes } = await import("node:crypto");
@@ -296,7 +296,7 @@ if (process.env.TEST_DATABASE_URL) {
 
         const worker = new Worker({ store: workerStore, media, root, pollMs: 200 }).start();
         let status = "queued";
-        for (let i = 0; i < 300 && (status === "queued" || status === "running"); i++) {
+        for (const until = Date.now() + 180_000; Date.now() < until && (status === "queued" || status === "running"); ) {
           await new Promise((res) => setTimeout(res, 500));
           status = (await web.job(job.id))!.status;
         }

@@ -70,9 +70,6 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
       live = false;
     };
   }, []);
-  useEffect(() => {
-    if (initialUrl) setUrl(initialUrl);
-  }, [initialUrl]);
 
   const target = demo ? "sample:minicrm" : normalizeUrl(url);
   const limitHit = caps?.limits && caps.usage ? caps.usage.recordingsToday >= caps.limits.recordingsPerDay : false;
@@ -82,6 +79,14 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const { job: activeJob } = useActiveJob();
   const otherJob = !busy && activeJob && activeJob.kind !== "record" ? activeJob : null;
   const ready = Boolean(target) && authorized && !blocked && !otherJob && !busy && settled;
+
+  // A deep link or a dropped URL feeds initialUrl. While a recording is starting or running the
+  // field shows what is being recorded, so a new link must not rewrite it mid-job.
+  const recordingNow = busy || activeJob?.kind === "record";
+  useEffect(() => {
+    if (initialUrl && !recordingNow) setUrl(initialUrl);
+    // Only a new link should apply; the job ending must not bring back an old one.
+  }, [initialUrl]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -81,12 +81,22 @@ On completion, `result` is:
   "succeeded": 2,
   "failed": 1,
   "items": [
-    { "recordingId": "rec-1", "status": "ok" },
+    { "recordingId": "rec-1", "status": "ok", "file": "recording-vertical.mp4" },
     { "recordingId": "rec-2", "status": "error", "error": "Recording not found." },
-    { "recordingId": "rec-3", "status": "ok" }
+    { "recordingId": "rec-3", "status": "ok", "file": "recording-vertical.mp4" }
   ]
 }
 ```
+
+An `ok` item's `file` is the export's file name inside the recording's folder (served at
+`/files/recordings/<id>/<file>`; on the desktop app, `POST /api/recordings/<id>/reveal` with
+`{ "file": "<file>" }` shows it in the file manager).
+
+A client that lost the job id (a reload) finds a running batch again with
+`GET /api/jobs/mine?kind=batch-render` (or `?kind=any` for the newest active job of any kind).
+
+The job fails at once, without retrying, when the disk has less than `LAB_MIN_FREE_DISK_MB`
+(default 1024) free: `Not enough free disk space (X MB free, need Y MB).`
 
 Per-item failures (a recording deleted after the job was enqueued, a corrupt or missing
 source file, an ownership mismatch discovered again at render time) are caught and recorded

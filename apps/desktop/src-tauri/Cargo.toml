@@ -34,6 +34,21 @@ tauri-plugin-deep-link = "2"
 # to the deep-link plugin of the running app. Without it the URL was dropped and the window only
 # came to the front, so browser sign-in never finished.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# "Walkthrough ready" when a job finishes while the window is closed or in the background.
+tauri-plugin-notification = "2"
+# The per-run shutdown token and the first-run master key.
+getrandom = "0.3"
+
+# The app server's master key lives in the OS keychain, not in a file beside the data it protects.
+# One native store per platform; Secret Service on Linux needs libdbus-1-dev to build.
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [dev-dependencies]
 # Only so the tests can exercise Tauri's own capability-URL matcher against the pattern in

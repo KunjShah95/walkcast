@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume2, Globe2 } from "lucide-react";
 import type { Route } from "../App.tsx";
-import { normalizeUrl } from "../components/RecordBar.tsx";
+import { normalizeUrl, RecordBar } from "../components/RecordBar.tsx";
 import { Empty, PageHead, fieldClass } from "../components/ui.tsx";
-import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo, startRecording } from "../lib/api.ts";
+import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo } from "../lib/api.ts";
 import type { LabIndex } from "../lib/types.ts";
 import { ago, ms } from "../lib/format.ts";
-import { LoaderCircle } from "lucide-react";
 
 const FALLBACK_VOICES = [
   { id: "af_heart", name: "Heart · American English" },
@@ -30,27 +29,10 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [task, setTask] = useState<DesktopTaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [recordingJob, setRecordingJob] = useState<{ url: string; onProgress?: (s: any) => void } | null>(null);
-  const [recording, setRecording] = useState(false);
-
   useEffect(() => {
     if (!recordings.some((recording) => recording.id === selected)) setSelected(recordings[0]?.id ?? "");
   }, [recordings, selected]);
   useEffect(() => { void loadTtsProviders().then(setProviders); }, []);
-  useEffect(() => {
-    if (!siteUrl || recording || !/^https?:\\/\\//i.test(siteUrl)) return;
-    // Start recording job for the website URL
-    let progressFn: ((s: any) => void) | undefined;
-    progressFn = async (status: any) => {
-      if (status.status === "complete" || status.status === "failed") {
-        setRecordingJob(null);
-        setRecording(false);
-      }
-    };
-    setRecordingJob({ url: siteUrl, onProgress: progressFn });
-    setRecording(true);
-    void startRecording({ url: siteUrl, authorized: true, maxPages: 50, maxSeconds: 300 }, progressFn);
-  }, [siteUrl, recording, refresh]);
   useEffect(() => {
     if (!task || task.status !== "running") return;
     const timer = window.setInterval(() => {
@@ -141,17 +123,9 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   <h2 className="text-[15px] font-semibold">Record a website to begin</h2>
                   <p className="text-[12.5px] leading-5 text-ink-3">Paste your website above, record its pages, then return here and select that recording to build the film.</p>
                 </div>
-                {recording ? (
-                  <div className="flex items-center gap-3 mt-2 text-[12px] text-ink-3">
-                    <LoaderCircle className="h-4 w-4 animate-spin text-signal" />
-                    <span>Recording website…</span>
-                  </div>
-                ) : (
-                  <RecordBar onRecord={setSiteUrl} initial={siteUrl} />
-                )}
-                <button type="button" onClick={() => document.getElementById("launch-site-url")?.focus()} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[13.5px] font-semibold text-on-solid hover:brightness-110">
-                  Paste a website above <ArrowRight className="h-4 w-4" />
-                </button>
+                {/* Opens the recorder with the link filled in: the owner/authorized confirmation and the
+                    voice choice stay there, so a recording never starts from typing a URL here. */}
+                <RecordBar onRecord={(url) => go({ view: "record", url })} initial={siteUrl} />
               </div>
             )}
           </div>

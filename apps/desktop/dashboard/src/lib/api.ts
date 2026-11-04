@@ -805,3 +805,9 @@ export async function revealRecordingFile(id: string, file?: string): Promise<bo
   }
   return true;
 }
+
+/** An experiment with every arm the server accepts from the app: the task too. */
+export async function startExperimentOn(input: { baseline: string; candidates: string[]; seeds: number; trials: number; task: string }, onProgress?: (s: JobStatus) => void): Promise<string> {
+  const result = await submitForResult("/api/run", { op: "experiment", ...input }, onProgress);
+  return String(result.experiment ?? "");
+}

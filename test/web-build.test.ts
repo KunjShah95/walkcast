@@ -134,7 +134,7 @@ test("answer engines are told where the answer is", { timeout: 180_000 }, async 
     };
     const page = ld["@graph"].find((n) => n["@type"] !== "BreadcrumbList" && n.speakable);
     assert.ok(page?.speakable?.cssSelector?.length, `${path} marks its answer as speakable`);
-    assert.ok(html.includes("<p class=\"answer\">"), `${path} actually has the answer paragraph it points at`);
+    assert.match(html, /<p class="answer"[\s>]/, `${path} actually has the answer paragraph it points at`);
   }
 });
 

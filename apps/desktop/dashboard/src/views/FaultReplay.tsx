@@ -8,6 +8,8 @@ import { type Capabilities, SignInRequired, loadCapabilities, startRun } from ".
 import { cn, faultLabel, ms } from "../lib/format.ts";
 import { SCENARIOS, type Scenario, type ScenarioStep, scriptedStandIn } from "../lib/scenarios.ts";
 import type { LabIndex, RunSummary } from "../lib/types.ts";
+import { refreshActiveJob, useActiveJob } from "../lib/active-job.ts";
+import { ActiveJobNotice } from "./ActiveJobNotice.tsx";
 
 /**
  * Fault replay: a fixed library of failure scenarios that ship with the product.
@@ -25,6 +27,9 @@ export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: R
   const [error, setError] = useState<string | null>(null);
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const [liveDir, setLiveDir] = useState<string | null>(null);
+  // One job per account: say so before the button, not as a raw 429 after it.
+  const { job: activeJob } = useActiveJob();
+  const otherJob = !running && activeJob ? activeJob : null;
 
   useEffect(() => {
     loadCapabilities().then(setCaps);
@@ -72,13 +77,13 @@ export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: R
       setError((e as Error).message);
     } finally {
       setRunning(false);
+      void refreshActiveJob();
     }
   };
 
   return (
     <div className="grid gap-5">
       <div className="max-w-[74ch]">
-        <div className="eyebrow">Fault replay</div>
         <h1 className="font-display text-[28px] font-semibold leading-tight tracking-tight sm:text-[34px]">
           Watch a browser agent meet a broken app.
         </h1>
@@ -150,7 +155,7 @@ export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: R
                   <button
                     type="button"
                     onClick={runLive}
-                    disabled={running}
+                    disabled={running || Boolean(otherJob)}
                     title="Starts a real browser against the test app; about 30 seconds."
                     className="rounded-full bg-solid px-4 py-1.5 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95 disabled:opacity-60"
                   >
@@ -159,6 +164,7 @@ export function FaultReplay({ index, go, refresh }: { index: LabIndex; go: (r: R
                 ) : null
               }
             />
+            {caps.live && otherJob && <ActiveJobNotice job={otherJob} go={go} action="run this scenario" className="m-3" />}
             {error && (
               <p className="border-b border-line px-4 py-3 text-[13px] text-fail">
                 {error}{" "}

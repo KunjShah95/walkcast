@@ -5,22 +5,58 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
-## [0.10.0] - Unreleased
+## [0.10.0] - 2026-11-04
 
 ### Added
 
-- Batch render: select several recordings in the Library and re-frame them all to 9:16 or 1:1
-  in one background job, with progress, per-recording ok/failed results, and cancel.
-- `POST /api/recordings/batch-render` endpoint and `batch-render` job kind. All ids are checked
+- Batch render: select up to 10 recordings in the Library and re-frame them to 9:16 or 1:1 in
+  one background job, with progress, per-recording results with download and show-in-folder,
+  cancel, and re-attach after reload.
+- `POST /api/recordings/batch-render` endpoint and `batch-render` job kind; all ids are checked
   for existence and ownership before anything is enqueued; a batch counts as one active job.
-- `LAB_MAX_BATCH_RENDER_ITEMS` environment variable (default 10) caps recordings per batch.
-- Postgres migration `20261104000000_batch_render_jobs.sql` allowing the new job kind.
-- `docs/batch-render.md` and `scripts/batch-render-bench.mjs`.
+- Running-job chip in the header (replaces the always-on LIVE badge) and pre-checks of the
+  one-active-job limit on every start button.
+- Desktop notifications when a job finishes; `walkcast://record?url=` deep links and URL drop.
+- Share button plus a grouped Export menu in place of ten export buttons.
+- System / Light / Dark theme setting; reworked dark tokens with distinct signal, record and pass.
+- Lab: "Connect your agent" empty states, configurable Experiments that resume, Compare from Runs.
+- `GET /api/diagnostics` scrubbed JSON bundle and a Settings action to download it.
+- `POST /api/recordings/:id/reveal` (desktop) and `POST /api/shutdown` (desktop, token-gated).
+- Env vars `LAB_MAX_BATCH_RENDER_ITEMS`, `LAB_MIN_FREE_DISK_MB`, `LAB_LAUNCH_RENDER_TIMEOUT_MS`,
+  `LAB_ALLOWED_HOSTS`.
+- Postgres migration `20261104000000_batch_render_jobs.sql`.
 - Website: hero links to the product demo video guide and the Loom comparison.
+
+### Changed
+
+- Server routes split from one handler into `apps/desktop/server/routes/*` with a route table
+  and per-route auth labels; behavior locked by `test/route-inventory.test.ts`.
+- Desktop sidecar is pre-bundled with esbuild (about 6x faster start) and uses ports 4317-4326.
+- Releases publish as drafts, pass an installed-build smoke test on Windows, then are promoted;
+  optional Windows code signing when certificate secrets are configured.
+- Desktop logs rotate at 5 MB, keeping five; dashboard polling is logged at debug.
+
+### Fixed
+
+- Quitting during a recording no longer kills the local server mid-job; the quit guard and tray
+  status read the real worker state, and shutdown drains the running job.
+- Closing the window hides to the tray instead of quitting.
+- Batch-render deadline now covers a full ffmpeg encode per item; cancelling stops ffmpeg; the
+  recording summary is written atomically.
+- Checkmarks on accent backgrounds were unreadable in dark mode.
+- Launch Studio renders get a timeout, are killed on quit, and their temp folders are swept.
+- Job tests that were skipped in CI (issue #6) run again.
+- Jobs check free disk space before starting; ENOSPC is reported clearly.
+
+### Security
+
+- Provider keys and the job sealing key are encrypted with a master key held in the OS keychain;
+  plaintext credentials are migrated and removed.
+- Host-header check against DNS rebinding on the local server; Content Security Policy on `/app`.
+- Recording authorization confirmations are stored with user, URL and time.
 
 ### Known limitations
 
-- A running batch is not re-attached in the Library after a page reload.
 - The batch endpoint has no idempotency key.
 
 ## [0.9.1] - 2026-11-03

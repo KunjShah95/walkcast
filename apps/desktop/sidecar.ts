@@ -30,6 +30,10 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const root = process.cwd();
 
+// The shell sets this (with WALKCAST_SHUTDOWN_TOKEN and, when the OS keychain is usable,
+// WALKCAST_MASTER_KEY); default it so a sidecar started by hand still knows it is the desktop app.
+process.env.WALKCAST_DESKTOP ??= "1";
+
 // One stray rejected promise (a webhook retry, a Playwright event after a page closed) would end
 // this process under Node's default, taking a running recording and the whole window with it.
 // For one person's desktop app, log it and keep serving; the job itself has its own guards.

@@ -2,9 +2,26 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "updates",
   "description": "Lets the dashboard (served by the local sidecar on 127.0.0.1) check for and install app updates through the app's own commands.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "remote": {
-    "urls": ["http://127.0.0.1:*"]
+    "urls": [
+      "http://127.0.0.1:4317/*",
+      "http://127.0.0.1:4318/*",
+      "http://127.0.0.1:4319/*",
+      "http://127.0.0.1:4320/*",
+      "http://127.0.0.1:4321/*",
+      "http://127.0.0.1:4322/*",
+      "http://127.0.0.1:4323/*",
+      "http://127.0.0.1:4324/*",
+      "http://127.0.0.1:4325/*",
+      "http://127.0.0.1:4326/*"
+    ]
   },
-  "permissions": ["core:default", "allow-check-update", "allow-install-update"]
+  "permissions": [
+    "core:default",
+    "allow-check-update",
+    "allow-install-update"
+  ]
 }

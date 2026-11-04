@@ -1,6 +1,7 @@
 import type { Route } from "../App.tsx";
 import { ReplayFixture } from "../components/ReplayFixture.tsx";
-import { Empty, FindingChip, Panel } from "../components/ui.tsx";
+import { FindingChip, Panel } from "../components/ui.tsx";
+import { ConnectAgentEmpty } from "./ConnectAgent.tsx";
 import { faultLabel } from "../lib/format.ts";
 import type { LabIndex } from "../lib/types.ts";
 
@@ -8,23 +9,14 @@ export function Fixtures({ index, go, refresh }: { index: LabIndex; go: (r: Rout
   const fixturesAll = index.fixtures ?? [];
   if (fixturesAll.length === 0) {
     return (
-      <Empty
+      <ConnectAgentEmpty
         title="Nothing to guard against yet"
-        tone="signal"
+        go={go}
         icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>}
-        action={
-          <button
-            type="button"
-            onClick={() => go({ view: "simulator" })}
-            className="rounded-full bg-solid px-4 py-2 text-[13px] font-medium text-on-solid transition-colors hover:brightness-95"
-          >
-            Browse the failure library
-          </button>
-        }
       >
-        A regression guard is saved automatically the first time an agent gets something wrong. It freezes the app, the data and the failure, so the
+        A regression fixture is saved automatically the first time an agent gets something wrong. It freezes the app, the data and the failure, so the
         same case can be re-checked on every future change.
-      </Empty>
+      </ConnectAgentEmpty>
     );
   }
   const groups = new Map<string, typeof fixturesAll>();
@@ -33,12 +25,11 @@ export function Fixtures({ index, go, refresh }: { index: LabIndex; go: (r: Rout
   return (
     <div className="grid gap-6">
       <div>
-        <div className="eyebrow">{fixturesAll.length} regression fixtures</div>
         <h1 className="font-display text-[28px] font-bold leading-tight tracking-[-0.02em]">
           Regression <span className="text-dim">fixtures.</span>
         </h1>
         <p className="mt-1 max-w-[70ch] text-ink-2">
-          A fixture rebuilds a failed run's application, seed data, fault and timings. Replaying it with the same agent re-runs the recorded model calls; any
+          {fixturesAll.length} regression fixture{fixturesAll.length === 1 ? "" : "s"}. A fixture rebuilds a failed run's application, seed data, fault and timings. Replaying it with the same agent re-runs the recorded model calls; any
           other agent or model is judged against the application's records.
         </p>
       </div>

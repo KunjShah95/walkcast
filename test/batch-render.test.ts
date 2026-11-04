@@ -88,8 +88,8 @@ describe("Worker.batchRender", () => {
     assert.equal(result.succeeded, 2);
     assert.equal(result.failed, 0);
     assert.deepEqual(result.items, [
-      { recordingId: "rec-a", status: "ok" },
-      { recordingId: "rec-b", status: "ok" },
+      { recordingId: "rec-a", status: "ok", file: "recording-vertical.mp4" },
+      { recordingId: "rec-b", status: "ok", file: "recording-vertical.mp4" },
     ]);
     for (const id of ["rec-a", "rec-b"]) {
       const file = join(root, "recordings", id, "recording.json");
@@ -104,6 +104,7 @@ describe("Worker.batchRender", () => {
     makeRecording(root, "rec-sq", "owner-1");
     const result = await runBatchRender(minimalWorker(root), fakeJob("owner-1", { recordingIds: ["rec-sq"], shape: "square" }), () => undefined);
     assert.equal(result.succeeded, 1);
+    assert.equal((result.items as { file?: string }[])[0]!.file, "recording-square.mp4", "an ok item names its export file");
     assert.ok(existsSync(join(root, "recordings", "rec-sq", "recording-square.mp4")));
     const summary = JSON.parse(readFileSync(join(root, "recordings", "rec-sq", "recording.json"), "utf8"));
     assert.equal(summary.media.exports.square, "recording-square.mp4");
@@ -127,9 +128,9 @@ describe("Worker.batchRender", () => {
     assert.equal(result.succeeded, 2);
     assert.equal(result.failed, 1);
     assert.deepEqual(result.items, [
-      { recordingId: "rec-good-1", status: "ok" },
+      { recordingId: "rec-good-1", status: "ok", file: "recording-vertical.mp4" },
       { recordingId: "rec-missing", status: "error", error: "Recording not found." },
-      { recordingId: "rec-good-2", status: "ok" },
+      { recordingId: "rec-good-2", status: "ok", file: "recording-vertical.mp4" },
     ]);
     // The two good ones still got their export; the batch did not stop at the bad id.
     assert.ok(existsSync(join(root, "recordings", "rec-good-1", "recording-vertical.mp4")));
@@ -157,7 +158,7 @@ describe("Worker.batchRender", () => {
     assert.equal(result.succeeded, 1);
     assert.equal(result.failed, 1);
     assert.deepEqual(result.items, [
-      { recordingId: "rec-mine", status: "ok" },
+      { recordingId: "rec-mine", status: "ok", file: "recording-vertical.mp4" },
       { recordingId: "rec-not-mine", status: "error", error: "Recording not found." },
     ]);
     // Nothing was exported for the recording that isn't this job's owner's.
