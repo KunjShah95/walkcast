@@ -5,10 +5,10 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
-## [0.10.1] - 2026-11-04
+## [0.10.2] - 2026-11-04
 
-First release of the 0.10 line. A `v0.10.0` tag exists, but its build failed and it was never
-published, so this release includes everything planned for 0.10.0.
+First release of the 0.10 line. Tags `v0.10.0` and `v0.10.1` exist, but their builds stopped
+before publishing, so this release includes everything planned for 0.10.0.
 
 ### Added
 
@@ -48,7 +48,8 @@ published, so this release includes everything planned for 0.10.0.
   recording summary is written atomically.
 - Checkmarks on accent backgrounds were unreadable in dark mode.
 - Launch Studio renders get a timeout, are killed on quit, and their temp folders are swept.
-- Job tests that were skipped in CI (issue #6) run again.
+- The file-store queued-recording end-to-end test runs in CI again; the Postgres variant stays
+  quarantined in CI until an intermittent job stall is root-caused (issue #6).
 - Jobs check free disk space before starting; ENOSPC is reported clearly.
 
 ### Security
@@ -73,5 +74,5 @@ published, so this release includes everything planned for 0.10.0.
 
 Earlier releases: see [GitHub Releases](https://github.com/KunjShah95/walkcast/releases).
 
-[0.10.1]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.1
+[0.10.2]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.2
 [0.9.1]: https://github.com/KunjShah95/walkcast/releases/tag/v0.9.1
