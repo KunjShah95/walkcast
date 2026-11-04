@@ -21,7 +21,7 @@ function CompareArticle({ compare }: { compare: Compare }) {
       <h1>
         {compare.them} alternative: <span className="dim">Walkcast, compared fairly.</span>
       </h1>
-      <p className="answer">
+      <p className="answer" id="compare-answer">
         <strong>Short answer:</strong> Walkcast is a free, open-source alternative to {compare.them} that records your
         website rather than your screen. It signs in, walks the pages and hands back an MP4 with narration, captions and
         a transcript. Regenerate it after every change. But {compare.them} is the better tool for{" "}

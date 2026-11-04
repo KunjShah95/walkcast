@@ -61,8 +61,10 @@ export function Hero() {
               Walkcast visits your website in a real browser and gives you a narrated walkthrough, captions, transcript and step-by-step guide. Paste a link; there is nothing to film.
             </motion.p>
             <motion.div className="landing-actions" {...enter(0.2)}>
-              <DownloadButton big placement="hero" />
+              <DownloadButton big placement="hero" label="Watch a real walkthrough" />
               <a className="landing-watch" href="#demo" onClick={() => trackSiteEvent("demo_anchor_click", { placement: "hero" })}><span><ArrowDown size={14} /></span> Watch a real walkthrough</a>
+<a href="/guides/product-demo-video" className="landing-cta" onClick={() => trackSiteEvent("homepage_guide_click", { placement: "hero" })}>Start your free demo</a>
+              <a href="/compare/loom" className="landing-cta" onClick={() => trackSiteEvent("homepage_compare_click", { placement: "hero" })}>Compare with Loom</a>
             </motion.div>
             <motion.ul className="landing-trust" aria-label="Included with Walkcast" {...enter(0.26)}>
               {trust.map((item, i) => (
