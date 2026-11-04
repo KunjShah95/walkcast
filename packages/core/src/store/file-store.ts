@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { scheduleDue } from "../cron.ts";
 import { jobCompletedPayload } from "./payload.ts";
@@ -40,11 +41,8 @@ export class FileStore implements Store {
     if (existsSync(lock)) {
       try {
         const pid = Number(readFileSync(lock, "utf8").trim());
-        if (pid && pid !== process.pid) {
-          try { process.kill(pid, 0); throw new Error(`FileStore is already in use by process ${pid} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`); } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e;
-            // stale lock; fall through
-          }
+        if (pid && pid !== process.pid && pidAlive(pid, lock)) {
+          throw new Error(`FileStore is already in use by process ${pid} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`);
         }
       } catch (e) {
         if (e instanceof Error && e.message.startsWith("FileStore is already in use")) throw e;
@@ -58,7 +56,7 @@ export class FileStore implements Store {
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
       const holder = Number(readFileSync(lock, "utf8").trim());
-      if (holder && holder !== process.pid && pidAlive(holder)) throw new Error(`FileStore is already in use by process ${holder} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`);
+      if (holder && holder !== process.pid && pidAlive(holder, lock)) throw new Error(`FileStore is already in use by process ${holder} (${file}). Use PgStore/SUPABASE_DB_URL for concurrent processes.`);
       writeFileSync(lock, String(process.pid));
     }
     const cleanup = () => { try { if (existsSync(lock) && readFileSync(lock, "utf8").trim() === String(process.pid)) unlinkSync(lock); } catch { /* best effort */ } };
@@ -606,12 +604,32 @@ function newJobRow(job: NewJob): Data["jobs"][number] {
   };
 }
 
-/** Whether a process with this id is running. */
-function pidAlive(pid: number): boolean {
+/** Whether a process with this id is still the process that created this lock. */
+function pidAlive(pid: number, lock: string): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
-    return true;
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+  if (process.platform !== "win32") return true;
+
+  // Windows reuses process ids. A stale lock can then point at an unrelated live process and
+  // strand the desktop app at startup. Compare that process's creation time with the lock's
+  // timestamp; if it started after the lock was written, the old owner is gone. PowerShell is
+  // invoked only when a Windows lock's PID appears live. If the query is unavailable, fail safe
+  // and keep treating it as live rather than risk opening the same JSON store twice.
+  try {
+    const ticksText = execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue; if ($p) { [Console]::Out.Write($p.StartTime.ToUniversalTime().Ticks) }`,
+    ], { encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const ticks = Number(ticksText);
+    if (!Number.isFinite(ticks) || ticks <= 0) return true;
+    const processStartedAt = (ticks - 621355968000000000) / 10_000;
+    const lockWrittenAt = statSync(lock).mtimeMs;
+    return processStartedAt <= lockWrittenAt + 1000;
+  } catch {
+    return true;
   }
 }
