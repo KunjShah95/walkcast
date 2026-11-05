@@ -46,16 +46,18 @@ for (const [name, ratio] of [["a", 0.16], ["b", 0.48], ["c", 0.78]]) {
 const html = (await (await import("node:fs/promises")).readFile(resolve(here, "site-film.html"), "utf8"))
   .replaceAll("__SITE_DATA__", JSON.stringify(data).replaceAll("<", "\\u003c"));
 writeFileSync(resolve(workDir, "site-film.html"), html);
-await run(process.execPath, [resolve(here, "music.py"), resolve(outputDir, "score.wav")]);
+await run(python, [resolve(here, "music.py"), resolve(outputDir, "score.wav")], here, {
+  ...process.env, PYTHONUTF8: "1", WALKCAST_KOKORO_CACHE: process.env.WALKCAST_KOKORO_CACHE || resolve(here, "../../../.walkcast/kokoro-cache"),
+});
 await run(python, [resolve(here, "voiceover-site.py"), voice, resolve(outputDir, "voice.wav"), captions, configPath], here, {
   ...process.env, PYTHONUTF8: "1", HF_HOME: process.env.WALKCAST_KOKORO_CACHE || resolve(here, "../../../.walkcast/kokoro-cache"),
 });
 await run(process.execPath, [resolve(here, "render.mjs"), resolve(workDir, "site-film.html"), resolve(outputDir, "silent.mp4"), "30", "0", "42"], here, {
   ...process.env, PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || "",
 });
-const mix = "[1:a]aresample=48000,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,pan=stereo|c0=c0|c1=c0[vo];[0:a]aresample=48000,volume=0.55[music];[music][vo]sidechaincompress=threshold=0.02:ratio=10:attack=25:release=400[duck];[duck][vo]amix=inputs=2:weights='1 1.25':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11,aresample=48000,afade=t=out:st=39:d=2[a]";
+const mix = "[1:a]aresample=48000,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,pan=stereo|c0=c0|c1=c0,asplit=2[vo][key];[0:a]aresample=48000,volume=0.55[music];[music][key]sidechaincompress=threshold=0.02:ratio=10:attack=25:release=400[duck];[duck][vo]amix=inputs=2:weights='1 1.25':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11,aresample=48000,afade=t=out:st=39:d=2[a]";
 const finalVideo = resolve(outputDir, "Site-Launch-Film.mp4");
 await run(ffmpeg, ["-y", "-i", resolve(outputDir, "score.wav"), "-i", resolve(outputDir, "voice.wav"), "-i", resolve(outputDir, "silent.mp4"), "-i", captions, "-filter_complex", mix,
   "-map", "2:v:0", "-map", "[a]", "-map", "3:s:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-c:s", "mov_text", "-metadata:s:s:0", "language=eng", "-metadata", `title=${data.host} — Website Launch Film`, "-movflags", "+faststart", "-t", "42", finalVideo]);
-await run(ffmpeg, ["-y", "-ss", "21", "-i", finalVideo, "-frames:v", "1", "-q:v", "2", resolve(outputDir, "Site-Launch-Film-poster.jpg")]);
+await run(ffmpeg, ["-y", "-ss", "21", "-i", finalVideo, "-frames:v", "1", "-update", "1", "-q:v", "2", resolve(outputDir, "Site-Launch-Film-poster.jpg")]);
 console.log(JSON.stringify({ video: finalVideo, captions, sourceCapture: capture, website: data.host, voice, duration: 42 }));

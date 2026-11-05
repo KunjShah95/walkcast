@@ -28,6 +28,8 @@ export interface DesktopTask {
   video?: LaunchVideo;
   temporaryDir?: string;
   child?: ChildProcess;
+  /** Bounded output tail retained to make renderer failures diagnosable in Launch Studio. */
+  diagnosticTail?: string[];
 }
 
 /** LAB_LAUNCH_RENDER_TIMEOUT_MS, default 20 minutes: a film render (or Kokoro setup) that runs longer is stuck. */
@@ -39,6 +41,7 @@ export function launchRenderTimeoutMs(): number {
 export function trackDesktopTask(task: DesktopTask, chunk: Buffer | string): void {
   const text = String(chunk);
   const lines = text.split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length) task.diagnosticTail = [...(task.diagnosticTail ?? []), ...lines.map((line) => line.slice(0, 500))].slice(-12);
   if (lines.length) task.message = lines.at(-1)!.slice(0, 220);
   const frames = /frame\s+(\d+)\s*\/\s*(\d+)/.exec(text);
   if (frames) task.progress = Math.min(96, 24 + Math.round((Number(frames[1]) / Number(frames[2])) * 70));
@@ -139,7 +142,11 @@ export class DesktopTasks {
       task.child = undefined;
       if (task.status !== "running") return;
       void (async () => {
-        if (code !== 0) throw new Error(`Video renderer exited with code ${code ?? "unknown"}. ${task.message}`);
+        if (code !== 0) {
+          const label = task.kind === "kokoro-setup" ? "Kokoro setup" : "Video renderer";
+          const detail = task.diagnosticTail?.join("\n");
+          throw new Error(`${label} exited with code ${code ?? "unknown"}.${detail ? `\n${detail}` : ` ${task.message}`}`);
+        }
         await complete?.();
         if (task.temporaryDir) rmSync(task.temporaryDir, { recursive: true, force: true });
         task.status = "complete";

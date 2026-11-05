@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { LaunchVideo, RecordingSummary } from "../../../../packages/core/src/data.ts";
 import { findChrome } from "../../../../packages/core/src/lab/chrome.ts";
@@ -16,6 +17,20 @@ const taskView = (task: DesktopTask) => ({
   progress: task.progress, message: task.message, startedAt: task.startedAt,
   updatedAt: task.updatedAt, error: task.error, video: task.video,
 });
+
+/** Kokoro can be warmed in Walkcast's private cache or already exist in Hugging Face's user cache. */
+function hasKokoroModel(cacheRoot: string): boolean {
+  const snapshots = join(cacheRoot, "hub", "models--hexgrad--Kokoro-82M", "snapshots");
+  try {
+    return readdirSync(snapshots, { withFileTypes: true }).some((entry) => {
+      if (!entry.isDirectory()) return false;
+      const snapshot = join(snapshots, entry.name);
+      return existsSync(join(snapshot, "config.json")) && existsSync(join(snapshot, "kokoro-v1_0.pth"));
+    });
+  } catch {
+    return false;
+  }
+}
 
 /** Launch Studio: Kokoro setup, a launch film rendered from a recording, and the task status both report. */
 export const launchRoutes: Route[] = [
@@ -73,6 +88,10 @@ export const launchRoutes: Route[] = [
       const voice = String((await readJson(req, 20_000)).voice ?? "af_heart").trim();
       if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
       if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
+      const appCache = process.env.WALKCAST_KOKORO_CACHE?.trim() || join(root, "data", "kokoro-cache");
+      const userCache = process.env.HF_HOME?.trim() || join(homedir(), ".cache", "huggingface");
+      const kokoroCache = [appCache, userCache].find(hasKokoroModel);
+      if (!kokoroCache) return json(503, { error: "The Kokoro model is not downloaded yet. Choose Prepare model in Launch Studio, then generate the film again." });
       // A film render writes frames, audio and an encode: refuse up front on a nearly full disk.
       const space = await checkFreeSpace(root);
       if (!space.ok) return json(507, { error: space.message });
@@ -106,11 +125,11 @@ export const launchRoutes: Route[] = [
         message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
       };
       const builder = join(appSourceRoot, "docs", "launch", "source", "build-site-film.mjs");
-      const cache = process.env.WALKCAST_KOKORO_CACHE || join(root, "data", "kokoro-cache");
       desktopTasks.start(task, process.execPath, [builder, capture], appSourceRoot, {
         ...process.env,
         KOKORO_VOICE: voice,
-        WALKCAST_KOKORO_CACHE: cache,
+        WALKCAST_KOKORO_CACHE: kokoroCache,
+        HF_HUB_OFFLINE: "1",
         WALKCAST_LAUNCH_WORK_DIR: workDir,
         WALKCAST_LAUNCH_OUTPUT_DIR: outputDir,
         WALKCAST_LAUNCH_CAPTIONS_PATH: captionsPath,

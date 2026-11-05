@@ -142,7 +142,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
           <span className="font-mono text-[12px] text-ink-3">{task.progress}%</span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-panel-3"><div className="h-full rounded-full bg-signal transition-[width] duration-700" style={{ width: `${task.progress}%` }} /></div>
-        {task.error && <p className="text-[12.5px] text-fail">{task.error}</p>}
+        {task.error && <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-panel-2 p-3 font-mono text-[11.5px] text-fail">{task.error}</pre>}
       </section>}
 
       {recording && latest && <section className="grid gap-4 rounded-2xl border border-line bg-panel p-4 sm:p-5">
