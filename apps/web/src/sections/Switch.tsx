@@ -94,7 +94,7 @@ export function Versus() {
                   <td className="us"><b>$0</b><small>MIT, forever</small></td>
                   <td><b>$18</b><small>per month</small></td>
                   <td><b>$29</b><small>a month, or $108 a year</small></td>
-                  <td><b>$23</b><small>per month</small></td>
+                  <td><b>$25</b><small>per month, billed yearly</small></td>
                 </tr>
               </thead>
               <tbody>
@@ -107,7 +107,7 @@ export function Versus() {
           </div>
           <div className="vs-foot">
             <p>
-              Paid plan for one person, checked 20 October 2026 on each tool's own pricing page. Loom and Scribe
+              Paid plan for one person, checked 5 November 2026 on each tool's own pricing page. Loom and Scribe
               also have limited free tiers. <span className="mk-key"><MarkIcon m="some" /> means partly, or only on a paid plan.</span>
             </p>
             <nav aria-label="Full comparisons">
@@ -133,8 +133,8 @@ const COST: { name: string; color: string; per: (n: number) => number; plan: (n:
   {
     name: "Scribe",
     color: "#bfb3a4",
-    per: (n) => (n === 1 ? 23 * 12 : (59 + 12 * Math.max(0, n - 5)) * 12),
-    plan: (n) => (n === 1 ? "Pro Personal, $23 a month" : "Team, $59 a month for 5, then $12 each"),
+    per: (n) => (n === 1 ? 25 * 12 : Math.max(5, n) * 13 * 12),
+    plan: (n) => (n === 1 ? "Pro Personal, $25 per seat/month billed yearly" : "Pro Team, $13 per seat/month yearly, five-seat minimum"),
   },
 ];
 const usd = (v: number) => `$${v.toLocaleString("en-US")}`;
@@ -213,7 +213,7 @@ export function Savings() {
               </li>
             </ul>
             <p className="calc-note">
-              Prices from each tool's pricing page, 20 October 2026. They do different jobs; see the comparison above.
+              Prices from each tool's pricing page, 5 November 2026. They do different jobs; see the comparison above.
             </p>
           </Reveal>
         </div>

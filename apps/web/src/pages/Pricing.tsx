@@ -55,9 +55,8 @@ export function PricingPage() {
 
       <h2>What the alternatives charge</h2>
       <p>
-        Prices checked on 20 October 2026: Loom's paid seats start at $18 per user
-        per month, Screen Studio is $29 per month or $108 per year, and Scribe's Pro Personal plan is $23 per user per
-        month. Each of those is a fair tool for a different job. The comparisons are{" "}
+        Prices checked on 5 November 2026: Loom's paid seats start at $18 per user
+        per month, Screen Studio lists $29 monthly or $9 monthly billed yearly, and Scribe Pro Personal lists $35 monthly or $25 monthly billed yearly. Scribe Pro Team lists $17 monthly or $13 monthly billed yearly with a five-seat minimum. Each tool serves a different job. The comparisons are{" "}
         <a href="/compare/loom">Loom</a>, <a href="/compare/screen-studio">Screen Studio</a> and{" "}
         <a href="/compare/scribe">Scribe</a>, with the sources.
       </p>

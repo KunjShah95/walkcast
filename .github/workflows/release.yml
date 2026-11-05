@@ -185,8 +185,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: walkcast-${{ matrix.target }}
-          # Only the installers. bundle/ also holds Tauri's staging trees (the expanded .app, and the
-          # unpacked .deb/.rpm payloads with the sidecar's node_modules), which are not releases.
+          # Only public installers, signed updater bundles, and signatures. bundle/ also holds Tauri's
+          # staging trees (the expanded .app and unpacked .deb/.rpm payloads), which are not releases.
           path: |
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
@@ -194,6 +194,7 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage.tar.gz
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app.tar.gz
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
 

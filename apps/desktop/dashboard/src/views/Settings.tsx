@@ -23,6 +23,8 @@ export function Settings({ me }: { me: Me | null }) {
     <div className="grid max-w-[900px] gap-6">
       <PageHead title={t("settings.title")} dim={t("settings.dim")} description={t("settings.description")} />
 
+      <Updates />
+
       <Panel>
         <PanelHeader eyebrow={t("language")} title={t("language")} />
         <div className="grid gap-2 px-4 py-4">
@@ -39,13 +41,11 @@ export function Settings({ me }: { me: Me | null }) {
 
       <Account me={me} />
 
-      <Updates />
-
       <Panel>
-        <PanelHeader eyebrow="Desktop app" title="Download Walkcast" aside={<span className="font-mono text-[11.5px] text-ink-3">lightweight Tauri build</span>} />
+        <PanelHeader eyebrow="Installers" title="First install or repair" aside={<span className="font-mono text-[11.5px] text-ink-3">Windows · Linux</span>} />
         <div className="grid gap-4 px-4 py-4">
           <p className="text-[13px] text-ink-2">
-            A small native window for the signed-in app only. It uses your system's built-in webview, so there is no bundled browser and the installer stays a couple of megabytes.
+            Use an installer for a first install or repair. After that, Walkcast checks for signed updates at launch and installs them in place. You can also check and install one above without downloading an installer.
           </p>
           <div className="flex flex-wrap gap-2">
             <a href="https://github.com/KunjShah95/walkcast/releases/latest" target="_blank" rel="noreferrer" className="rounded-full border border-line-strong px-4 py-2 text-[13.5px] hover:bg-panel-2">

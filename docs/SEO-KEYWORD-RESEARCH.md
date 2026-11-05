@@ -4,7 +4,10 @@
 > [`SEO-TRENDS-RAW.md`](SEO-TRENDS-RAW.md) (generated) and `results/seo-trends.json` (raw).
 > Re-pull with `node scripts/seo-trends.mjs`; regenerate the dump with `node scripts/seo-report.mjs`.
 >
-> Pulled 20 October 2026. Prices quoted from vendor pages checked the same day.
+> Pulled 20 October 2026. Search suggestion counts are not search volumes. Prices quoted from vendor pages checked the same day; refresh them before reusing.
+
+For the current ranked route-to-query assignment and the citation checklist, see
+[`SEO-PRIORITY-MAP.md`](SEO-PRIORITY-MAP.md).
 
 ## Where the data came from
 
@@ -113,8 +116,8 @@ github", "scribe documentation alternatives", "**video** scribe alternative".
 
 Three things make these the highest-value queries on the list:
 
-- **Comparison articles are the most-cited content type in AI search** (~33% of citations, per the
-  Princeton GEO study). Answer engines quote tables, not paragraphs.
+- **Comparison pages match the query's decision intent.** Use clear criteria and a balanced table so
+  readers can compare products. Do not treat an unsourced citation-share estimate as a forecast.
 - **They are near the bottom of the funnel.** Someone searching "loom alternative" is choosing a
   tool this week.
 - **They are winnable.** A new domain with no authority can rank for a specific alternative query;
@@ -198,8 +201,8 @@ The existing `/compare/screen-recording` stays for the generic "screen recording
 
 ### Comparison pages, written to be citable
 
-Comparison articles are the most-cited content type in AI search, so each one is built to be
-extracted rather than read:
+Comparison articles are written for the reader making a product decision, with the facts and their
+sources next to each claim:
 
 - A **one-paragraph answer** at the top, marked `speakable` in the schema, so a voice assistant has
   a passage to read.
@@ -210,8 +213,9 @@ extracted rather than read:
 - **A price with a date and a source link.** Prices were checked on 20 October 2026 against each
   vendor's own pricing page, and every number on the page carries that date. Stale prices are worse
   than no prices.
-- **A facts table with a source per row.** Citing sources is the single largest GEO lever in the
-  Princeton study (+40% visibility).
+- **A facts table with a source per row.** The GEO paper tested citations, relevant quotations and
+  statistics in its benchmark and reported visibility gains of up to 40% across queries. That is a
+  result from that experiment, not a promised gain for Walkcast; cite the [KDD 2024 paper](https://doi.org/10.1145/3637528.3671900).
 - **The competitor as a named entity** in the JSON-LD (`SoftwareApplication` with its own URL), so an
   engine can relate Walkcast to Loom rather than reading them as two unrelated strings.
 - **A `FAQPage`** on every comparison page, built from the same questions that appear in the page.
@@ -240,8 +244,8 @@ guides index cross-links every guide, and every comparison page links the other 
 
 ## What to do next, in order
 
-1. **Publish and let it index.** Everything above is one deployment away from being live. Nothing
-   else in this list matters until the pages are crawled.
+1. **Publish and verify crawl state.** Keep the routes and sitemap deployed, then inspect them in
+   Search Console. A deployment or indexing request does not guarantee the URL will be indexed.
 2. **Submit the sitemaps.** Search Console for `/sitemap.xml` and `/sitemap-agents.xml`; Bing for
    IndexNow. Ask for indexing of the home page, `/guides`, the three comparison pages and `/lab`.
 3. **Watch the comparison pages first.** They are the highest-intent set and the fastest to move.
@@ -249,11 +253,9 @@ guides index cross-links every guide, and every comparison page links the other 
 4. **Write the next guide only from data.** The next candidate is a "stagehand testing" or "stagehand
    evals" guide, because the Lab already exists and the demand is real but unserved. Do not write a
    guide for a phrase the data shows nobody types.
-5. **Third-party presence is still the biggest gap.** The GEO playbook's citation plan (GitHub,
-   Product Hunt, Reddit, Dev.to, YouTube, G2) is untouched. Answer engines cite third-party sources
-   about six times more often than a brand's own pages, so the comparison pages on our own domain are
-   the smaller half of this. A Loom-alternative post on a dev blog, or a well-answered
-   r/webdev thread, is worth more than any page we publish.
+5. **Third-party presence is still a gap.** The citation plan (GitHub, Product Hunt, Reddit, Dev.to,
+   YouTube and relevant directories) is untouched. Third-party sources can add independent evidence,
+   but no fixed citation multiplier is established here. A useful, accurate contribution is the goal.
 6. **Re-pull the data in three months.** `npm run seo:pull` then `npm run seo:report`. The script is
    idempotent and takes about fifteen minutes. The suggestion density numbers are the cheapest
    early-warning system available: when a cluster stops appearing, the demand moved.

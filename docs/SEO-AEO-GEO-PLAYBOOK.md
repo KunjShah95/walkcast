@@ -2,7 +2,8 @@
 
 > Structured as the standard five-branch model: **On-Page**, **Off-Page**, **Technical**, **Local**,
 > **Tools**. Each item is marked done (in code), to-do, or N/A with a reason.
-> Last synced from code: 2026-10-20.
+> Last synced from code: 2026-11-05. See the ranked [`SEO-PRIORITY-MAP.md`](SEO-PRIORITY-MAP.md) for
+> the page-by-page query focus, evidence limits and citation checklist.
 >
 > The keyword and trend data behind the priorities is in
 > [`SEO-KEYWORD-RESEARCH.md`](SEO-KEYWORD-RESEARCH.md); the measurements are in
@@ -24,7 +25,7 @@
 | Guides | done | `/guides` (index), `/guides/product-demo-video`, `/guides/website-tutorial-video`, `/guides/narrated-website-walkthrough`. Each is a complete answer with numbered steps, a file table and an embed snippet. |
 | Pricing page | done | `/pricing`, with a full limits table, the reason the tool is free, and the competitors' prices for comparison. |
 | Lab page | done | `/lab`, aimed at "browser agent testing", "ai browser agent" and "stagehand evals". It states plainly that Stagehand and Playwright run the agent and the Lab is what you use after the run fails. |
-| Schema markup integration | done | JSON-LD `@graph` per page: `Organization`, `Person`, `WebSite`, `WebPage`, `Article` on guides and comparisons, `CollectionPage` + `ItemList` on the guides index, `SoftwareApplication`, `VideoObject`, `HowTo` on every guide, `FAQPage` on every page with questions, `BreadcrumbList` (three levels under `/guides` and `/compare`), and `speakable` on the pages whose first paragraph answers the question. |
+| Schema markup integration | done | JSON-LD `@graph` per page: `Organization`, `Person`, `WebSite`, `WebPage`, `Article` on guides and comparisons, `CollectionPage` + `ItemList` on the guides index, `SoftwareApplication`, `VideoObject`, `HowTo` on every guide, `FAQPage` on pages with questions, `BreadcrumbList` (three levels under `/guides` and `/compare`), and `speakable` on pages whose first paragraph answers the question. Keep it aligned with visible content. This describes pages for consumers; it does not guarantee a Google rich result. |
 
 ## 2. Off-Page SEO
 
@@ -36,7 +37,7 @@
 | Social bookmarking | to-do | Product Hunt + HN "Show HN" launch day; each links the landing hero video, which is in the sitemap as a `video:video` entry. |
 | Forum & Q&A participation | to-do | r/webdev, r/qualityassurance, r/LocalLLaMA (self-host angle); answer "how do I record a walkthrough of a site behind a login?" with the `/how` page as the citation. |
 | Review-site profiles | to-do | G2/Capterra/TrustRadius, even for a free tier. AI engines cite these for "best tools" lists. |
-| Third-party citation count | to-do | The GEO plan in the research doc: answer engines cite third-party sources about six times more often than a brand's own pages, so this is the larger half of GEO. |
+| Third-party references | to-do | Earn relevant, factual mentions through useful community contributions and maintained directories. Do not rely on an unverified multiplier or manufacture reviews. |
 
 ## 3. Technical SEO
 
@@ -71,8 +72,8 @@ Yelp and the footer.
 |---|---|---|
 | `speakable` markup | done | `SpeakableSpecification` on the pages whose opening paragraph answers the page's question, checked against the class that paragraph actually uses in the test. |
 | Self-contained answer blocks | done | Every guide, comparison and the Lab open with a bold "Short answer" paragraph that stands alone. |
-| Comparison tables as extractable structure | done | The four comparison pages carry a `Question / Walkcast / Them / Note` table. Tables are what answer engines quote. |
-| Sourced statistics | done | The comparison pages give a price with the date it was checked and a link to the vendor's own pricing page, and a facts table with a source per row. Citing sources is the largest GEO lever in the Princeton study. |
+| Comparison tables as extractable structure | done | The four comparison pages carry a `Question / Walkcast / Them / Note` table to make product differences easy to inspect. |
+| Sourced statistics | done | The comparison pages give a price with the date it was checked and a link to the vendor's own pricing page, and a facts table with a source per row. |
 | Author attribution and freshness | done | A named author with a profile link, and a visible "Updated <date>" on every document page. |
 | `llms.txt` and `llms-full.txt` | done | A short quotable summary linking every page, and a full-answers file with every FAQ answer in plain text. |
 | `/pricing.md` | done | The price, its limits and what the tool does not do, in plain text, so an agent comparing tools on a buyer's behalf can parse it without running JavaScript. Linked from `/pricing`, the footer and `llms.txt`. |
@@ -82,6 +83,8 @@ Yelp and the footer.
 | Measurement | to-do | Once the pages are live: Search Console for impressions and clicks per target query, and monthly manual checks of the target queries in ChatGPT, Perplexity and Google AI Overviews, logging the cited URL and snippet. |
 
 ## 6. Tools
+
+Google's current guidance says AI features use the same foundational Search requirements and helpful-content principles. Crawlability is a prerequisite, not a promise of indexing, ranking or citation. Google ignores the `meta keywords` tag, and its FAQ/HowTo rich-result support is restricted or retired; see the linked [priority map](SEO-PRIORITY-MAP.md) before making those claims.
 
 | Tool | Use |
 |---|---|

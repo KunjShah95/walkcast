@@ -5,6 +5,18 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
+## [0.10.7] - 2026-11-05
+
+### Fixed
+
+- Linux desktop updates now publish and use Tauri's signed `.AppImage.tar.gz` bundle.
+- Settings makes the signed, in-place desktop update flow easier to find.
+
+### Changed
+
+- Added a ranked search-query map with evidence limits, current citation sources and crawl-measurement steps.
+- Removed unsupported AI-search citation multipliers from the SEO notes and clarified that crawl eligibility does not guarantee indexing or citation.
+
 ## [0.10.2] - 2026-11-04
 
 First release of the 0.10 line. Tags `v0.10.0` and `v0.10.1` exist, but their builds stopped
@@ -75,4 +87,5 @@ before publishing, so this release includes everything planned for 0.10.0.
 Earlier releases: see [GitHub Releases](https://github.com/KunjShah95/walkcast/releases).
 
 [0.10.2]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.2
+[0.10.7]: https://github.com/KunjShah95/walkcast/compare/v0.10.6...v0.10.7
 [0.9.1]: https://github.com/KunjShah95/walkcast/releases/tag/v0.9.1

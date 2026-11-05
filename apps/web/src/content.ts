@@ -13,7 +13,7 @@ export const SITE_ORIGIN = "https://walkcast.kunjshah.in";
 /** Who builds it: named on every page and in the JSON-LD, so engines can attribute the answers. */
 export const AUTHOR = { name: "Kunj Shah", url: "https://github.com/KunjShah95" };
 /** When the page copy last changed in substance (dateModified, sitemap lastmod). */
-export const UPDATED = "2026-10-22";
+export const UPDATED = "2026-11-05";
 
 /** Every prerendered page: the landing page plus the documents engines can cite on their own. */
 export interface Route {
@@ -228,7 +228,7 @@ export const COMPARE_FAQ: Record<string, [string, string][]> = {
     ],
     [
       "How much does Screen Studio cost?",
-      "Screen Studio is $29 per month, or $108 for the year ($9 per month billed yearly). New customers get a trial only, and the one-time licence is no longer sold. Figures checked on 20 October 2026.",
+      "Screen Studio lists plans at $29 per month or $9 per month billed yearly, with all features included. Figures checked on 5 November 2026.",
     ],
     [
       "Does Walkcast have automatic zoom like Screen Studio?",
@@ -254,7 +254,7 @@ export const COMPARE_FAQ: Record<string, [string, string][]> = {
     ],
     [
       "How much does Scribe cost?",
-      "Scribe has a free Basic tier. Pro Personal is $23 per user per month and the Team plan is $59 a month for five users, then $12 per additional user. Figures checked on 20 October 2026.",
+      "Scribe Basic is free. Pro Personal is $35 per seat per month, or $25 billed yearly. Pro Team is $17 per seat per month, or $13 billed yearly, with a five-seat minimum. Figures checked on 5 November 2026.",
     ],
     [
       "Can a Scribe alternative record pages behind a login?",
@@ -415,7 +415,7 @@ export const COMPARES: Compare[] = [
     them: "Loom",
     themUrl: "https://www.loom.com/pricing",
     price: "Loom's free Starter plan allows 25 videos of up to five minutes with no downloads; paid seats start at $18 per user per month.",
-    priceChecked: "20 October 2026",
+    priceChecked: "5 November 2026",
     theyAreGoodAt: [
       "Recording your screen and your face quickly, in the browser, with nothing to install.",
       "Async video messaging: comments, reactions and a share link that plays in the browser.",
@@ -455,9 +455,9 @@ export const COMPARES: Compare[] = [
   {
     path: "/compare/screen-studio",
     them: "Screen Studio",
-    themUrl: "https://screen.studio/pricing",
-    price: "Screen Studio is $29 per month, or $108 for the year ($9 per month billed yearly). There is no free plan for new customers.",
-    priceChecked: "20 October 2026",
+    themUrl: "https://screen.studio/4",
+    price: "Screen Studio lists plans at $29 per month or $9 per month billed yearly, with all features included.",
+    priceChecked: "5 November 2026",
     theyAreGoodAt: [
       "Beautiful screencasts: automatic zoom on clicks, smoothed cursor movement and framed backgrounds with almost no effort.",
       "A real editing environment with titles, on-screen text, motion presets and 3D mockups.",
@@ -479,7 +479,7 @@ export const COMPARES: Compare[] = [
     rows: [
       ["Windows", "yes", "no", "Screen Studio is macOS only, so Windows and Linux users have no equivalent from its maker."],
       ["Linux", "yes", "no", "Walkcast ships an AppImage and a .deb."],
-      ["Price", "yes", "no", "Walkcast is free and MIT licensed. Screen Studio has no free plan for new customers."],
+      ["Price", "yes", "some", "Walkcast is free and MIT licensed. Screen Studio lists paid plans from $9 per month billed yearly."],
       ["Automatic zoom on clicks", "some", "yes", "Walkcast zooms in on each click and fill from the browser's own action log. Screen Studio's zoom is editable and paired with cursor smoothing and 3D framing."],
       ["Smoothed cursor and 3D framing", "no", "yes", "Walkcast draws a pointer that moves to each control; it does not smooth a recorded cursor or frame the shot in 3D."],
       ["Records a website, not your screen", "yes", "no", "Walkcast drives its own browser and films your site."],
@@ -491,7 +491,7 @@ export const COMPARES: Compare[] = [
       ["Files stay on your machine", "yes", "no", "Walkcast writes a recording to your folder. The app uploads nothing."],
     ],
     facts: [
-      ["Screen Studio is $29 per month or $108 per year, with no free plan and no one-time licence for new buyers.", "https://screen.studio/pricing"],
+      ["Screen Studio lists plans at $29 per month or $9 per month billed yearly, with all features included.", "https://screen.studio/4"],
       ["Screen Studio requires macOS 13.1 or later; there is no Windows build.", "https://screen.studio/download"],
       ["Walkcast runs on Windows 10 or 11 (64-bit) and 64-bit Linux.", "https://github.com/KunjShah95/walkcast"],
     ],
@@ -500,8 +500,8 @@ export const COMPARES: Compare[] = [
     path: "/compare/scribe",
     them: "Scribe",
     themUrl: "https://scribe.com/pricing",
-    price: "Scribe has a free Basic tier; Pro Personal is $23 per user per month and Team is $59 a month for five users, then $12 per additional user.",
-    priceChecked: "20 October 2026",
+    price: "Scribe Basic is free. Pro Personal is $35 per seat per month, or $25 billed yearly. Pro Team is $17 per seat per month, or $13 billed yearly, with a five-seat minimum.",
+    priceChecked: "5 November 2026",
     theyAreGoodAt: [
       "Turning a process into a step-by-step guide of annotated screenshots, straight from a browser extension.",
       "Editing steps, retaking them, adding company branding and translating a guide.",
@@ -528,11 +528,11 @@ export const COMPARES: Compare[] = [
       ["Browser extension capture", "no", "yes", "Scribe captures from your Chrome or Edge session; Walkcast drives its own browser."],
       ["Guide translation", "no", "yes", "Available on some Scribe Enterprise plans."],
       ["Approval workflow and SSO", "no", "yes", "Scribe Enterprise has them; Walkcast is a desktop app with no accounts at all."],
-      ["Price", "yes", "some", "Walkcast is free and MIT licensed. Scribe's paid plans start at $23 per user per month."],
+      ["Price", "yes", "some", "Walkcast is free and MIT licensed. Scribe's paid plans start at $13 per seat per month billed yearly, with five seats on Pro Team."],
       ["Files stay on your machine", "yes", "no", "Walkcast writes to your folder. The app uploads nothing."],
     ],
     facts: [
-      ["Scribe's Basic tier is free, Pro Personal is $23 per user per month, and Team is $59 a month including five users.", "https://scribe.com/pricing"],
+      ["Scribe Basic is free. Pro Personal is $35 per seat per month or $25 billed yearly; Pro Team is $17 per seat per month or $13 billed yearly and starts at five seats.", "https://scribe.com/pricing"],
       ["Scribe's guides are built from annotated screenshots captured by its Chrome and Edge extensions.", "https://scribe.com/pricing"],
       ["Walkcast records a browser session to MP4 and WebM, WebVTT captions, a transcript, a page list and a step-by-step guide.", "https://github.com/KunjShah95/walkcast"],
     ],

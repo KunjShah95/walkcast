@@ -106,13 +106,13 @@ export function Updates() {
         )}
         <p className="text-[12.5px] text-ink-3">
           {invoke
-            ? "Updates are downloaded from GitHub, checked against Walkcast's signing key, installed, and the app restarts. Your recordings and settings stay where they are."
+            ? "The desktop app checks for signed updates when it starts. It installs a ready update automatically, or you can install it here with one click. There is no need to download the installer again. Your recordings and settings stay where they are."
             : "This copy runs as a server or from source, so it can't update itself. Install the new release on the machine that runs it (for a server: deploy the new image, then run walkcast db migrate)."}
         </p>
         <div className="flex flex-wrap gap-2">
           {status?.available && invoke && (
             <Button tone="primary" onClick={install} disabled={busy}>
-              {phase === "installing" ? "Downloading and installing…" : `Update to ${status.version}`}
+              {phase === "installing" ? "Downloading and installing…" : `Install ${status.version} and restart`}
             </Button>
           )}
           {status?.available && !invoke && status.url && (
