@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume2, Globe2 } from "lucide-react";
 import type { Route } from "../App.tsx";
 import { normalizeUrl, RecordBar } from "../components/RecordBar.tsx";
@@ -28,6 +28,9 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [providers, setProviders] = useState<TtsProviderInfo[]>([]);
   const [task, setTask] = useState<DesktopTaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshRef = useRef(refresh);
+
+  useEffect(() => { refreshRef.current = refresh; }, [refresh]);
 
   useEffect(() => {
     if (!recordings.some((recording) => recording.id === selected)) setSelected(recordings[0]?.id ?? "");
@@ -35,17 +38,29 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   useEffect(() => { void loadTtsProviders().then(setProviders); }, []);
   useEffect(() => {
     if (!task || task.status !== "running") return;
-    const timer = window.setInterval(() => {
-      void loadDesktopTask(task.id).then((next) => {
+    let active = true;
+    let requestInFlight = false;
+    const poll = async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const next = await loadDesktopTask(task.id);
+        if (!active) return;
         setTask(next);
         if (next.status === "complete") {
-          void refresh();
+          void refreshRef.current();
           if (next.kind === "kokoro-setup") void loadTtsProviders().then(setProviders);
         }
-      }, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [task?.id, task?.status, refresh]);
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 1500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [task?.id, task?.status]);
 
   const recording = recordings.find((item) => item.id === selected);
   const kokoro = providers.find((provider) => provider.id === "kokoro");

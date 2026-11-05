@@ -434,7 +434,7 @@ export function setupLaunchVoice(): Promise<DesktopTaskStatus> {
 }
 
 export function loadDesktopTask(id: string): Promise<DesktopTaskStatus> {
-  return taskRequest(`/api/launch-videos/jobs/${encodeURIComponent(id)}`);
+  return taskRequest(`/api/launch-videos/jobs/${encodeURIComponent(id)}`, { cache: "no-store" });
 }
 
 export function recordingAssetUrl(id: string, file: string): string {
