@@ -17,6 +17,8 @@ export const TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".wav": "audio/wav",
   ".vtt": "text/vtt; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
   ".json": "application/json",
   ".m3u8": "application/vnd.apple.mpegurl",
   ".ts": "video/mp2t",

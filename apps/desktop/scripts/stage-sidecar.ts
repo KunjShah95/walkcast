@@ -22,7 +22,7 @@ const OUT = join(TAURI, "sidecar");
 const BIN = join(TAURI, "binaries");
 
 /** Sources the server reaches, kept at their repo paths. */
-const SOURCES = ["packages/core/src", "packages/brand/src", "apps/desktop/server", "apps/desktop/sidecar.ts", "supabase/migrations", "fixtures", "docs/launch/source/video.html", "docs/launch/source/site-film.html", "docs/launch/source/fonts", "docs/launch/source/build-fresh.mjs", "docs/launch/source/build-site-film.mjs", "docs/launch/source/prepare-fresh.mjs", "docs/launch/source/render.mjs", "docs/launch/source/music.py", "docs/launch/source/voiceover-fresh.py", "docs/launch/source/voiceover-site.py", "docs/brand/svg/walkcast-wordmark.svg", "scripts/setup-kokoro.ps1"];
+const SOURCES = ["packages/core/src", "packages/brand/src", "apps/desktop/server", "apps/desktop/sidecar.ts", "supabase/migrations", "fixtures", "docs/launch/source/video.html", "docs/launch/source/site-film.html", "docs/launch/source/fonts", "docs/launch/source/build-fresh.mjs", "docs/launch/source/build-site-film.mjs", "docs/launch/source/prepare-fresh.mjs", "docs/launch/source/render.mjs", "docs/launch/source/music.py", "docs/launch/source/music-brag.py", "docs/launch/source/voiceover-fresh.py", "docs/launch/source/voiceover-site.py", "docs/brand/svg/walkcast-wordmark.svg", "scripts/setup-kokoro.ps1"];
 const DASHBOARD = "apps/desktop/dashboard/dist/index.html";
 /** Packages read by path rather than imported (the self-hosted fonts), plus the TypeScript loader. */
 const ALWAYS = ["@fontsource-variable/schibsted-grotesk", "@fontsource-variable/jetbrains-mono", "tsx"];

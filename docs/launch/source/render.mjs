@@ -15,6 +15,7 @@ const p = await b.newPage({ viewport:{width,height} });
 await p.goto('file://'+html); await p.evaluate(()=>document.fonts.ready);
 // warm image cache for the demo frames
 await p.waitForTimeout(500);
+await p.waitForFunction(() => [...document.querySelectorAll('video')].every((video) => video.readyState >= 1), null, { timeout: 15_000 });
 if (out.startsWith('--stills')) {
   const ts = out.split('=')[1].split(',').map(Number);
   for (const t of ts) { await p.evaluate(t=>window.render(t), t); await p.screenshot({ path: `${process.env.SD || '.'}/still-${t}.jpg`, type:'jpeg', quality:85 }); }

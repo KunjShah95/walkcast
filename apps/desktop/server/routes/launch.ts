@@ -85,8 +85,13 @@ export const launchRoutes: Route[] = [
       if (!(sourceUrl.protocol === "https:" || sourceUrl.protocol === "http:") || row.summary.durationMs < 15_000 || !row.summary.pages.length) {
         return json(400, { error: "Choose a website recording with at least 15 seconds of footage and one visited page." });
       }
-      const voice = String((await readJson(req, 20_000)).voice ?? "af_heart").trim();
+      const input = await readJson(req, 20_000);
+      const voice = String(input.voice ?? "af_heart").trim();
       if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
+      const tone = input.tone ?? "polished";
+      const format = input.format ?? "landscape";
+      if (!(tone === "polished" || tone === "cinematic" || tone === "playful")) return json(400, { error: "Choose a supported film direction." });
+      if (!(format === "landscape" || format === "vertical" || format === "square")) return json(400, { error: "Choose a supported video format." });
       if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
       const appCache = process.env.WALKCAST_KOKORO_CACHE?.trim() || join(root, "data", "kokoro-cache");
       const userCache = process.env.HF_HOME?.trim() || join(homedir(), ".cache", "huggingface");
@@ -119,7 +124,7 @@ export const launchRoutes: Route[] = [
         try { pathname = new URL(page.url).pathname; } catch { /* invalid event URL; title remains useful */ }
         return { title: String(page.title || pathname || sourceUrl.hostname).trim().slice(0, 60), url: page.url };
       }).filter((page, index, all) => all.findIndex((other) => other.url === page.url) === index).slice(0, 8);
-      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs }));
+      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs, tone, format }));
       const task: DesktopTask = {
         id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
         message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
@@ -128,6 +133,8 @@ export const launchRoutes: Route[] = [
       desktopTasks.start(task, process.execPath, [builder, capture], appSourceRoot, {
         ...process.env,
         KOKORO_VOICE: voice,
+        WALKCAST_LAUNCH_TONE: tone,
+        WALKCAST_LAUNCH_FORMAT: format,
         WALKCAST_KOKORO_CACHE: kokoroCache,
         HF_HUB_OFFLINE: "1",
         WALKCAST_LAUNCH_WORK_DIR: workDir,
@@ -139,10 +146,14 @@ export const launchRoutes: Route[] = [
         const video = `launch-video-${taskId}.mp4`;
         const poster = `launch-video-${taskId}-poster.jpg`;
         const captions = `launch-video-${taskId}.vtt`;
+        const plan = `launch-video-${taskId}-storyboard.md`;
+        const shareCopy = `launch-video-${taskId}-share-copy.txt`;
         copyFileSync(join(outputDir, "Site-Launch-Film.mp4"), join(recordingDir, video));
         copyFileSync(join(outputDir, "Site-Launch-Film-poster.jpg"), join(recordingDir, poster));
         copyFileSync(captionsPath, join(recordingDir, captions));
-        const made: LaunchVideo = { id: taskId, video, poster, captions, voice, createdAt: new Date().toISOString() };
+        copyFileSync(join(outputDir, "brag-plan.md"), join(recordingDir, plan));
+        copyFileSync(join(outputDir, "share-copy.txt"), join(recordingDir, shareCopy));
+        const made: LaunchVideo = { id: taskId, video, poster, captions, plan, shareCopy, voice, tone, format, durationSeconds: 20, createdAt: new Date().toISOString() };
         const fresh = rereadSummary(summaryFile, diskSummary);
         fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
         writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));

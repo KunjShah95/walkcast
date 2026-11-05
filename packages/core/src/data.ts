@@ -126,7 +126,13 @@ export interface LaunchVideo {
   video: string;
   poster: string;
   captions: string;
+  /** Human-readable Brag-style storyboard produced from this recording's real page titles. */
+  plan?: string;
+  shareCopy?: string;
   voice: string;
+  tone?: "polished" | "cinematic" | "playful";
+  format?: "landscape" | "vertical" | "square";
+  durationSeconds?: number;
   createdAt: string;
 }
 

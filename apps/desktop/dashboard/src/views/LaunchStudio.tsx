@@ -25,6 +25,8 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [selected, setSelected] = useState(recordings[0]?.id ?? "");
   const [siteUrl, setSiteUrl] = useState("");
   const [voice, setVoice] = useState("af_heart");
+  const [tone, setTone] = useState<"polished" | "cinematic" | "playful">("polished");
+  const [format, setFormat] = useState<"landscape" | "vertical" | "square">("landscape");
   const [providers, setProviders] = useState<TtsProviderInfo[]>([]);
   const [task, setTask] = useState<DesktopTaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,10 +130,22 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   {busy && task?.kind === "kokoro-setup" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />} Set up Kokoro locally
                 </button>
               )}
-              <button type="button" disabled={!recording || busy} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voice))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
-                {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Generate launch film <ArrowRight className="h-4 w-4" />
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Film direction
+                  <select className={fieldClass} value={tone} onChange={(e) => setTone(e.target.value as typeof tone)} disabled={busy}>
+                    <option value="polished">Polished</option><option value="cinematic">Cinematic</option><option value="playful">Playful</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Video format
+                  <select className={fieldClass} value={format} onChange={(e) => setFormat(e.target.value as typeof format)} disabled={busy}>
+                    <option value="landscape">Landscape · 16:9</option><option value="vertical">Vertical · 9:16</option><option value="square">Square · 1:1</option>
+                  </select>
+                </label>
+              </div>
+              <button type="button" disabled={!recording || busy} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voice, { tone, format }))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
+                {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Make Brag launch film <ArrowRight className="h-4 w-4" />
               </button>
-              <p className="text-[11.5px] leading-5 text-ink-3">Choose any fresh website recording. The film uses its real page footage and titles. Rendering happens on this computer.</p>
+              <p className="text-[11.5px] leading-5 text-ink-3">A 20-second, storyboarded product film from this recording’s real pages, with motion design, Kokoro narration, original music, and captions. It renders locally.</p>
             </> : (
               <div className="grid gap-4">
                 <div className="grid gap-1">
@@ -162,10 +176,14 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
 
       {recording && latest && <section className="grid gap-4 rounded-2xl border border-line bg-panel p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-[15px] font-semibold">Your latest launch film</h2><p className="mt-1 text-[12px] text-ink-3">Generated {ago(Date.parse(latest.createdAt))} · {latest.voice}</p></div>
-          <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download MP4</a>
+          <div><h2 className="text-[15px] font-semibold">Your latest launch film</h2><p className="mt-1 text-[12px] text-ink-3">Generated {ago(Date.parse(latest.createdAt))} · {latest.voice} · {latest.tone ?? "polished"} · {latest.format ?? "landscape"}</p></div>
+          <div className="flex flex-wrap gap-2">
+            {latest.plan && <a href={recordingAssetUrl(recording.id, latest.plan)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Storyboard</a>}
+            {latest.shareCopy && <a href={recordingAssetUrl(recording.id, latest.shareCopy)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Share copy</a>}
+            <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download MP4</a>
+          </div>
         </div>
-        <video key={latest.id} controls playsInline poster={recordingAssetUrl(recording.id, latest.poster)} className="aspect-video w-full rounded-xl bg-black">
+        <video key={latest.id} controls playsInline poster={recordingAssetUrl(recording.id, latest.poster)} className={`mx-auto ${latest.format === "vertical" ? "aspect-[9/16] max-h-[72vh] max-w-[405px]" : latest.format === "square" ? "aspect-square max-w-3xl" : "aspect-video"} w-full rounded-xl bg-black`}>
           <source src={recordingAssetUrl(recording.id, latest.video)} type="video/mp4" />
           <track kind="captions" src={recordingAssetUrl(recording.id, latest.captions)} srcLang="en" label="English" default />
         </video>

@@ -43,10 +43,19 @@ of the older CRM demo used in the original launch cut.
 ## Build a fresh launch cut
 
 In the desktop app, open **Launch Studio**, paste any website URL, and press **Record site**. After
-recording its pages, return to Launch Studio, choose that recording and a Kokoro narrator, and
-press **Generate launch film**. The Studio renders locally from the real recorded pages, shows job
-progress, then plays the MP4 and captions. Its generated assets are saved beside the source
-recording. The command below still builds the original Walkcast-specific launch cut from a raw MP4.
+recording its pages, return to Launch Studio, choose that recording, a Kokoro narrator, a creative
+direction, and a video format. **Make Brag launch film** creates a 20-second storyboarded film from
+three timed excerpts of that recording, with animated page cards, original tone-matched music, locally
+generated narration, and captions. Rendering stays on the computer. The MP4, poster, captions, and
+downloadable storyboard are saved beside the source recording. The command below still builds the
+original Walkcast-specific launch cut from a raw MP4.
+
+The Brag-style local film supports polished, cinematic, and playful directions in landscape (16:9),
+vertical (9:16), and square (1:1). It follows the installed Brag skill's creative rules—short
+hook/reveal/highlights/outro, readable text, real product footage, and no invented claims—using
+Walkcast's built-in Playwright/FFmpeg renderer and original generated score. Each feature beat plays
+a short clip from the source recording. It does not require a network connection or a separate
+Hyperframes installation.
 
 Capture a new recording of the current product site, then pass its raw MP4 to the launch builder:
 

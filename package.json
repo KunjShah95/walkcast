@@ -1,6 +1,6 @@
 {
   "name": "walkcast",
-  "version": "0.10.5",
+  "version": "0.10.6",
   "private": true,
   "bin": {
     "walkcast": "bin/walkcast.mjs"
