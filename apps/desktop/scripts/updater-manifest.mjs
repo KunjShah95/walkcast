@@ -6,7 +6,7 @@
 // The app polls releases/latest/download/latest.json (tauri.conf.json → plugins.updater). Each
 // platform entry points at the installer the updater can apply in place, plus the minisign
 // signature Tauri produced for it at build time (TAURI_SIGNING_PRIVATE_KEY):
-//   windows-x86_64  NSIS *-setup.exe   linux-x86_64  *.AppImage.tar.gz
+//   windows-x86_64  NSIS *-setup.exe   linux-x86_64  *.AppImage (Tauri v2)
 //
 // macOS is no longer built (release.yml's matrix dropped it); this manifest has no darwin entry
 // to match, so a macOS install never offers this version to auto-update to.
@@ -14,9 +14,10 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const PLATFORMS = {
-  "windows-x86_64": (name) => /_x64-setup\.exe$/.test(name),
-  // Tauri signs the AppImage update archive, not the raw installable .AppImage file.
-  "linux-x86_64": (name) => /\.AppImage\.tar\.gz$/.test(name),
+  "windows-x86_64": [(name) => /_x64-setup\.exe$/.test(name)],
+  // With createUpdaterArtifacts=true, Tauri v2 signs the AppImage itself. Keep the older
+  // v1Compatible archive as a fallback for releases built in that legacy mode.
+  "linux-x86_64": [(name) => /\.AppImage$/.test(name), (name) => /\.AppImage\.tar\.gz$/.test(name)],
 };
 
 function walk(dir) {
@@ -30,11 +31,12 @@ export function buildManifest(dir, tag, repo, notes) {
   const files = walk(dir);
   const platforms = {};
   const missing = [];
-  for (const [platform, matches] of Object.entries(PLATFORMS)) {
-    const file = files.find((f) => matches(basename(f)));
-    const sig = file && files.find((f) => f === `${file}.sig`);
+  for (const [platform, matchers] of Object.entries(PLATFORMS)) {
+    const candidates = matchers.map((matches) => files.find((f) => matches(basename(f)))).filter(Boolean);
+    const file = candidates.find((candidate) => files.includes(`${candidate}.sig`));
+    const sig = file && `${file}.sig`;
     if (!file || !sig) {
-      missing.push(`${platform} (${file ? "no .sig next to " + basename(file) : "no installer"})`);
+      missing.push(`${platform} (${candidates.length ? "no .sig next to " + basename(candidates[0]) : "no installer"})`);
       continue;
     }
     platforms[platform] = {

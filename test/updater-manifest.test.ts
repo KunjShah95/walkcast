@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 // @ts-expect-error plain .mjs script without types
 import { buildManifest } from "../apps/desktop/scripts/updater-manifest.mjs";
@@ -10,22 +10,28 @@ test("updater manifest maps each platform to its updatable installer and signatu
   const dir = mkdtempSync(join(tmpdir(), "manifest-"));
   try {
     const put = (rel: string, body = "x") => {
-      mkdirSync(join(dir, rel, ".."), { recursive: true });
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
       writeFileSync(join(dir, rel), body);
     };
     put("nsis/walkcast_0.3.1_x64-setup.exe");
     put("nsis/walkcast_0.3.1_x64-setup.exe.sig", "SIG-WIN\n");
     put("msi/walkcast_0.3.1_x64_en-US.msi");
     put("appimage/walkcast_0.3.1_amd64.AppImage");
+    put("appimage/walkcast_0.3.1_amd64.AppImage.sig", "SIG-LINUX-DIRECT\n");
     put("appimage/walkcast_0.3.1_amd64.AppImage.tar.gz");
-    put("appimage/walkcast_0.3.1_amd64.AppImage.tar.gz.sig", "SIG-LINUX\n");
+    put("appimage/walkcast_0.3.1_amd64.AppImage.tar.gz.sig", "SIG-LINUX-LEGACY\n");
     put("deb/walkcast_0.3.1_amd64.deb");
     const m = buildManifest(dir, "v0.3.1", "o/r", "notes");
     assert.equal(m.version, "0.3.1");
     assert.deepEqual(m.platforms["windows-x86_64"], { signature: "SIG-WIN", url: "https://github.com/o/r/releases/download/v0.3.1/walkcast_0.3.1_x64-setup.exe" });
     assert.equal(m.platforms["darwin-aarch64"], undefined, "macOS is no longer built; the manifest has no entry for it");
-    assert.equal(m.platforms["linux-x86_64"].signature, "SIG-LINUX");
-    assert.equal(m.platforms["linux-x86_64"].url, "https://github.com/o/r/releases/download/v0.3.1/walkcast_0.3.1_amd64.AppImage.tar.gz");
+    assert.equal(m.platforms["linux-x86_64"].signature, "SIG-LINUX-DIRECT");
+    assert.equal(m.platforms["linux-x86_64"].url, "https://github.com/o/r/releases/download/v0.3.1/walkcast_0.3.1_amd64.AppImage");
+
+    rmSync(join(dir, "appimage/walkcast_0.3.1_amd64.AppImage.sig"));
+    const legacy = buildManifest(dir, "v0.3.1", "o/r", "notes");
+    assert.equal(legacy.platforms["linux-x86_64"].signature, "SIG-LINUX-LEGACY");
+    assert.equal(legacy.platforms["linux-x86_64"].url, "https://github.com/o/r/releases/download/v0.3.1/walkcast_0.3.1_amd64.AppImage.tar.gz");
 
     rmSync(join(dir, "appimage/walkcast_0.3.1_amd64.AppImage.tar.gz.sig"));
     assert.throws(() => buildManifest(dir, "v0.3.1", "o/r", "notes"), /linux-x86_64 \(no \.sig/);

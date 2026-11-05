@@ -9,7 +9,7 @@ All notable changes to Walkcast are documented here. The format follows
 
 ### Fixed
 
-- Linux desktop updates now publish and use Tauri's signed `.AppImage.tar.gz` bundle.
+- Linux desktop release validation now selects Tauri v2's signed `.AppImage` payload, with a legacy `.AppImage.tar.gz` fallback.
 - Settings makes the signed, in-place desktop update flow easier to find.
 
 ### Changed
