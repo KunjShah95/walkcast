@@ -102,7 +102,7 @@ fn healthy(port: u16) -> bool {
     return false;
   };
   let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-  if stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").is_err() {
+  if write!(stream, "GET /healthz HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n").is_err() {
     return false;
   };
   let mut head = [0u8; 12];
@@ -114,7 +114,7 @@ fn healthy(port: u16) -> bool {
 fn http_request(port: u16, method: &str, path: &str, headers: &[(&str, &str)]) -> Option<(u16, String)> {
   let mut stream = TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(500)).ok()?;
   stream.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
-  let mut request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n");
+  let mut request = format!("{method} {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n");
   for (name, value) in headers {
     request.push_str(&format!("{name}: {value}\r\n"));
   }
