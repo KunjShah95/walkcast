@@ -423,7 +423,7 @@ async function taskRequest(url: string, init?: RequestInit): Promise<DesktopTask
   return body.task;
 }
 
-export type LaunchFilmOptions = { tone: "polished" | "cinematic" | "playful"; format: "landscape" | "vertical" | "square" };
+export type LaunchFilmOptions = { tone: "polished" | "cinematic" | "playful"; format: "landscape" | "vertical" | "square"; voiceProvider?: "kokoro" | "custom" };
 
 export function startLaunchVideo(id: string, voice: string, options: LaunchFilmOptions): Promise<DesktopTaskStatus> {
   return taskRequest(`/api/recordings/${encodeURIComponent(id)}/launch-videos`, {

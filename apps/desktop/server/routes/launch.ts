@@ -79,6 +79,7 @@ export const launchRoutes: Route[] = [
       const id = params[1]!;
       const row = await findRecording(id);
       if (!row || !canSee(row.owner) || !row.summary) return json(404, { error: "Recording not found." });
+      const recordingDurationMs = row.summary.durationMs;
       if (media.kind !== "local") return json(501, { error: "Launch films need the recording saved on this computer." });
       let sourceUrl: URL;
       try { sourceUrl = new URL(row.summary.url); } catch { return json(400, { error: "This recording has an invalid website address." }); }
@@ -86,17 +87,22 @@ export const launchRoutes: Route[] = [
         return json(400, { error: "Choose a website recording with at least 15 seconds of footage and one visited page." });
       }
       const input = await readJson(req, 20_000);
+      const voiceProvider = input.voiceProvider === "custom" ? "custom" : "kokoro";
       const voice = String(input.voice ?? "af_heart").trim();
-      if (!/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
+      if (voiceProvider === "kokoro" && !/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
+      if (voiceProvider === "custom" && (!/^[\w:.-]{1,100}$/.test(voice) || !process.env.LAB_TTS_ENDPOINT?.trim())) return json(503, { error: "Configure LAB_TTS_ENDPOINT and enter a valid voice-profile ID before using the connected voice pipeline." });
       const tone = input.tone ?? "polished";
       const format = input.format ?? "landscape";
       if (!(tone === "polished" || tone === "cinematic" || tone === "playful")) return json(400, { error: "Choose a supported film direction." });
       if (!(format === "landscape" || format === "vertical" || format === "square")) return json(400, { error: "Choose a supported video format." });
-      if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
-      const appCache = process.env.WALKCAST_KOKORO_CACHE?.trim() || join(root, "data", "kokoro-cache");
-      const userCache = process.env.HF_HOME?.trim() || join(homedir(), ".cache", "huggingface");
-      const kokoroCache = [appCache, userCache].find(hasKokoroModel);
-      if (!kokoroCache) return json(503, { error: "The Kokoro model is not downloaded yet. Choose Prepare model in Launch Studio, then generate the film again." });
+      let kokoroCache: string | undefined;
+      if (voiceProvider === "kokoro") {
+        if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
+        const appCache = process.env.WALKCAST_KOKORO_CACHE?.trim() || join(root, "data", "kokoro-cache");
+        const userCache = process.env.HF_HOME?.trim() || join(homedir(), ".cache", "huggingface");
+        kokoroCache = [appCache, userCache].find(hasKokoroModel);
+        if (!kokoroCache) return json(503, { error: "The Kokoro model is not downloaded yet. Choose Prepare model in Launch Studio, then generate the film again." });
+      }
       // A film render writes frames, audio and an encode: refuse up front on a nearly full disk.
       const space = await checkFreeSpace(root);
       if (!space.ok) return json(507, { error: space.message });
@@ -116,14 +122,32 @@ export const launchRoutes: Route[] = [
       const taskRoot = join(root, "launch-video-work", taskId);
       const workDir = join(taskRoot, "docs", "launch", "source");
       const outputDir = join(taskRoot, "rendered");
-      const captionsPath = join(outputDir, "Site-Launch-Film.vtt");
       const siteConfigPath = join(taskRoot, "site-film.json");
       mkdirSync(taskRoot, { recursive: true });
-      const pages = row.summary.pages.map((page) => {
+      const requestMoments = new Map<string, number>();
+      const tracePath = join(recordingDir, "trace.jsonl");
+      if (existsSync(tracePath)) {
+        for (const line of readFileSync(tracePath, "utf8").split(/\r?\n/)) {
+          try {
+            const event = JSON.parse(line) as { type?: string; method?: string; url?: string; at?: number };
+            if (event.type !== "request" || event.method !== "GET" || !event.url || !Number.isFinite(event.at)) continue;
+            const key = new URL(event.url).origin + new URL(event.url).pathname;
+            if (!requestMoments.has(key)) requestMoments.set(key, event.at!);
+          } catch { /* ignore malformed and non-URL trace rows */ }
+        }
+      }
+      const rawPages = row.summary.pages.map((page) => {
         let pathname = "";
-        try { pathname = new URL(page.url).pathname; } catch { /* invalid event URL; title remains useful */ }
-        return { title: String(page.title || pathname || sourceUrl.hostname).trim().slice(0, 60), url: page.url };
+        let atMs: number | undefined;
+        try {
+          const url = new URL(page.url);
+          pathname = url.pathname;
+          atMs = requestMoments.get(url.origin + url.pathname);
+        } catch { /* invalid event URL; title remains useful */ }
+        return { title: String(page.title || pathname || sourceUrl.hostname).trim().slice(0, 60), url: page.url, atMs };
       }).filter((page, index, all) => all.findIndex((other) => other.url === page.url) === index).slice(0, 8);
+      const firstMoment = rawPages.find((page) => page.atMs !== undefined)?.atMs ?? 0;
+      const pages = rawPages.map((page, index) => ({ ...page, atMs: page.atMs === undefined ? undefined : Math.max(0, page.atMs - firstMoment) || (index === 0 ? 0 : undefined) }));
       writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs, tone, format }));
       const task: DesktopTask = {
         id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
@@ -133,27 +157,22 @@ export const launchRoutes: Route[] = [
       desktopTasks.start(task, process.execPath, [builder, capture], appSourceRoot, {
         ...process.env,
         KOKORO_VOICE: voice,
+        WALKCAST_LAUNCH_VOICE_ID: voice,
+        WALKCAST_LAUNCH_VOICE_PROVIDER: voiceProvider,
         WALKCAST_LAUNCH_TONE: tone,
         WALKCAST_LAUNCH_FORMAT: format,
-        WALKCAST_KOKORO_CACHE: kokoroCache,
+        ...(kokoroCache ? { WALKCAST_KOKORO_CACHE: kokoroCache } : {}),
         HF_HUB_OFFLINE: "1",
         WALKCAST_LAUNCH_WORK_DIR: workDir,
         WALKCAST_LAUNCH_OUTPUT_DIR: outputDir,
-        WALKCAST_LAUNCH_CAPTIONS_PATH: captionsPath,
         WALKCAST_LAUNCH_SITE_CONFIG: siteConfigPath,
         ...(findChrome() ? { PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: findChrome()! } : {}),
       }, async () => {
         const video = `launch-video-${taskId}.mp4`;
         const poster = `launch-video-${taskId}-poster.jpg`;
-        const captions = `launch-video-${taskId}.vtt`;
-        const plan = `launch-video-${taskId}-storyboard.md`;
-        const shareCopy = `launch-video-${taskId}-share-copy.txt`;
         copyFileSync(join(outputDir, "Site-Launch-Film.mp4"), join(recordingDir, video));
         copyFileSync(join(outputDir, "Site-Launch-Film-poster.jpg"), join(recordingDir, poster));
-        copyFileSync(captionsPath, join(recordingDir, captions));
-        copyFileSync(join(outputDir, "brag-plan.md"), join(recordingDir, plan));
-        copyFileSync(join(outputDir, "share-copy.txt"), join(recordingDir, shareCopy));
-        const made: LaunchVideo = { id: taskId, video, poster, captions, plan, shareCopy, voice, tone, format, durationSeconds: 20, createdAt: new Date().toISOString() };
+        const made: LaunchVideo = { id: taskId, video, poster, voice, voiceProvider, tone, format, durationSeconds: Math.min(58, Math.round(recordingDurationMs / 1000)), createdAt: new Date().toISOString() };
         const fresh = rereadSummary(summaryFile, diskSummary);
         fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
         writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));

@@ -5,6 +5,19 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
+## [0.10.8] - 2026-11-06
+
+### Added
+
+- Launch Studio's natural walkthrough films follow the real capture chronologically, with page-aware chapter timing, editorial motion, an original full-length score, and automatic narration.
+- Connected voice pipeline support for an owner-approved voice profile through the custom TTS endpoint.
+
+### Changed
+
+- Launch films export only the finished MP4 and poster; scripts, transcripts, caption files, and storyboard downloads are not generated.
+- Launch Studio supports continuous films up to 58 seconds and adapts score accents to recorded page changes.
+- Release metadata and the installed app version are advanced to 0.10.8.
+
 ## [0.10.7] - 2026-11-05
 
 ### Fixed
@@ -88,4 +101,5 @@ Earlier releases: see [GitHub Releases](https://github.com/KunjShah95/walkcast/r
 
 [0.10.2]: https://github.com/KunjShah95/walkcast/compare/v0.9.1...v0.10.2
 [0.10.7]: https://github.com/KunjShah95/walkcast/compare/v0.10.6...v0.10.7
+[0.10.8]: https://github.com/KunjShah95/walkcast/compare/v0.10.7...v0.10.8
 [0.9.1]: https://github.com/KunjShah95/walkcast/releases/tag/v0.9.1

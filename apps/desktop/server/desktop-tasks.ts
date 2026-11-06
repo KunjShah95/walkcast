@@ -44,7 +44,9 @@ export function trackDesktopTask(task: DesktopTask, chunk: Buffer | string): voi
   if (lines.length) task.diagnosticTail = [...(task.diagnosticTail ?? []), ...lines.map((line) => line.slice(0, 500))].slice(-12);
   if (lines.length) task.message = lines.at(-1)!.slice(0, 220);
   const frames = /frame\s+(\d+)\s*\/\s*(\d+)/.exec(text);
+  const voiceSegments = /voice segment\s+(\d+)\s*\/\s*(\d+)/i.exec(text);
   if (frames) task.progress = Math.min(96, 24 + Math.round((Number(frames[1]) / Number(frames[2])) * 70));
+  else if (voiceSegments) task.progress = Math.max(task.progress, Math.min(23, 12 + Math.round((Number(voiceSegments[1]) / Number(voiceSegments[2])) * 11)));
   else if (/Prepared current/.test(text)) task.progress = Math.max(task.progress, 8);
   else if (/Kokoro|voice/.test(text)) task.progress = Math.max(task.progress, 17);
   else if (/score|music/i.test(text)) task.progress = Math.max(task.progress, 12);

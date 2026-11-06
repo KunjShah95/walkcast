@@ -1,13 +1,15 @@
-"""Generate an original, tone-aware 20-second launch-film score (NumPy only)."""
+"""Generate an original, tone-aware walkthrough score (NumPy only)."""
 import sys
 import wave
+import json
+import os
 
 import numpy as np
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "score.wav"
 TONE = sys.argv[2] if len(sys.argv) > 2 else "polished"
+DURATION = max(15.0, min(90.0, float(sys.argv[3]) if len(sys.argv) > 3 else 58.0))
 SR = 44100
-DURATION = 20.0
 N = int(SR * DURATION)
 LEFT = np.zeros(N, dtype=np.float64)
 RIGHT = np.zeros(N, dtype=np.float64)
@@ -62,7 +64,9 @@ def whoosh(duration=0.55):
 
 
 # Four-bar harmonic loop, opening with space and filling out as the product appears.
-for bar, root in enumerate(MIDI):
+bars = int(np.ceil(DURATION / (4 * BEAT)))
+for bar in range(bars):
+    root = MIDI[bar % len(MIDI)]
     start = bar * 4 * BEAT
     t = np.arange(min(N - int(start * SR), int(4 * BEAT * SR))) / SR
     if not len(t):
@@ -84,8 +88,19 @@ for bar, root in enumerate(MIDI):
         if TONE == "playful" and at > 2.6:
             add(pluck(chord[(beat + bar + 1) % len(chord)] + 12, 0.2), at + BEAT * 0.75, 0.08, 0.2)
 
-# Restrained transition sounds land with the four visual beats.
-for at, gain in [(2.7, 0.45), (7.7, 0.26), (12.7, 0.3), (17.0, 0.48)]:
+# Place restrained hits on the actual captured page changes when available. Older recordings
+# without matching trace timestamps use an even chapter rhythm as a graceful fallback.
+try:
+    chapter_times = json.loads(os.environ.get("WALKCAST_LAUNCH_CHAPTER_TIMES", "[]"))
+except json.JSONDecodeError:
+    chapter_times = []
+exact = len(chapter_times) > 0 and all(isinstance(t, (int, float)) for t in chapter_times)
+if exact:
+    cues = [4.2] + [float(t) for t in chapter_times[1:] if 4.5 < float(t) < DURATION - 4.5] + [DURATION - 4.2]
+else:
+    cues = [DURATION * ratio for ratio in (0.08, 0.34, 0.61, 0.84)]
+for index, at in enumerate(sorted(set(round(t, 2) for t in cues))):
+    gain = (0.45, 0.25, 0.28, 0.36)[min(index, 3)]
     add(whoosh(), at - 0.36, 0.23 if TONE == "polished" else 0.33)
     add(soft_hit(1.2), at, gain * (1.25 if TONE == "cinematic" else 1.0))
 
@@ -94,7 +109,7 @@ t = np.arange(int(SR * 3.2)) / SR
 root = MIDI[0]
 outro = sum(np.sin(2 * np.pi * note(m) * t) for m in [root, root + 3, root + 7, root + 12, root + 19]) / 5
 outro *= np.minimum(1, t * 2) * np.exp(-t * 0.42)
-add(outro, 16.8, 0.2)
+add(outro, DURATION - 3.6, 0.2)
 
 fade_in = np.minimum(1, np.arange(N) / (0.55 * SR))
 fade_out = np.minimum(1, np.maximum(0, (DURATION * SR - np.arange(N)) / (2.4 * SR))) ** 1.4

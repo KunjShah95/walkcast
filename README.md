@@ -252,12 +252,14 @@ the repository `.env` for local development.
 
 ### Launch Studio
 
-The desktop dashboard includes **Launch Studio**. Paste any website URL, record its pages, then
-choose that recording and a Kokoro voice. Walkcast builds a site-specific 1080p launch film from
-real footage and page titles, with a composed score, ducked narration, and captions. The MP4 and
-VTT are saved with the source recording. The first run can prepare Kokoro and its local voice-model
-cache from the Studio itself. `npm run launch:video -- <recording.mp4>` remains available for the
-original Walkcast product-launch cut.
+The desktop dashboard includes **Launch Studio**. Paste any website URL and record its pages, then
+choose the fresh recording and a voice source. Walkcast builds a site-specific 1080p walkthrough
+from continuous chronological footage, page-aware chapter labels, editorial motion, original score,
+and automatic narration. It saves the MP4 and poster without script or transcript sidecars. Kokoro
+is available locally; a custom TTS endpoint can use an existing owner-approved voice profile (see
+[`docs/launch/voice-pipeline.md`](docs/launch/voice-pipeline.md)). The first run can prepare Kokoro
+and its local voice-model cache from the Studio itself. `npm run launch:video -- <recording.mp4>`
+remains available for the original Walkcast product-launch cut.
 
 Guardrails: explicit authorization attestation required; never bypasses CAPTCHA/2FA (stops and
 says so); after sign-in only GET navigations; skips sign-out/delete/cancel/unsubscribe links;

@@ -1,77 +1,128 @@
-"""Create short, readable narration and matching captions for a Brag-style site film."""
-import json
-import sys
+"""Generate an automatic, short narration track from the recording's real page titles.
 
-import numpy as np
-import soundfile as sf
-from kokoro import KPipeline
+No transcript, subtitles, script, or captions file is written. The narration text exists only in
+memory while Kokoro synthesizes it; it describes the recorded visit and avoids inferred claims.
+"""
+import json
+import base64
+import os
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import wave
+from pathlib import Path
 
 VOICE = sys.argv[1] if len(sys.argv) > 1 else "af_heart"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "voice.wav"
-VTT = sys.argv[3] if len(sys.argv) > 3 else "captions.vtt"
-CONFIG = sys.argv[4] if len(sys.argv) > 4 else ""
+CONFIG = sys.argv[3] if len(sys.argv) > 3 else ""
+DURATION = max(15, min(90, float(sys.argv[4]) if len(sys.argv) > 4 else 58))
 SR = 24000
-DURATION = 20
-tone = "polished"
-try:
-    with open(CONFIG, encoding="utf-8") as handle:
-        tone = json.load(handle).get("tone", tone)
-except (OSError, json.JSONDecodeError):
-    pass
+PROVIDER = os.environ.get("WALKCAST_LAUNCH_VOICE_PROVIDER", "kokoro")
 
-LINES_BY_TONE = {
-    "polished": [
-        (0.45, 2.8, "A closer look at what you are building."),
-        (3.25, 6.4, "Start with the first impression."),
-        (7.25, 10.4, "Explore the details that make it distinct."),
-        (11.25, 14.7, "See how the experience comes together."),
-        (16.7, 19.4, "One real visit. One clear story."),
-    ],
-    "cinematic": [
-        (0.45, 2.8, "Every great experience starts somewhere."),
-        (3.25, 6.4, "Step inside. See the first impression."),
-        (7.25, 10.4, "Move closer. The details unfold."),
-        (11.25, 14.7, "The whole experience, brought into view."),
-        (16.7, 19.4, "One real visit. A story worth sharing."),
-    ],
-    "playful": [
-        (0.45, 2.8, "Your website is ready for its close-up."),
-        (3.25, 6.4, "First up, the very first impression."),
-        (7.25, 10.4, "Now, the details that make it yours."),
-        (11.25, 14.7, "Look at that. It all comes together."),
-        (16.7, 19.4, "One real visit. Pretty good story."),
-    ],
-}
+with open(CONFIG, encoding="utf-8") as handle:
+    site = json.load(handle)
+host = " ".join(str(site.get("host") or "this website").split())[:45]
+brand = " ".join(str(site.get("title") or host).split())[:34]
+pages = []
+for page in site.get("pages", []):
+    name = " ".join(str(page.get("title") or "").split())[:50]
+    if name and name.casefold() not in [item.casefold() for item in pages]:
+        pages.append(name)
 
-pipeline = KPipeline(lang_code=VOICE[0])
-out = np.zeros(DURATION * SR, dtype=np.float32)
-cues = []
-for start, end, text in LINES_BY_TONE.get(tone, LINES_BY_TONE["polished"]):
-    speed = 1.0
-    for _ in range(7):
-        chunks = [audio for _, _, audio in pipeline(text, voice=VOICE, speed=speed)]
-        audio = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
-        nonzero = np.where(np.abs(audio) > 0.01)[0]
-        if len(nonzero):
-            audio = audio[max(0, nonzero[0] - 240):nonzero[-1] + 1200]
-        duration = len(audio) / SR
-        if duration <= end - start or speed >= 1.32:
-            break
-        speed = round(min(1.32, speed * min(1.25, (duration / (end - start)) * 1.02)), 3)
-    if duration > end - start:
-        raise RuntimeError(f"Narration line overruns its scene ({duration:.2f}s / {end-start:.2f}s): {text}")
-    offset = int(start * SR)
-    out[offset:offset + len(audio)] += audio
-    cues.append((start, start + duration, text))
-    print(f"{start:5.2f} {duration:5.2f}s speed {speed} {text}")
+# Conversational lines are composed from the pages actually present in the Walkcast capture.
+# The generated words are used only to synthesize speech; no script or transcript is exported.
+page_line_count = max(1, min(5, int((DURATION - 5) // 3.5)))
+lines = [f"Welcome to {brand}."]
+for i, page in enumerate(pages[:page_line_count]):
+    lead = ["First,", "Next,", "Then,", "Here,", "And finally,"][i]
+    lines.append(f"{lead} {page[:32]}.")
+lines.append(f"That's {brand}.")
+if PROVIDER == "kokoro":
+    from kokoro import KPipeline
+    import numpy as np
+    import soundfile as sf
+    voice = KPipeline(lang_code=VOICE[0])
+else:
+    voice = None
 
-sf.write(OUT, out, SR)
+def request_audio(phrase):
+    # Adapter contract: POST {text, language, voice} to LAB_TTS_ENDPOINT. Return WAV/MP3 bytes,
+    # or JSON with base64 audio/audioContent. This lets an owner-consented voice pipeline serve
+    # its own voice profile without coupling Walkcast to one vendor's clone model.
+    endpoint = os.environ.get("LAB_TTS_ENDPOINT", "").strip()
+    profile = os.environ.get("WALKCAST_LAUNCH_VOICE_ID", "").strip()
+    key = os.environ.get("LAB_TTS_API_KEY", "").strip()
+    body = json.dumps({"text": phrase, "language": os.environ.get("LAB_TTS_LANGUAGE", "en"), "voice": profile}).encode()
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            raw = response.read()
+            if "application/json" in response.headers.get("Content-Type", ""):
+                result = json.loads(raw.decode("utf-8"))
+                encoded = result.get("audio") or result.get("audioContent")
+                if not encoded:
+                    raise RuntimeError("Connected voice endpoint returned no base64 audio.")
+                raw = base64.b64decode(encoded)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(f"Connected voice endpoint returned HTTP {error.code}.") from None
+    except urllib.error.URLError:
+        raise RuntimeError("Could not reach the configured voice endpoint.") from None
+    return raw
 
-def stamp(seconds):
-    minutes = int(seconds // 60)
-    return f"00:{minutes:02d}:{seconds % 60:06.3f}"
+def slots():
+    # Keep breathing room between phrases so the captured interface can be watched naturally.
+    slot = max(4.0, DURATION - 4.0) / len(lines)
+    return [(phrase, 1.0 + index * slot, min(4.8, slot * 0.86)) for index, phrase in enumerate(lines)]
 
-with open(VTT, "w", encoding="utf-8") as handle:
-    handle.write("WEBVTT\n\n")
-    for number, (start, end, text) in enumerate(cues, 1):
-        handle.write(f"{number}\n{stamp(start)} --> {stamp(end)}\n{text}\n\n")
+if PROVIDER == "kokoro":
+    out = np.zeros(round(DURATION * SR), dtype=np.float32)
+    for line_number, (phrase, start, budget) in enumerate(slots(), 1):
+        speed = 1.0
+        for _attempt in range(6):
+            chunks = [audio for _, _, audio in voice(phrase, voice=VOICE, speed=speed)]
+            audio = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+            nonzero = np.where(np.abs(audio) > 0.01)[0]
+            if len(nonzero):
+                audio = audio[max(0, nonzero[0] - 240):nonzero[-1] + 1200]
+            if len(audio) / SR <= budget or speed >= 1.32:
+                break
+            speed = round(min(1.32, speed * 1.12), 3)
+        if len(audio) / SR > budget:
+            raise RuntimeError("The selected Kokoro voice could not fit a narration line into its visual beat.")
+        offset = round(start * SR)
+        out[offset:offset + len(audio)] += audio
+        print(f"voice segment {line_number}/{len(lines)} synthesized", flush=True)
+    sf.write(OUT, out, SR)
+else:
+    ffmpeg = os.environ.get("LAB_FFMPEG", "ffmpeg")
+    with tempfile.TemporaryDirectory(prefix="walkcast-voice-") as temp:
+        inputs = []
+        filter_parts = []
+        for line_number, (phrase, start, budget) in enumerate(slots(), 1):
+            source = Path(temp) / f"source-{line_number}"
+            wav = Path(temp) / f"voice-{line_number}.wav"
+            source.write_bytes(request_audio(phrase))
+            result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(source), "-ar", str(SR), "-ac", "1", "-c:a", "pcm_s16le", str(wav)], capture_output=True, text=True)
+            if result.returncode:
+                raise RuntimeError(f"Could not convert connected voice audio: {result.stderr[-1200:]}")
+            with wave.open(str(wav), "rb") as clip:
+                clip_duration = clip.getnframes() / clip.getframerate()
+            if clip_duration > budget:
+                raise RuntimeError("The connected voice endpoint returned a line that is too long for its visual beat.")
+            inputs.append(wav)
+            delay = round(start * 1000)
+            filter_parts.append(f"[{line_number}:a]adelay={delay}|{delay}[v{line_number}]")
+            print(f"voice segment {line_number}/{len(lines)} synthesized", flush=True)
+        labels = "".join(f"[v{i}]" for i in range(1, len(inputs) + 1))
+        filter_parts.append(f"[0:a]{labels}amix=inputs={len(inputs)+1}:duration=first:normalize=0[out]")
+        args = [ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-t", str(DURATION), "-i", f"anullsrc=r={SR}:cl=mono"]
+        for path in inputs:
+            args.extend(["-i", str(path)])
+        args.extend(["-filter_complex", ";".join(filter_parts), "-map", "[out]", "-ar", str(SR), "-ac", "1", OUT])
+        result = subprocess.run(args, capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"Could not assemble connected voice track: {result.stderr[-1200:]}")

@@ -125,11 +125,13 @@ export interface LaunchVideo {
   id: string;
   video: string;
   poster: string;
-  captions: string;
+  /** Optional caption sidecar; launch walkthrough films can intentionally ship without transcripts. */
+  captions?: string;
   /** Human-readable Brag-style storyboard produced from this recording's real page titles. */
   plan?: string;
   shareCopy?: string;
   voice: string;
+  voiceProvider?: "kokoro" | "custom";
   tone?: "polished" | "cinematic" | "playful";
   format?: "landscape" | "vertical" | "square";
   durationSeconds?: number;
