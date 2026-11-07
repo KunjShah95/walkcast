@@ -5036,7 +5036,7 @@ dependencies = [
 
 [[package]]
 name = "walkcast"
-version = "0.10.8"
+version = "0.10.9"
 dependencies = [
  "getrandom 0.3.4",
  "keyring",

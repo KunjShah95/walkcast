@@ -897,6 +897,14 @@ function VoiceRecorder({
 
   const start = async () => {
     setError(null);
+    if (!window.isSecureContext) {
+      setError("Microphone recording needs a secure local connection. Open Walkcast from its desktop app or use its localhost address, then retry.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("This browser does not expose microphone recording. Open Walkcast in its desktop app or a current desktop browser.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const ctx = new AudioContext();
@@ -915,6 +923,24 @@ function VoiceRecorder({
         });
         setState("review");
       };
+      const v = video.current;
+      if (v) {
+        v.pause();
+        v.muted = true;
+        v.currentTime = 0;
+        v.onended = () => stopAll();
+        try {
+          // Start playback from the click gesture before recording; play() can reject even after
+          // microphone permission succeeds (for example when the video is still loading).
+          await v.play();
+        } catch {
+          stream.getTracks().forEach((track) => track.stop());
+          await ctx.close();
+          v.muted = false;
+          setError("The walkthrough could not start playing. Wait for the video to load, then record your voice again.");
+          return;
+        }
+      }
       const started = performance.now();
       const tick = () => {
         analyser.getByteTimeDomainData(data);
@@ -926,17 +952,10 @@ function VoiceRecorder({
       };
       rec.current = { recorder, stream, ctx, raf: 0, started };
       recorder.start(250);
-      const v = video.current;
-      if (v) {
-        v.muted = true;
-        v.currentTime = 0;
-        v.onended = () => stopAll();
-        void v.play().catch(() => {});
-      }
       setState("recording");
       tick();
     } catch (e) {
-      setError(e instanceof DOMException && e.name === "NotAllowedError" ? "Microphone access was blocked. Allow it in the browser's address bar and try again." : e instanceof Error ? e.message : String(e));
+      setError(microphoneError(e));
     }
   };
 
@@ -1057,6 +1076,17 @@ function VoiceRecorder({
       </div>
     </div>
   );
+}
+
+function microphoneError(error: unknown): string {
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone access is blocked. In the browser address bar, open the site controls (lock or tune icon), set Microphone to Allow, then reload Walkcast and try again. Also check Windows Settings → Privacy & security → Microphone and enable desktop app access.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "No microphone was found. Connect or enable a microphone, then try again.";
+  if (name === "NotReadableError" || name === "TrackStartError") return "The microphone is busy or unavailable. Close other apps using it, then try again.";
+  if (name === "OverconstrainedError") return "The selected microphone does not support the requested recording settings. Check your microphone settings and try again.";
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** How long a recorded take is, read with the same decoder that will trim it. */

@@ -11,6 +11,7 @@ const capture = resolve(process.argv[2] || "");
 const ffmpeg = process.env.LAB_FFMPEG || "ffmpeg";
 const python = process.env.WALKCAST_KOKORO_PYTHON || "python";
 const voice = process.env.KOKORO_VOICE || "af_heart";
+const hasVoice = process.env.WALKCAST_LAUNCH_HAS_VOICE !== "0";
 if (!existsSync(capture) || !existsSync(configPath)) throw new Error("A website recording and its launch-film details are required.");
 const site = JSON.parse(await (await import("node:fs/promises")).readFile(configPath, "utf8"));
 const host = String(site.host || new URL(site.url).hostname);
@@ -60,7 +61,7 @@ writeFileSync(resolve(workDir, "site-film.html"), html);
 await run(python, [resolve(here, "music-brag.py"), resolve(outputDir, "score.wav"), tone, String(duration)], here, {
   ...process.env, PYTHONUTF8: "1", WALKCAST_LAUNCH_CHAPTER_TIMES: JSON.stringify(data.chapters.map((chapter) => chapter.at)),
 });
-await run(python, [resolve(here, "voiceover-site.py"), voice, resolve(outputDir, "voice.wav"), configPath, String(duration)], here, {
+if (hasVoice) await run(python, [resolve(here, "voiceover-site.py"), voice, resolve(outputDir, "voice.wav"), configPath, String(duration)], here, {
   ...process.env, PYTHONUTF8: "1", HF_HOME: process.env.WALKCAST_KOKORO_CACHE || resolve(here, "../../../.walkcast/kokoro-cache"),
 });
 await run(process.execPath, [resolve(here, "render.mjs"), resolve(workDir, "site-film.html"), resolve(outputDir, "silent.mp4"), "30", "0", String(duration), String(dimensions[0]), String(dimensions[1])], here, {
@@ -68,9 +69,15 @@ await run(process.execPath, [resolve(here, "render.mjs"), resolve(workDir, "site
 });
 const musicMix = tone === "cinematic" ? 0.48 : tone === "playful" ? 0.4 : 0.34;
 const fadeStart = Math.max(0, duration - 4);
-const mix = `[1:a]aresample=48000,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,pan=stereo|c0=c0|c1=c0,asplit=2[vo][key];[0:a]aresample=48000,volume=${musicMix}[music];[music][key]sidechaincompress=threshold=0.02:ratio=10:attack=25:release=400[duck];[duck][vo]amix=inputs=2:weights='1 1.25':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11,aresample=48000,afade=t=out:st=${fadeStart}:d=4[a]`;
+const silentVideo = resolve(outputDir, "silent.mp4");
+const noVoiceVideo = resolve(outputDir, "Site-Launch-Film-No-Voice.mp4");
+const musicOnly = `[0:a]aresample=48000,volume=${musicMix},loudnorm=I=-18:TP=-2:LRA=11,afade=t=out:st=${fadeStart}:d=4[a]`;
+await run(ffmpeg, ["-y", "-i", resolve(outputDir, "score.wav"), "-i", silentVideo, "-filter_complex", musicOnly, "-map", "1:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", String(duration), noVoiceVideo]);
 const finalVideo = resolve(outputDir, "Site-Launch-Film.mp4");
-await run(ffmpeg, ["-y", "-i", resolve(outputDir, "score.wav"), "-i", resolve(outputDir, "voice.wav"), "-i", resolve(outputDir, "silent.mp4"), "-filter_complex", mix,
-  "-map", "2:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-metadata", `title=${host} — Walkthrough Film`, "-movflags", "+faststart", "-t", String(duration), finalVideo]);
+if (hasVoice) {
+  const mix = `[1:a]aresample=48000,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,pan=stereo|c0=c0|c1=c0,asplit=2[vo][key];[0:a]aresample=48000,volume=${musicMix}[music];[music][key]sidechaincompress=threshold=0.02:ratio=10:attack=25:release=400[duck];[duck][vo]amix=inputs=2:weights='1 1.25':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11,aresample=48000,afade=t=out:st=${fadeStart}:d=4[a]`;
+  await run(ffmpeg, ["-y", "-i", resolve(outputDir, "score.wav"), "-i", resolve(outputDir, "voice.wav"), "-i", silentVideo, "-filter_complex", mix,
+    "-map", "2:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-metadata", `title=${host} — Walkthrough Film`, "-movflags", "+faststart", "-t", String(duration), finalVideo]);
+} else copyFileSync(noVoiceVideo, finalVideo);
 await run(ffmpeg, ["-y", "-ss", String(Math.min(duration - 1, Math.max(2, duration * 0.24))), "-i", finalVideo, "-frames:v", "1", "-update", "1", "-q:v", "2", resolve(outputDir, "Site-Launch-Film-poster.jpg")]);
-console.log(JSON.stringify({ video: finalVideo, sourceCapture: capture, website: host, voice, tone, format, dimensions, duration, pageCount }));
+console.log(JSON.stringify({ video: finalVideo, noVoiceVideo: hasVoice ? noVoiceVideo : null, sourceCapture: capture, website: host, voice: hasVoice ? voice : "none", tone, format, dimensions, duration, pageCount }));

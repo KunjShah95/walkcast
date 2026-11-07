@@ -87,8 +87,8 @@ export const launchRoutes: Route[] = [
         return json(400, { error: "Choose a website recording with at least 15 seconds of footage and one visited page." });
       }
       const input = await readJson(req, 20_000);
-      const voiceProvider = input.voiceProvider === "custom" ? "custom" : "kokoro";
-      const voice = String(input.voice ?? "af_heart").trim();
+      const voiceProvider = input.voiceProvider === "custom" ? "custom" : input.voiceProvider === "none" ? "none" : "kokoro";
+      const voice = voiceProvider === "none" ? "none" : String(input.voice ?? "af_heart").trim();
       if (voiceProvider === "kokoro" && !/^[a-z]{2}_[a-z0-9_]{2,40}$/.test(voice)) return json(400, { error: "Choose a valid Kokoro voice id." });
       if (voiceProvider === "custom" && (!/^[\w:.-]{1,100}$/.test(voice) || !process.env.LAB_TTS_ENDPOINT?.trim())) return json(503, { error: "Configure LAB_TTS_ENDPOINT and enter a valid voice-profile ID before using the connected voice pipeline." });
       const tone = input.tone ?? "polished";
@@ -159,6 +159,7 @@ export const launchRoutes: Route[] = [
         KOKORO_VOICE: voice,
         WALKCAST_LAUNCH_VOICE_ID: voice,
         WALKCAST_LAUNCH_VOICE_PROVIDER: voiceProvider,
+        WALKCAST_LAUNCH_HAS_VOICE: voiceProvider === "none" ? "0" : "1",
         WALKCAST_LAUNCH_TONE: tone,
         WALKCAST_LAUNCH_FORMAT: format,
         ...(kokoroCache ? { WALKCAST_KOKORO_CACHE: kokoroCache } : {}),
@@ -172,7 +173,10 @@ export const launchRoutes: Route[] = [
         const poster = `launch-video-${taskId}-poster.jpg`;
         copyFileSync(join(outputDir, "Site-Launch-Film.mp4"), join(recordingDir, video));
         copyFileSync(join(outputDir, "Site-Launch-Film-poster.jpg"), join(recordingDir, poster));
-        const made: LaunchVideo = { id: taskId, video, poster, voice, voiceProvider, tone, format, durationSeconds: Math.min(58, Math.round(recordingDurationMs / 1000)), createdAt: new Date().toISOString() };
+        const noVoiceOutput = join(outputDir, "Site-Launch-Film-No-Voice.mp4");
+        const noVoiceVideo = existsSync(noVoiceOutput) ? `launch-video-${taskId}-no-voice.mp4` : undefined;
+        if (noVoiceVideo) copyFileSync(noVoiceOutput, join(recordingDir, noVoiceVideo));
+        const made: LaunchVideo = { id: taskId, video, poster, ...(noVoiceVideo ? { noVoiceVideo } : {}), voice, voiceProvider, tone, format, durationSeconds: Math.min(58, Math.round(recordingDurationMs / 1000)), createdAt: new Date().toISOString() };
         const fresh = rereadSummary(summaryFile, diskSummary);
         fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
         writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));

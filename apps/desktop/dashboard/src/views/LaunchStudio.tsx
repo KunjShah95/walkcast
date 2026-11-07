@@ -25,7 +25,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [selected, setSelected] = useState(recordings[0]?.id ?? "");
   const [siteUrl, setSiteUrl] = useState("");
   const [voice, setVoice] = useState("af_heart");
-  const [voiceProvider, setVoiceProvider] = useState<"kokoro" | "custom">("kokoro");
+  const [voiceProvider, setVoiceProvider] = useState<"kokoro" | "custom" | "none">("kokoro");
   const [customVoice, setCustomVoice] = useState("");
   const [tone, setTone] = useState<"polished" | "cinematic" | "playful">("polished");
   const [format, setFormat] = useState<"landscape" | "vertical" | "square">("landscape");
@@ -122,15 +122,18 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   {recordings.map((item) => <option key={item.id} value={item.id}>{new URL(item.url).hostname} · {item.pages.length} pages · {ms(item.durationMs)} · {ago(Date.parse(item.createdAt))}</option>)}
                 </select>
               </label>
-              {connectedVoice?.configured && <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Voice source
+              <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Audio track
                 <select className={fieldClass} value={voiceProvider} onChange={(e) => setVoiceProvider(e.target.value as typeof voiceProvider)} disabled={busy}>
-                  <option value="kokoro">Kokoro · local preset</option><option value="custom">Connected voice pipeline</option>
+                  <option value="kokoro">Natural narration + music</option>
+                  {connectedVoice?.configured && <option value="custom">My connected voice + music</option>}
+                  <option value="none">Music only · no narration</option>
                 </select>
-              </label>}
+                <span className="text-[11px] font-normal leading-5 text-ink-3">When narration is on, Walkcast also builds a music-only download from the same cut.</span>
+              </label>
               {voiceProvider === "custom" ? <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Voice profile ID
                 <input className={fieldClass} value={customVoice} onChange={(e) => setCustomVoice(e.target.value)} placeholder="your-cloned-voice-id" disabled={busy} />
                 <span className="text-[11px] font-normal leading-5 text-ink-3">Uses your configured LAB_TTS_ENDPOINT. It should return WAV/MP3 bytes or JSON with an audio base64 field.</span>
-              </label> : <>
+              </label> : voiceProvider === "kokoro" ? <>
               <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">
                 Kokoro narrator
                 <select className={fieldClass} value={voice} onChange={(e) => setVoice(e.target.value)} disabled={busy}>
@@ -147,7 +150,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   {busy && task?.kind === "kokoro-setup" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />} Set up Kokoro locally
                 </button>
               )}
-              </>}
+              </> : null}
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Film direction
                   <select className={fieldClass} value={tone} onChange={(e) => setTone(e.target.value as typeof tone)} disabled={busy}>
@@ -163,7 +166,7 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
               <button type="button" disabled={!recording || busy || (voiceProvider === "custom" && !customVoice.trim())} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voiceProvider === "custom" ? customVoice.trim() : voice, { tone, format, voiceProvider }))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
                 {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Make walkthrough film <ArrowRight className="h-4 w-4" />
               </button>
-              <p className="text-[11.5px] leading-5 text-ink-3">A continuous cut of the real browser visit, with automatic page-aware narration and an original mastered score. Walkcast does not export scripts or transcripts. To use a cloned owner voice, configure your pipeline as the custom TTS endpoint and enter its voice-profile ID.</p>
+              <p className="text-[11.5px] leading-5 text-ink-3">A continuous cut of the real browser visit with an original mastered score. Narrated films also include a music-only MP4. Walkcast does not export scripts or transcripts. To use a cloned owner voice, configure your pipeline as the custom TTS endpoint and enter its voice-profile ID.</p>
             </> : (
               <div className="grid gap-4">
                 <div className="grid gap-1">
@@ -194,9 +197,10 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
 
       {recording && latest && <section className="grid gap-4 rounded-2xl border border-line bg-panel p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-[15px] font-semibold">Your latest walkthrough film</h2><p className="mt-1 text-[12px] text-ink-3">Generated {ago(Date.parse(latest.createdAt))} · {latest.voiceProvider === "custom" ? "Connected voice" : latest.voice} · {latest.durationSeconds ?? 58}s · {latest.tone ?? "polished"} · {latest.format ?? "landscape"}</p></div>
+          <div><h2 className="text-[15px] font-semibold">Your latest walkthrough film</h2><p className="mt-1 text-[12px] text-ink-3">Generated {ago(Date.parse(latest.createdAt))} · {latest.voiceProvider === "none" ? "Music only" : latest.voiceProvider === "custom" ? "Connected voice" : latest.voice} · {latest.durationSeconds ?? 58}s · {latest.tone ?? "polished"} · {latest.format ?? "landscape"}</p></div>
           <div className="flex flex-wrap gap-2">
-            <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download MP4</a>
+            <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download {latest.voiceProvider === "none" ? "music only" : "with voice"}</a>
+            {latest.noVoiceVideo && <a href={recordingAssetUrl(recording.id, latest.noVoiceVideo)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download music only</a>}
           </div>
         </div>
         <video key={latest.id} controls playsInline poster={recordingAssetUrl(recording.id, latest.poster)} className={`mx-auto ${latest.format === "vertical" ? "aspect-[9/16] max-h-[72vh] max-w-[405px]" : latest.format === "square" ? "aspect-square max-w-3xl" : "aspect-video"} w-full rounded-xl bg-black`}>

@@ -423,7 +423,7 @@ async function taskRequest(url: string, init?: RequestInit): Promise<DesktopTask
   return body.task;
 }
 
-export type LaunchFilmOptions = { tone: "polished" | "cinematic" | "playful"; format: "landscape" | "vertical" | "square"; voiceProvider?: "kokoro" | "custom" };
+export type LaunchFilmOptions = { tone: "polished" | "cinematic" | "playful"; format: "landscape" | "vertical" | "square"; voiceProvider?: "kokoro" | "custom" | "none" };
 
 export function startLaunchVideo(id: string, voice: string, options: LaunchFilmOptions): Promise<DesktopTaskStatus> {
   return taskRequest(`/api/recordings/${encodeURIComponent(id)}/launch-videos`, {
@@ -443,8 +443,8 @@ export function recordingAssetUrl(id: string, file: string): string {
   return `/files/recordings/${encodeURIComponent(id)}/${encodeURIComponent(file)}`;
 }
 
-async function recordingCall(id: string, what: "narration" | "voiceover", init: RequestInit): Promise<RecordingSummary> {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/${what}`, { method: "POST", ...init, signal: AbortSignal.timeout(15_000) });
+async function recordingCall(id: string, what: "narration" | "voiceover", init: RequestInit, timeoutMs = 15_000): Promise<RecordingSummary> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/${what}`, { method: "POST", ...init, signal: AbortSignal.timeout(timeoutMs) });
   const body = (await res.json().catch(() => ({}))) as { recording?: RecordingSummary; error?: string };
   if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
   if (!res.ok || !body.recording) throw new Error(body.error ?? `Request failed (${res.status}).`);
@@ -458,7 +458,7 @@ export function renarrate(id: string, captions: { start: number; end: number; te
 
 /** Replace the narration with the user's own recording. */
 export function uploadVoiceover(id: string, audio: Blob): Promise<RecordingSummary> {
-  return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
+  return recordingCall(id, "voiceover", { headers: { "Content-Type": audio.type || "audio/webm" }, body: audio }, 120_000);
 }
 
 /** Re-frame the walkthrough for a feed: 9:16 or 1:1, with the captions burned in. */

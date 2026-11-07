@@ -5,6 +5,19 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
+## [0.10.9] - 2026-11-07
+
+### Fixed
+
+- Launch narration now normalizes unsupported website title characters and retries with a safe line when Kokoro/Misaki returns a missing phoneme.
+- Voice recording explains browser and Windows microphone permission steps, handles denied devices clearly, and reports video playback failures instead of silently recording against a paused player.
+- Own voice uploads have a longer request window for media conversion.
+
+### Added
+
+- Launch Studio can render a narrated film and a matching music-only MP4 in one job, or render music only without setting up a speech model.
+- The download page now points to the published 0.10.8 installers and retains 0.10.7 and older downloads.
+
 ## [0.10.8] - 2026-11-06
 
 ### Added

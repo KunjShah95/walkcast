@@ -6,9 +6,11 @@ memory while Kokoro synthesizes it; it describes the recorded visit and avoids i
 import json
 import base64
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import urllib.request
 import wave
 from pathlib import Path
@@ -78,12 +80,48 @@ def slots():
     slot = max(4.0, DURATION - 4.0) / len(lines)
     return [(phrase, 1.0 + index * slot, min(4.8, slot * 0.86)) for index, phrase in enumerate(lines)]
 
+def phonemizer_safe(phrase):
+    """Keep page titles from feeding Kokoro tokens with missing phonemes (Misaki None + str crash)."""
+    normalized = unicodedata.normalize("NFKD", phrase).encode("ascii", "ignore").decode("ascii")
+    candidate = re.sub(r"[^A-Za-z0-9 ,.!?'’-]", " ", normalized)
+    candidate = re.sub(r"\s+", " ", candidate).strip()
+    if not candidate:
+        return "Explore this website."
+    try:
+        voice.g2p(candidate)
+        return candidate
+    except (TypeError, AttributeError):
+        # Misaki has hit an upstream bug on some out-of-lexicon product names. Check individual
+        # words and omit only the token it cannot phonemize; retain the rest of the real page title.
+        safe_words = []
+        for word in candidate.split():
+            try:
+                voice.g2p(word)
+                safe_words.append(word)
+            except (TypeError, AttributeError):
+                continue
+        candidate = " ".join(safe_words).strip(" ,.!?'’- ")
+        if candidate:
+            try:
+                voice.g2p(candidate)
+                return candidate
+            except (TypeError, AttributeError):
+                pass
+        return "Explore this website."
+
 if PROVIDER == "kokoro":
     out = np.zeros(round(DURATION * SR), dtype=np.float32)
     for line_number, (phrase, start, budget) in enumerate(slots(), 1):
+        phrase = phonemizer_safe(phrase)
         speed = 1.0
         for _attempt in range(6):
-            chunks = [audio for _, _, audio in voice(phrase, voice=VOICE, speed=speed)]
+            try:
+                chunks = [audio for _, _, audio in voice(phrase, voice=VOICE, speed=speed)]
+            except (TypeError, AttributeError):
+                if phrase == "Explore this website.":
+                    raise RuntimeError("Kokoro could not phonemize the fallback narration. Update the Kokoro/Misaki packages and try again.") from None
+                phrase = "Explore this website."
+                chunks = [audio for _, _, audio in voice(phrase, voice=VOICE, speed=speed)]
             audio = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
             nonzero = np.where(np.abs(audio) > 0.01)[0]
             if len(nonzero):

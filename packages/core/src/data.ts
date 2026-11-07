@@ -124,6 +124,8 @@ export interface ShareLink {
 export interface LaunchVideo {
   id: string;
   video: string;
+  /** Optional music-only version of the same cut, built alongside the narrated master. */
+  noVoiceVideo?: string;
   poster: string;
   /** Optional caption sidecar; launch walkthrough films can intentionally ship without transcripts. */
   captions?: string;
@@ -131,7 +133,7 @@ export interface LaunchVideo {
   plan?: string;
   shareCopy?: string;
   voice: string;
-  voiceProvider?: "kokoro" | "custom";
+  voiceProvider?: "kokoro" | "custom" | "none";
   tone?: "polished" | "cinematic" | "playful";
   format?: "landscape" | "vertical" | "square";
   durationSeconds?: number;
