@@ -40,6 +40,14 @@ for i, page in enumerate(pages[:page_line_count]):
     lead = ["First,", "Next,", "Then,", "Here,", "And finally,"][i]
     lines.append(f"{lead} {page[:32]}.")
 lines.append(f"That's {brand}.")
+pronunciation_map = []
+for mapping in re.split(r"[;\n]+", str(site.get("pronunciation") or "")):
+    original, separator, spoken = mapping.partition("=")
+    if separator and original.strip() and spoken.strip():
+        pronunciation_map.append((original.strip(), spoken.strip()))
+for original, spoken in pronunciation_map:
+    lines = [re.sub(re.escape(original), lambda _match, value=spoken: value, line, flags=re.IGNORECASE) for line in lines]
+PACE = {"relaxed": 0.88, "balanced": 1.0, "brisk": 1.12}.get(str(site.get("narrationPace") or "balanced"), 1.0)
 if PROVIDER == "kokoro":
     from kokoro import KPipeline
     import numpy as np
@@ -55,7 +63,7 @@ def request_audio(phrase):
     endpoint = os.environ.get("LAB_TTS_ENDPOINT", "").strip()
     profile = os.environ.get("WALKCAST_LAUNCH_VOICE_ID", "").strip()
     key = os.environ.get("LAB_TTS_API_KEY", "").strip()
-    body = json.dumps({"text": phrase, "language": os.environ.get("LAB_TTS_LANGUAGE", "en"), "voice": profile}).encode()
+    body = json.dumps({"text": phrase, "language": os.environ.get("LAB_TTS_LANGUAGE", "en"), "voice": profile, "speed": PACE}).encode()
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = f"Bearer {key}"
@@ -113,7 +121,8 @@ if PROVIDER == "kokoro":
     out = np.zeros(round(DURATION * SR), dtype=np.float32)
     for line_number, (phrase, start, budget) in enumerate(slots(), 1):
         phrase = phonemizer_safe(phrase)
-        speed = 1.0
+        speed = PACE
+        max_speed = min(1.48, PACE * 1.32)
         for _attempt in range(6):
             try:
                 chunks = [audio for _, _, audio in voice(phrase, voice=VOICE, speed=speed)]
@@ -126,9 +135,9 @@ if PROVIDER == "kokoro":
             nonzero = np.where(np.abs(audio) > 0.01)[0]
             if len(nonzero):
                 audio = audio[max(0, nonzero[0] - 240):nonzero[-1] + 1200]
-            if len(audio) / SR <= budget or speed >= 1.32:
+            if len(audio) / SR <= budget or speed >= max_speed:
                 break
-            speed = round(min(1.32, speed * 1.12), 3)
+            speed = round(min(max_speed, speed * 1.12), 3)
         if len(audio) / SR > budget:
             raise RuntimeError("The selected Kokoro voice could not fit a narration line into its visual beat.")
         offset = round(start * SR)

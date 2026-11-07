@@ -5,6 +5,14 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
+## [0.10.10] - 2026-11-07
+
+### Added
+
+- Launch Studio can record the owner's voice directly against a generated film, mix it over the music-only master, preview it, and download it as a separate MP4.
+- Launch film narration accepts custom pronunciation pairs, relaxed/balanced/brisk delivery, calm/balanced/quick motion, and early/aligned/late chapter cues.
+- Deleting a recording now also removes its launch-film variants, including the owner-voice mix.
+
 ## [0.10.9] - 2026-11-07
 
 ### Fixed

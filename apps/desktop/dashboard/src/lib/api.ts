@@ -423,12 +423,34 @@ async function taskRequest(url: string, init?: RequestInit): Promise<DesktopTask
   return body.task;
 }
 
-export type LaunchFilmOptions = { tone: "polished" | "cinematic" | "playful"; format: "landscape" | "vertical" | "square"; voiceProvider?: "kokoro" | "custom" | "none" };
+export type LaunchFilmOptions = {
+  tone: "polished" | "cinematic" | "playful";
+  format: "landscape" | "vertical" | "square";
+  voiceProvider?: "kokoro" | "custom" | "none";
+  narrationPace?: "relaxed" | "balanced" | "brisk";
+  motionPace?: "calm" | "balanced" | "quick";
+  chapterCueMs?: -750 | 0 | 750;
+  pronunciation?: string;
+};
 
 export function startLaunchVideo(id: string, voice: string, options: LaunchFilmOptions): Promise<DesktopTaskStatus> {
   return taskRequest(`/api/recordings/${encodeURIComponent(id)}/launch-videos`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice, ...options }),
   });
+}
+
+/** Mix an owner's recorded take into a launch film's music-only master. */
+export async function uploadLaunchVoiceover(id: string, videoId: string, audio: Blob): Promise<string> {
+  const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/launch-videos/${encodeURIComponent(videoId)}/voiceover`, {
+    method: "POST",
+    headers: { "Content-Type": audio.type || "audio/webm" },
+    body: audio,
+    signal: AbortSignal.timeout(120_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as { video?: string; error?: string };
+  if (res.status === 401) throw new SignInRequired(body.error ?? "Sign in first.");
+  if (!res.ok || !body.video) throw new Error(body.error ?? `Could not mix your voice into the launch film (${res.status}).`);
+  return body.video;
 }
 
 export function setupLaunchVoice(): Promise<DesktopTaskStatus> {

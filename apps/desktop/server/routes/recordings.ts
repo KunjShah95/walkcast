@@ -320,7 +320,8 @@ export const recordingRoutes: Route[] = [
       // The files it published (worker.ts): the media names in its summary, plus recording.json.
       const summary = (await listRecordings(user)).find((r) => r.id === id);
       const m = (summary?.media ?? {}) as Partial<Record<"mp4" | "webm" | "video" | "audio" | "captions", string | null>>;
-      const files = [m.mp4, m.webm, m.video, m.audio, m.captions, "recording.json"].filter((f): f is string => Boolean(f));
+      const launchFiles = (summary?.media.launchVideos ?? []).flatMap((film) => [film.video, film.poster, film.noVoiceVideo, film.ownVoiceVideo]);
+      const files = [m.mp4, m.webm, m.video, m.audio, m.captions, ...launchFiles, "recording.json"].filter((f): f is string => Boolean(f));
       try {
         await media.remove(id, files);
       } catch (e) {

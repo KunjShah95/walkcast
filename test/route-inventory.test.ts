@@ -137,6 +137,7 @@ const PROBES: Probe[] = [
   { route: "POST /api/launch-videos/setup", method: "POST", path: "/api/launch-videos/setup" },
   { route: "GET /api/launch-videos/jobs/:id", method: "GET", path: "/api/launch-videos/jobs/nope" },
   { route: "POST /api/recordings/:id/launch-videos", method: "POST", path: "/api/recordings/rec-1/launch-videos", body: "{}" },
+  { route: "POST /api/recordings/:id/launch-videos/:film/voiceover", method: "POST", path: "/api/recordings/rec-1/launch-videos/film-1/voiceover", body: "", only: "out" },
   // ---- voices
   { route: "GET /api/voices/custom", method: "GET", path: "/api/voices/custom" },
   { route: "POST /api/voices/custom", method: "POST", path: "/api/voices/custom", body: "" },
@@ -334,6 +335,7 @@ const EXPECTED: Record<string, Seen> = {
   "in GET /api/launch-videos/jobs/nope": {"status":404,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Launch video job not found."},
   "out POST /api/recordings/rec-1/launch-videos body={}": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
   "in POST /api/recordings/rec-1/launch-videos body={}": {"status":403,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Launch Studio is available in the local desktop app."},
+  "out POST /api/recordings/rec-1/launch-videos/film-1/voiceover": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
   "out GET /api/voices/custom": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
   "in GET /api/voices/custom": {"status":200,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"keys: voices"},
   "out POST /api/voices/custom": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},

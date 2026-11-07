@@ -126,6 +126,8 @@ export interface LaunchVideo {
   video: string;
   /** Optional music-only version of the same cut, built alongside the narrated master. */
   noVoiceVideo?: string;
+  /** Optional launch film with the owner's recorded voice mixed over its score. */
+  ownVoiceVideo?: string;
   poster: string;
   /** Optional caption sidecar; launch walkthrough films can intentionally ship without transcripts. */
   captions?: string;
@@ -136,6 +138,9 @@ export interface LaunchVideo {
   voiceProvider?: "kokoro" | "custom" | "none";
   tone?: "polished" | "cinematic" | "playful";
   format?: "landscape" | "vertical" | "square";
+  narrationPace?: "relaxed" | "balanced" | "brisk";
+  motionPace?: "calm" | "balanced" | "quick";
+  chapterCueMs?: -750 | 0 | 750;
   durationSeconds?: number;
   createdAt: string;
 }

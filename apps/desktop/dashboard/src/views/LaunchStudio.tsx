@@ -3,7 +3,7 @@ import { ArrowRight, Check, Download, Film, LoaderCircle, Play, Sparkles, Volume
 import type { Route } from "../App.tsx";
 import { normalizeUrl, RecordBar } from "../components/RecordBar.tsx";
 import { Empty, PageHead, fieldClass } from "../components/ui.tsx";
-import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo } from "../lib/api.ts";
+import { type DesktopTaskStatus, type TtsProviderInfo, loadDesktopTask, loadTtsProviders, recordingAssetUrl, setupLaunchVoice, startLaunchVideo, uploadLaunchVoiceover } from "../lib/api.ts";
 import type { LabIndex } from "../lib/types.ts";
 import { ago, ms } from "../lib/format.ts";
 
@@ -27,6 +27,10 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const [voice, setVoice] = useState("af_heart");
   const [voiceProvider, setVoiceProvider] = useState<"kokoro" | "custom" | "none">("kokoro");
   const [customVoice, setCustomVoice] = useState("");
+  const [pronunciation, setPronunciation] = useState("");
+  const [narrationPace, setNarrationPace] = useState<"relaxed" | "balanced" | "brisk">("balanced");
+  const [motionPace, setMotionPace] = useState<"calm" | "balanced" | "quick">("balanced");
+  const [chapterCue, setChapterCue] = useState<-750 | 0 | 750>(0);
   const [tone, setTone] = useState<"polished" | "cinematic" | "playful">("polished");
   const [format, setFormat] = useState<"landscape" | "vertical" | "square">("landscape");
   const [providers, setProviders] = useState<TtsProviderInfo[]>([]);
@@ -72,6 +76,12 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
   const voices = kokoro?.voices.length ? kokoro.voices : FALLBACK_VOICES;
   const busy = task?.status === "running";
   const latest = recording?.media.launchVideos?.[0];
+  const [ownVoiceFile, setOwnVoiceFile] = useState<string | null>(latest?.ownVoiceVideo ?? null);
+  const [previewMix, setPreviewMix] = useState<"generated" | "own" | "music">("generated");
+  useEffect(() => {
+    setOwnVoiceFile(latest?.ownVoiceVideo ?? null);
+    setPreviewMix(latest?.ownVoiceVideo ? "own" : "generated");
+  }, [latest?.id, latest?.ownVoiceVideo]);
   useEffect(() => {
     if (connectedVoice?.configured && voiceProvider === "kokoro") setVoiceProvider("custom");
     if (!connectedVoice?.configured && voiceProvider === "custom") setVoiceProvider("kokoro");
@@ -163,7 +173,30 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
                   </select>
                 </label>
               </div>
-              <button type="button" disabled={!recording || busy || (voiceProvider === "custom" && !customVoice.trim())} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voiceProvider === "custom" ? customVoice.trim() : voice, { tone, format, voiceProvider }))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
+              {voiceProvider !== "none" && <>
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Brand and product pronunciation
+                  <textarea className={fieldClass} rows={2} maxLength={1000} value={pronunciation} onChange={(e) => setPronunciation(e.target.value)} placeholder="Kokoro = koh-koh-roh; ArchMind = arch mind" disabled={busy} />
+                  <span className="text-[11px] font-normal leading-5 text-ink-3">Optional word=pronunciation pairs, separated by semicolons. Used only for the spoken audio.</span>
+                </label>
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Narration pace
+                  <select className={fieldClass} value={narrationPace} onChange={(e) => setNarrationPace(e.target.value as typeof narrationPace)} disabled={busy}>
+                    <option value="relaxed">Relaxed</option><option value="balanced">Balanced</option><option value="brisk">Brisk</option>
+                  </select>
+                </label>
+              </>}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Motion pace
+                  <select className={fieldClass} value={motionPace} onChange={(e) => setMotionPace(e.target.value as typeof motionPace)} disabled={busy}>
+                    <option value="calm">Calm</option><option value="balanced">Balanced</option><option value="quick">Quick</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-[12px] font-medium text-ink-2">Chapter cue
+                  <select className={fieldClass} value={chapterCue} onChange={(e) => setChapterCue(Number(e.target.value) as typeof chapterCue)} disabled={busy}>
+                    <option value={0}>On the page change</option><option value={-750}>0.75 sec early</option><option value={750}>0.75 sec later</option>
+                  </select>
+                </label>
+              </div>
+              <button type="button" disabled={!recording || busy || (voiceProvider === "custom" && !customVoice.trim())} onClick={() => recording && void run(() => startLaunchVideo(recording.id, voiceProvider === "custom" ? customVoice.trim() : voice, { tone, format, voiceProvider, narrationPace, motionPace, chapterCueMs: chapterCue, pronunciation }))} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-solid px-5 text-[14px] font-semibold text-on-solid transition active:scale-[.98] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50">
                 {busy && task?.kind === "launch-video" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />} Make walkthrough film <ArrowRight className="h-4 w-4" />
               </button>
               <p className="text-[11.5px] leading-5 text-ink-3">A continuous cut of the real browser visit with an original mastered score. Narrated films also include a music-only MP4. Walkcast does not export scripts or transcripts. To use a cloned owner voice, configure your pipeline as the custom TTS endpoint and enter its voice-profile ID.</p>
@@ -199,16 +232,154 @@ export function LaunchStudio({ index, go, refresh }: { index: LabIndex; go: (rou
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="text-[15px] font-semibold">Your latest walkthrough film</h2><p className="mt-1 text-[12px] text-ink-3">Generated {ago(Date.parse(latest.createdAt))} · {latest.voiceProvider === "none" ? "Music only" : latest.voiceProvider === "custom" ? "Connected voice" : latest.voice} · {latest.durationSeconds ?? 58}s · {latest.tone ?? "polished"} · {latest.format ?? "landscape"}</p></div>
           <div className="flex flex-wrap gap-2">
-            <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download {latest.voiceProvider === "none" ? "music only" : "with voice"}</a>
-            {latest.noVoiceVideo && <a href={recordingAssetUrl(recording.id, latest.noVoiceVideo)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Download music only</a>}
+            {latest.voiceProvider !== "none" && <a href={recordingAssetUrl(recording.id, latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Generated voice</a>}
+            {(latest.noVoiceVideo || latest.voiceProvider === "none") && <a href={recordingAssetUrl(recording.id, latest.noVoiceVideo ?? latest.video)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> Music only</a>}
+            {ownVoiceFile && <a href={recordingAssetUrl(recording.id, ownVoiceFile)} download className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] font-medium hover:bg-panel-2"><Download className="h-3.5 w-3.5" /> My voice</a>}
           </div>
         </div>
-        <video key={latest.id} controls playsInline poster={recordingAssetUrl(recording.id, latest.poster)} className={`mx-auto ${latest.format === "vertical" ? "aspect-[9/16] max-h-[72vh] max-w-[405px]" : latest.format === "square" ? "aspect-square max-w-3xl" : "aspect-video"} w-full rounded-xl bg-black`}>
-          <source src={recordingAssetUrl(recording.id, latest.video)} type="video/mp4" />
-        </video>
+        <div className="flex flex-wrap gap-2" aria-label="Preview audio mix">
+          {latest.voiceProvider !== "none" && <button type="button" onClick={() => setPreviewMix("generated")} className={`rounded-full px-3 py-1.5 text-[12px] ${previewMix === "generated" ? "bg-solid text-on-solid" : "bg-panel-2 text-ink-2"}`}>Generated voice</button>}
+          {ownVoiceFile && <button type="button" onClick={() => setPreviewMix("own")} className={`rounded-full px-3 py-1.5 text-[12px] ${previewMix === "own" ? "bg-solid text-on-solid" : "bg-panel-2 text-ink-2"}`}>My voice</button>}
+          {(latest.noVoiceVideo || latest.voiceProvider === "none") && <button type="button" onClick={() => setPreviewMix("music")} className={`rounded-full px-3 py-1.5 text-[12px] ${previewMix === "music" ? "bg-solid text-on-solid" : "bg-panel-2 text-ink-2"}`}>Music only</button>}
+        </div>
+        <video key={`${latest.id}-${previewMix}-${ownVoiceFile ?? ""}`} controls playsInline poster={recordingAssetUrl(recording.id, latest.poster)} src={recordingAssetUrl(recording.id, previewMix === "own" && ownVoiceFile ? ownVoiceFile : previewMix === "music" ? latest.noVoiceVideo ?? latest.video : latest.video)} className={`mx-auto ${latest.format === "vertical" ? "aspect-[9/16] max-h-[72vh] max-w-[405px]" : latest.format === "square" ? "aspect-square max-w-3xl" : "aspect-video"} w-full rounded-xl bg-black`} />
+        <LaunchVoiceRecorder
+          recordingId={recording.id}
+          filmId={latest.id}
+          videoFile={latest.noVoiceVideo ?? (latest.voiceProvider === "none" ? latest.video : null)}
+          format={latest.format}
+          onSaved={(file) => { setOwnVoiceFile(file); setPreviewMix("own"); }}
+        />
       </section>}
 
       {!recordings.length && <Empty title="No website recordings ready yet" tone="signal" icon={<Film />}>Paste a website above and record it. Once the recording is ready, select it here to generate a launch film.</Empty>}
+    </div>
+  );
+}
+
+function LaunchVoiceRecorder({
+  recordingId,
+  filmId,
+  videoFile,
+  format,
+  onSaved,
+}: {
+  recordingId: string;
+  filmId: string;
+  videoFile: string | null;
+  format?: "landscape" | "vertical" | "square";
+  onSaved: (file: string) => void;
+}) {
+  const [state, setState] = useState<"idle" | "recording" | "review" | "saving">("idle");
+  const [take, setTake] = useState<{ blob: Blob; url: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const player = useRef<HTMLVideoElement | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const startedAt = useRef(0);
+  const chunks = useRef<Blob[]>([]);
+  const busy = state === "recording" || state === "saving";
+
+  useEffect(() => () => {
+    const active = recorder.current;
+    if (active && active.state !== "inactive") active.stop();
+    stream.current?.getTracks().forEach((track) => track.stop());
+    const el = player.current;
+    if (el) { el.pause(); el.muted = false; }
+    if (take) URL.revokeObjectURL(take.url);
+  }, [take]);
+
+  const stop = () => {
+    const active = recorder.current;
+    recorder.current = null;
+    if (active && active.state !== "inactive") active.stop();
+    stream.current?.getTracks().forEach((track) => track.stop());
+    stream.current = null;
+    const el = player.current;
+    if (el) { el.pause(); el.muted = false; el.onended = null; }
+  };
+
+  const start = async () => {
+    setError(null);
+    if (!videoFile) {
+      setError("Regenerate this film in the current Launch Studio to create its separate music track before recording your voice.");
+      return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setError("Microphone capture needs a secure localhost connection in a current desktop browser.");
+      return;
+    }
+    let liveStream: MediaStream | null = null;
+    try {
+      liveStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const el = player.current;
+      if (!el) throw new Error("The voice-recording preview is not ready.");
+      el.pause();
+      el.currentTime = 0;
+      el.muted = true;
+      await el.play();
+      const active = new MediaRecorder(liveStream);
+      chunks.current = [];
+      active.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
+      active.onstop = () => {
+        const blob = new Blob(chunks.current, { type: active.mimeType || "audio/webm" });
+        setTake((old) => {
+          if (old) URL.revokeObjectURL(old.url);
+          return { blob, url: URL.createObjectURL(blob) };
+        });
+        setState("review");
+      };
+      stream.current = liveStream;
+      recorder.current = active;
+      startedAt.current = Date.now();
+      active.start(250);
+      setState("recording");
+      const tick = () => {
+        if (recorder.current !== active) return;
+        setElapsed((Date.now() - startedAt.current) / 1000);
+        requestAnimationFrame(tick);
+      };
+      tick();
+      el.onended = stop;
+    } catch (cause) {
+      liveStream?.getTracks().forEach((track) => track.stop());
+      const el = player.current;
+      if (el) { el.pause(); el.muted = false; }
+      const name = cause instanceof DOMException ? cause.name : "";
+      setError(name === "NotAllowedError" || name === "SecurityError"
+        ? "Microphone blocked: open the browser site controls by the address bar, set Microphone to Allow, and reload Walkcast. Also check Windows Settings → Privacy & security → Microphone."
+        : name === "NotFoundError" ? "No microphone was found. Connect or enable one, then try again."
+          : cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const save = async () => {
+    if (!take) return;
+    setState("saving");
+    setError(null);
+    try {
+      onSaved(await uploadLaunchVoiceover(recordingId, filmId, take.blob));
+      setState("review");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setState("review");
+    }
+  };
+
+  return (
+    <div className="grid gap-3 rounded-xl border border-line bg-paper/60 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div><h3 className="text-[13px] font-semibold">Record your own voice</h3><p className="mt-1 max-w-xl text-[11.5px] leading-5 text-ink-3">The music-only cut plays from the start while you speak. Walkcast ducks the score under your voice and saves a separate MP4.</p></div>
+        {state === "recording" && <span className="font-mono text-[12px] text-rec">REC · {Math.floor(elapsed / 60)}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</span>}
+      </div>
+      {videoFile ? <video ref={player} key={`${filmId}-${videoFile}`} src={recordingAssetUrl(recordingId, videoFile)} playsInline preload="metadata" className={`w-full max-w-xl rounded-lg bg-black ${format === "vertical" ? "aspect-[9/16] max-h-[55vh]" : format === "square" ? "aspect-square" : "aspect-video"}`} /> : <p className="rounded-lg bg-panel-2 px-3 py-2 text-[11.5px] text-ink-3">Regenerate this older film to create the separate music track needed for your own voice mix.</p>}
+      {take && state !== "recording" && <audio controls src={take.url} className="w-full" />}
+      {error && <p role="alert" className="text-[12px] text-fail">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        {state === "recording" ? <button type="button" onClick={stop} className="rounded-full bg-rec px-4 py-2 text-[12px] font-semibold text-white">Stop recording</button> : <button type="button" disabled={!videoFile || busy} onClick={() => void start()} className="rounded-full bg-panel-2 px-4 py-2 text-[12px] font-semibold text-ink disabled:opacity-50">{take ? "Record again" : "Record my voice"}</button>}
+        {take && state !== "recording" && <button type="button" disabled={busy} onClick={() => void save()} className="rounded-full bg-solid px-4 py-2 text-[12px] font-semibold text-on-solid disabled:opacity-50">{state === "saving" ? "Mixing…" : "Use this take"}</button>}
+      </div>
     </div>
   );
 }

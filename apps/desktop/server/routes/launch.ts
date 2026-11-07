@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { LaunchVideo, RecordingSummary } from "../../../../packages/core/src/data.ts";
@@ -8,7 +9,7 @@ import { checkFreeSpace } from "../../../../packages/core/src/ops/disk.ts";
 import { log } from "../../../../packages/core/src/ops/log.ts";
 import { kokoroReady, refreshKokoro } from "../../../../packages/core/src/record/voice.ts";
 import type { DesktopTask } from "../desktop-tasks.ts";
-import { readJson, rereadSummary } from "../http.ts";
+import { readBodyToTemp, readJson, rereadSummary } from "../http.ts";
 import type { Route } from "./router.ts";
 
 // ---------------------------------------------------------- local product-launch video studio
@@ -17,6 +18,30 @@ const taskView = (task: DesktopTask) => ({
   progress: task.progress, message: task.message, startedAt: task.startedAt,
   updatedAt: task.updatedAt, error: task.error, video: task.video,
 });
+
+/** Add an owner-recorded voice take to the film's music-only master, ducking the score under speech. */
+function mixLaunchVoice(input: string, voice: string, output: string, duration: number): Promise<void> {
+  const ffmpeg = process.env.LAB_FFMPEG?.trim() || "ffmpeg";
+  const filter = [
+    "[1:a]aresample=48000,highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=2.5,acompressor=threshold=0.1:ratio=3:attack=5:release=120:makeup=1.6,asplit=2[vo][key]",
+    "[0:a]aresample=48000[music]",
+    "[music][key]sidechaincompress=threshold=0.02:ratio=8:attack=25:release=400[duck]",
+    "[duck][vo]amix=inputs=2:duration=first:weights='1 1.2':normalize=0,loudnorm=I=-14:TP=-1.2:LRA=11,afade=t=out:st=" + Math.max(0, duration - 3) + ":d=3[a]",
+  ].join(";");
+  const args = ["-y", "-i", input, "-i", voice, "-filter_complex", filter, "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-metadata", "title=Walkcast Launch Film — Owner Voice", "-movflags", "+faststart", "-t", String(duration), output];
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpeg, args, { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+    let detail = "";
+    const timer = setTimeout(() => child.kill("SIGKILL"), 110_000);
+    child.stderr?.on("data", (chunk: Buffer) => { detail = `${detail}${chunk.toString()}`.slice(-1800); });
+    child.once("error", (error) => { clearTimeout(timer); reject(error); });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(code === null ? "Mixing your voice timed out." : `Could not mix your voice into the video. ${detail.trim().split("\n").at(-1) ?? ""}`));
+    });
+  });
+}
 
 /** Kokoro can be warmed in Walkcast's private cache or already exist in Hugging Face's user cache. */
 function hasKokoroModel(cacheRoot: string): boolean {
@@ -34,6 +59,48 @@ function hasKokoroModel(cacheRoot: string): boolean {
 
 /** Launch Studio: Kokoro setup, a launch film rendered from a recording, and the task status both report. */
 export const launchRoutes: Route[] = [
+  {
+    method: "POST",
+    path: /^\/api\/recordings\/([\w.-]+)\/launch-videos\/([\w-]+)\/voiceover$/,
+    auth: "owner-checked",
+    handler: async ({ req, json, params, canSee, deps: { root, media, findRecording, saveRecordingSummary } }) => {
+      const [, id, filmId] = params as unknown as [string, string, string];
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "Recording your voice for a launch film is available in the desktop app." });
+      const dir = join(root, "recordings", id);
+      const summaryFile = join(dir, "recording.json");
+      if (!existsSync(summaryFile)) return json(404, { error: "Recording files are missing." });
+      const summary = JSON.parse(readFileSync(summaryFile, "utf8")) as RecordingSummary;
+      const film = summary.media.launchVideos?.find((item) => item.id === filmId);
+      if (!film) return json(404, { error: "Launch film not found." });
+      const musicFile = film.noVoiceVideo ?? (film.voiceProvider === "none" ? film.video : undefined);
+      if (!musicFile) return json(409, { error: "This older film has no separate music-only track. Regenerate it in Launch Studio, then record your voice." });
+      const source = join(dir, basename(musicFile));
+      if (!existsSync(source)) return json(404, { error: "The music-only version of this film is missing. Regenerate it in Launch Studio." });
+      const audioPath = await readBodyToTemp(req, 40_000_000, "launch-voice");
+      const videoFile = `launch-video-${filmId}-own-voice.mp4`;
+      const tempOutput = join(dir, `.${videoFile}.tmp.mp4`);
+      const output = join(dir, videoFile);
+      try {
+        await mixLaunchVoice(source, audioPath, tempOutput, Math.min(90, Math.max(10, film.durationSeconds ?? 58)));
+        copyFileSync(tempOutput, output);
+        rmSync(tempOutput, { force: true });
+      } catch (error) {
+        rmSync(tempOutput, { force: true });
+        return json(500, { error: error instanceof Error ? error.message : "Could not finish the voice mix." });
+      } finally {
+        rmSync(audioPath, { force: true });
+      }
+      const fresh = rereadSummary(summaryFile, summary);
+      const savedFilm = fresh.media.launchVideos?.find((item) => item.id === filmId);
+      if (!savedFilm) return json(404, { error: "Launch film was removed while your voice was being mixed." });
+      savedFilm.ownVoiceVideo = videoFile;
+      writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));
+      await saveRecordingSummary(id, row.owner, fresh);
+      return json(200, { video: videoFile });
+    },
+  },
   {
     method: "POST",
     path: "/api/launch-videos/setup",
@@ -95,6 +162,13 @@ export const launchRoutes: Route[] = [
       const format = input.format ?? "landscape";
       if (!(tone === "polished" || tone === "cinematic" || tone === "playful")) return json(400, { error: "Choose a supported film direction." });
       if (!(format === "landscape" || format === "vertical" || format === "square")) return json(400, { error: "Choose a supported video format." });
+      const narrationPace = input.narrationPace ?? "balanced";
+      const motionPace = input.motionPace ?? "balanced";
+      const chapterCue = Number(input.chapterCue ?? 0);
+      const pronunciation = String(input.pronunciation ?? "").slice(0, 1000);
+      if (!(narrationPace === "relaxed" || narrationPace === "balanced" || narrationPace === "brisk")) return json(400, { error: "Choose a supported narration pace." });
+      if (!(motionPace === "calm" || motionPace === "balanced" || motionPace === "quick")) return json(400, { error: "Choose a supported motion pace." });
+      if (![ -750, 0, 750 ].includes(chapterCue)) return json(400, { error: "Chapter cue must be early, aligned, or late." });
       let kokoroCache: string | undefined;
       if (voiceProvider === "kokoro") {
         if (!(await kokoroReady())) return json(503, { error: "Kokoro is not installed for this Python. Open Launch Studio and choose Set up Kokoro." });
@@ -148,7 +222,7 @@ export const launchRoutes: Route[] = [
       }).filter((page, index, all) => all.findIndex((other) => other.url === page.url) === index).slice(0, 8);
       const firstMoment = rawPages.find((page) => page.atMs !== undefined)?.atMs ?? 0;
       const pages = rawPages.map((page, index) => ({ ...page, atMs: page.atMs === undefined ? undefined : Math.max(0, page.atMs - firstMoment) || (index === 0 ? 0 : undefined) }));
-      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs, tone, format }));
+      writeFileSync(siteConfigPath, JSON.stringify({ url: sourceUrl.toString(), host: sourceUrl.hostname, title: pages[0]?.title || sourceUrl.hostname, pages, durationMs: row.summary.durationMs, tone, format, pronunciation, narrationPace, motionPace, chapterCueMs: chapterCue }));
       const task: DesktopTask = {
         id: taskId, kind: "launch-video", owner: owner ?? null, recordingId: id, status: "running", progress: 1,
         message: "Building the launch film…", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), temporaryDir: taskRoot,
@@ -176,7 +250,7 @@ export const launchRoutes: Route[] = [
         const noVoiceOutput = join(outputDir, "Site-Launch-Film-No-Voice.mp4");
         const noVoiceVideo = existsSync(noVoiceOutput) ? `launch-video-${taskId}-no-voice.mp4` : undefined;
         if (noVoiceVideo) copyFileSync(noVoiceOutput, join(recordingDir, noVoiceVideo));
-        const made: LaunchVideo = { id: taskId, video, poster, ...(noVoiceVideo ? { noVoiceVideo } : {}), voice, voiceProvider, tone, format, durationSeconds: Math.min(58, Math.round(recordingDurationMs / 1000)), createdAt: new Date().toISOString() };
+        const made: LaunchVideo = { id: taskId, video, poster, ...(noVoiceVideo ? { noVoiceVideo } : {}), voice, voiceProvider, tone, format, narrationPace, motionPace, chapterCueMs: chapterCue as -750 | 0 | 750, durationSeconds: Math.min(58, Math.round(recordingDurationMs / 1000)), createdAt: new Date().toISOString() };
         const fresh = rereadSummary(summaryFile, diskSummary);
         fresh.media.launchVideos = [made, ...(fresh.media.launchVideos ?? []).filter((item) => item.id !== made.id)].slice(0, 12);
         writeFileSync(summaryFile, JSON.stringify(fresh, null, 2));

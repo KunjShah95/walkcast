@@ -28,11 +28,13 @@ const shortLabel = (value) => {
 const tone = ["polished", "cinematic", "playful"].includes(site.tone) ? site.tone : "polished";
 const format = ["landscape", "vertical", "square"].includes(site.format) ? site.format : "landscape";
 const dimensions = { landscape: [1920, 1080], vertical: [1080, 1920], square: [1080, 1080] }[format];
-const data = { host, title: shortLabel(title), pageCount, tone, format };
+const motionPace = ["calm", "balanced", "quick"].includes(site.motionPace) ? site.motionPace : "balanced";
+const data = { host, title: shortLabel(title), pageCount, tone, format, motionPace };
 data.captureDuration = Math.max(15, Number(site.durationMs || 20_000) / 1000);
 data.duration = Math.min(data.captureDuration, 58);
 data.pages = pages.slice(0, 6).map((page) => ({ ...page, title: shortLabel(page.title), path: (() => { try { return new URL(page.url).pathname || "/"; } catch { return "/"; } })() }));
-data.chapters = data.pages.map((page, index) => ({ label: ["First look", "Explore", "A closer look", "In the details", "Another angle", "The experience"][index] || "The experience", title: page.title, path: page.path, at: page.atMs === undefined ? null : page.atMs / 1000 }));
+const chapterCueSeconds = Number(site.chapterCueMs || 0) / 1000;
+data.chapters = data.pages.map((page, index) => ({ label: ["First look", "Explore", "A closer look", "In the details", "Another angle", "The experience"][index] || "The experience", title: page.title, path: page.path, at: page.atMs === undefined ? null : Math.max(0, page.atMs / 1000 + chapterCueSeconds) }));
 data.titleHtml = data.title.replace(/[&<>"']/g, "").slice(0, 50);
 const duration = data.duration;
 
