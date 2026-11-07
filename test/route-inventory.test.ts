@@ -551,7 +551,7 @@ test("every route answers as it did before the route table", { timeout: 120_000 
       return;
     }
     const routes = new Set(PROBES.map((p) => p.route));
-    assert.equal(routes.size, 87, "routes probed (80 handlers plus 7 pipeline checks)");
+    assert.equal(routes.size, 88, "routes probed (81 handlers plus 7 pipeline checks)");
     const problems: string[] = [];
     for (const key of new Set([...Object.keys(EXPECTED), ...Object.keys(observed)])) {
       try {
