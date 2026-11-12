@@ -24,6 +24,11 @@ export interface Route {
   label: string;
   /** What kind of page this is. Drives the JSON-LD node type and the crawler files. */
   kind?: "landing" | "index" | "guide" | "compare" | "lab" | "faq" | "download" | "privacy" | "pricing";
+  /**
+   * When this page alone last changed. Falls back to UPDATED. Set it instead of bumping UPDATED
+   * so one edited page does not tell crawlers that all fourteen changed on the same day.
+   */
+  updated?: string;
   /** Questions answered on the page. Emitted as FAQPage schema and copied into llms.txt. */
   faq?: [string, string][];
   /** The section that answers the page's question in one paragraph, for `speakable`. */
@@ -63,6 +68,16 @@ export interface Route {
     title: "How to make a narrated website walkthrough (free) · Walkcast",
     description:
       "Step by step: turn a website link into a narrated MP4 with captions and a transcript, even behind a login. No microphone or screen recorder needed.",
+    faq: [
+      [
+        "What is a narrated website walkthrough?",
+        "A video that visits your website in a real browser, signs in when it needs to, and speaks over a recording of the visit. One link in, one MP4 out with captions and a transcript; there is no microphone to set up and no screen recorder to install.",
+      ],
+      [
+        "How is a walkthrough different from a screen recording?",
+        "A screen recording captures whatever you happen to show and whatever you type into. A walkthrough records the site itself, narrates from the browser's own trace of what happened, and is repeatable: run it again after the page changes instead of re-recording it.",
+      ],
+    ],
   },
   {
     path: "/guides/product-demo-video",
@@ -71,6 +86,16 @@ export interface Route {
     title: "How to make a product demo video of your live app · Walkcast",
     description:
       "Make a product demo video from the real product: paste your app URL, get an MP4 with narration, captions and a transcript. You never record anything yourself.",
+    faq: [
+      [
+        "Do I need a script for the video?",
+        "No. The narration is written from the browser's own trace: the page it opened, the field it typed into, what it clicked and what the site answered. The voice describes what actually happened on screen, not a fiction.",
+      ],
+      [
+        "Can I demo behind a login?",
+        "Yes. Walkcast signs in with a test account you provide, holds the password in memory only, stops at CAPTCHAs and two-factor prompts, and never submits a form, so a demo cannot accidentally create a customer or send an email.",
+      ],
+    ],
   },
   {
     path: "/guides/website-tutorial-video",
@@ -79,6 +104,16 @@ export interface Route {
     title: "How to make a website tutorial video · Walkcast",
     description:
       "Record a website tutorial video from the live site: narrated, captioned, and re-recordable after every change. Windows and Linux, free.",
+    faq: [
+      [
+        "How do I make a website tutorial without recording my screen?",
+        "You don't film anything. Walkcast visits the site in its own browser, narrates each page, and gives you an MP4, WebVTT captions, a transcript and a Markdown guide. Paste the link, press Record, get the files.",
+      ],
+      [
+        "What do I get when the recording is done?",
+        "An MP4 with an embedded caption track, WebVTT captions, the narration as a WAV, a transcript, a WebM copy, and a list of every page visited with its title and HTTP status.",
+      ],
+    ],
   },
   {
     path: "/compare/screen-recording",
@@ -116,6 +151,7 @@ export interface Route {
     path: "/lab",
     label: "Walkcast Lab",
     kind: "lab",
+    updated: "2026-11-12",
     title: "Walkcast Lab: browser agent tests from real failures",
     description:
       "Walkcast Lab turns a failed browser AI agent run into a cause, cited evidence and a replayable regression fixture you can rerun.",
@@ -577,6 +613,10 @@ export const LAB_FAQ: [string, string][] = [
   [
     "Can Walkcast Lab test an agent that uses browser automation tools?",
     "Yes. The Lab reads from the recorder, so it works with any agent that drives a real browser, including agents built on Playwright, Stagehand or browser-use.",
+  ],
+  [
+    "Is Walkcast Lab a browser agent observability tool?",
+    "Not in the tracing sense. Observability tools record spans, token counts and latency for a run you already have. Walkcast Lab starts where those stop: it keeps the browser state at the moment the agent failed, the page, the click and what the site answered, and turns that into a classified cause and a fixture you can replay. Run it alongside your traces rather than instead of them.",
   ],
 ];
 

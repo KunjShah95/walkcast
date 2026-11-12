@@ -112,6 +112,24 @@ export function ProductDemoPage() {
         transcript. Your part is the link and the Record button; the browser does the walking and the talking.
       </p>
 
+      <figure className="doc-demo">
+        <video
+          className="doc-demo-video"
+          poster="/assets/demo-poster.jpg"
+          controls
+          playsInline
+          preload="none"
+          aria-label="A real Walkcast recording of the demo website Estate360: a browser signs in, visits six pages and narrates each one."
+        >
+          <source src="/assets/demo.mp4" type="video/mp4" />
+          <source src="/assets/demo.webm" type="video/webm" />
+          <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="English" default />
+        </video>
+        <figcaption>
+          The output. A browser visited the Estate360 demo site, signed in and narrated six pages. One take, nothing filmed.
+        </figcaption>
+      </figure>
+
       <h2>What a product demo video needs to be</h2>
       <p>
         Most product demo videos fail for the same reason: they show a mockup. A viewer can tell, and a viewer who

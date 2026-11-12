@@ -2,6 +2,8 @@
 
 **Reviewed 5 November 2026.** Use this map to decide which page to improve next. Each URL owns one main search intent; supporting phrases belong in useful headings, examples and answers on that page.
 
+> The 12 November 2026 execution pass — live HTTP verification of both sites, the full keyword-to-URL map, and the indexed-gap register — is in [`SEO-EXECUTION-2026-11-12.md`](SEO-EXECUTION-2026-11-12.md). Directory and citation targets are in [`directory-submissions.md`](directory-submissions.md).
+
 ## What the evidence can and cannot say
 
 The current research pull is [`results/seo-trends.json`](../results/seo-trends.json), generated 20 October 2026 from Google autocomplete and a partial Trends pull. The counts below are suggestion counts for a seed phrase. They are not monthly search volumes or ranking estimates. Trends returned incomplete data, and this repository has no Search Console query export, so performance must not be guessed from the suggestion counts.

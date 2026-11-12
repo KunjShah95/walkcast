@@ -21,9 +21,9 @@
   --pink: #c0321c;
   --green: #2c6a3d;
   --orange: #c8551e;
-  --display: "Bricolage Grotesque", "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --sans: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --display: "Bricolage Grotesk Variable", "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --r: 16px;
   --r-lg: 24px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -1063,7 +1063,7 @@ body:has(#root .landing-hero) { background: #fff; color: #1d241e; }
    One stage, centred. The words sit over a slow aura in the brand's own colours (teal and the
    highlighter amber), and the real recording opens full width under them. The aura is the
    page's one atmospheric effect in light; the proof band is its one dark room. */
-:root { --serif: "Fraunces", ui-serif, Georgia, serif; }
+:root { --serif: "Fraunces Variable", ui-serif, Georgia, serif; }
 .hero { position: relative; padding: clamp(36px, 5vw, 64px) 0 0; isolation: isolate; }
 .hero-aura {
   position: absolute; z-index: -1; inset: -48px 0 auto; height: min(880px, 110vh); pointer-events: none;
@@ -1339,3 +1339,22 @@ body:has(#root .landing-hero) { background: #fff; color: #1d241e; }
   .nav-sheet-foot { margin: 14px 0 8px; color: var(--muted); font-size: 12px; }
   .nav-sheet-foot a { color: var(--ink); text-underline-offset: 3px; }
 }
+
+/* ---------------------------------------------------------------- next steps */
+/* The three links at the end of every document: read, consider, decide. They are the one-step
+   path off the page, so they are visible, labelled and keyboard reachable. */
+.next-steps { margin: 28px 0 0; }
+.next-steps-eyebrow { margin: 0 0 10px; color: var(--dim); font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
+.next-steps-grid { display: grid; gap: 10px; }
+@media (min-width: 720px) { .next-steps-grid { grid-template-columns: repeat(3, 1fr); } }
+.next-step { display: block; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); text-decoration: none; transition: border-color 0.18s var(--ease); }
+.next-step b { display: block; font-family: var(--display); font-size: 15px; letter-spacing: -0.015em; line-height: 1.25; color: var(--ink); }
+.next-step span { display: block; margin-top: 6px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.next-step:hover { border-color: var(--signal); }
+.next-step:hover b { color: var(--signal); }
+.next-step:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+/* The sample output embedded on the product-demo guide: the proof without the download. */
+.doc-demo { margin: 22px 0 8px; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: #000; }
+.doc-demo-video { width: 100%; height: auto; display: block; }
+.doc-demo figcaption { padding: 10px 14px; background: var(--panel); color: var(--ink-2); font-size: 13px; line-height: 1.5; }

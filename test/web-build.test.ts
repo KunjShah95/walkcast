@@ -110,12 +110,16 @@ test("the machine-readable files an agent needs are published and linked", { tim
   assert.match(pricing, /No paid tier|no paid tier/i);
 
   const robots = read(out, "robots.txt");
-  assert.match(robots, new RegExp(`Sitemap: ${SITE}/sitemap-agents\\.xml`), "the agent sitemap is advertised");
+  // One Sitemap: line only. A second sitemap of .md/.txt URLs is not a search sitemap, and every
+  // entry in it reads as "URL not allowed" in the console's Sitemaps report.
+  assert.ok(!robots.includes("sitemap-agents.xml"), "robots.txt does not advertise the agent sitemap");
+  assert.equal((robots.match(/^Sitemap:/gm) ?? []).length, 1, "robots.txt declares exactly one sitemap");
   const agents = read(out, "sitemap-agents.xml");
   assert.match(agents, new RegExp(`<loc>${SITE}/pricing\\.md</loc>`));
 
   const llms = read(out, "llms.txt");
   assert.match(llms, /pricing\.md/, "llms.txt points at the plain-text price");
+  assert.match(llms, /sitemap-agents\.xml/, "llms.txt is where the agent sitemap is advertised instead");
   for (const r of ROUTES) {
     const loc = r.path === "/" ? `${SITE}/` : `${SITE}${r.path}`;
     assert.ok(llms.includes(loc), `${r.path} is linked from llms.txt`);
@@ -217,4 +221,43 @@ test("the guides index lists every guide as a structured list", { timeout: 180_0
       `the ItemList names ${g.path}`,
     );
   }
+});
+
+test("the sitemap is a file a crawler cannot reject", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const out = build();
+  const xml = read(out, "sitemap.xml");
+
+  assert.ok(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n'), "the XML declaration is the first thing in the file");
+  assert.ok(/<\/urlset>\s*$/.test(xml), "the document closes with </urlset>");
+  assert.equal((xml.match(/<url>/g) ?? []).length, (xml.match(/<\/url>/g) ?? []).length, "every <url> is closed");
+
+  const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]!);
+  assert.equal(locs.length, ROUTES.length, "one <loc> per route");
+  assert.equal(new Set(locs).size, locs.length, "no duplicate URLs");
+  const host = new URL(SITE).host;
+  for (const loc of locs) {
+    const u = new URL(loc);
+    assert.equal(u.protocol, "https:", `${loc} is https`);
+    assert.equal(u.host, host, `${loc} is on the canonical host`);
+    assert.equal(u.search + u.hash, "", `${loc} carries no query or fragment`);
+  }
+
+  // A future <lastmod> is the one sitemap value an engine acts on, so it can never ship.
+  const dates = [...xml.matchAll(/<lastmod>([^<]*)<\/lastmod>/g)].map((m) => m[1]!);
+  assert.equal(dates.length, locs.length, "every URL has a <lastmod>");
+  for (const d of dates) {
+    assert.ok(!Number.isNaN(Date.parse(d)), `${d} is a date`);
+    assert.ok(Date.parse(d) <= Date.now() + 86_400_000, `${d} is not in the future`);
+  }
+
+  // A video entry missing one required field makes Google drop the whole <url>, not just the video.
+  for (const f of ["thumbnail_loc", "title", "description", "content_loc", "duration", "publication_date"]) {
+    assert.match(xml, new RegExp(`<video:${f}>`), `the video entry has <video:${f}>`);
+  }
+  const seconds = Number(/<video:duration>(\d+)</.exec(xml)![1]);
+  assert.ok(seconds >= 1 && seconds <= 28_800, `video duration ${seconds}s is inside Google's 1–28800s range`);
+
+  // The XML sitemap is for pages. The plain-text files get their own file, linked from llms.txt.
+  assert.ok(!xml.includes("llms.txt"), "the page sitemap does not list plain-text files");
 });

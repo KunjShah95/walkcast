@@ -76,7 +76,17 @@ const vtt = readFileSync(join(here, "public/assets/demo.vtt"), "utf8");
 const transcript = [...vtt.matchAll(/-->[^\n]*\r?\n([\s\S]*?)(?:\r?\n\r?\n|$)/g)].map((m) => m[1]!.trim()).join(" ");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const ORG = { "@type": "Organization", "@id": `${SITE}/#org`, name: NAME, url: `${SITE}/`, logo: `${SITE}/assets/logo.png`, sameAs: [REPO_URL], founder: { "@id": `${SITE}/#author` } };
+/** `sameAs` is how an engine ties this site to the off-site pages describing the same entity. Every
+ *  URL here exists; a 404 in sameAs is worse than a short list. */
+const ORG = {
+  "@type": "Organization",
+  "@id": `${SITE}/#org`,
+  name: NAME,
+  url: `${SITE}/`,
+  logo: `${SITE}/assets/logo.png`,
+  sameAs: [REPO_URL, "https://www.producthunt.com/products/walkcast"],
+  founder: { "@id": `${SITE}/#author` },
+};
 const PERSON = { "@type": "Person", "@id": `${SITE}/#author`, name: AUTHOR.name, url: AUTHOR.url, sameAs: [AUTHOR.url] };
 const WEBSITE = { "@type": "WebSite", "@id": `${SITE}/#site`, url: `${SITE}/`, name: NAME, description: DESCRIPTION, publisher: { "@id": `${SITE}/#org` }, inLanguage: "en" };
 const APP = {
@@ -170,6 +180,8 @@ function graphFor(route: Route) {
   const kind = route.kind ?? "webpage";
   const isGuide = kind === "guide";
   const isCompare = kind === "compare";
+  // Each page carries its own change date: editing one page must not date all of them.
+  const modified = route.updated ?? UPDATED;
   const pageType = kind === "index" ? "CollectionPage" : isGuide || isCompare ? "Article" : kind === "faq" ? "FAQPage" : "WebPage";
   const page: Record<string, unknown> = {
     "@type": pageType,
@@ -180,7 +192,7 @@ function graphFor(route: Route) {
     isPartOf: { "@id": `${SITE}/#site` },
     about: { "@id": `${SITE}/#app` },
     inLanguage: "en",
-    dateModified: UPDATED,
+    dateModified: modified,
     author: { "@id": `${SITE}/#author` },
     publisher: { "@id": `${SITE}/#org` },
   };
@@ -240,6 +252,17 @@ function graphFor(route: Route) {
 
 // ------------------------------------------------------------------ pages
 
+/**
+ * Ownership tags, when the environment provides them. Both consoles accept DNS or an uploaded file,
+ * but a meta tag is the one method that needs no access to the DNS provider — which matters when the
+ * domain's nameservers sit at a registrar rather than at the host. Set GOOGLE_SITE_VERIFICATION and
+ * BING_SITE_VERIFICATION (the msvalidate.01 value) in the Vercel project settings.
+ */
+const VERIFY_TAGS = [
+  process.env.GOOGLE_SITE_VERIFICATION ? `<meta name="google-site-verification" content="${esc(process.env.GOOGLE_SITE_VERIFICATION)}">` : "",
+  process.env.BING_SITE_VERIFICATION ? `<meta name="msvalidate.01" content="${esc(process.env.BING_SITE_VERIFICATION)}">` : "",
+].filter(Boolean);
+
 const templateFile = join(out, "index.html");
 if (!existsSync(templateFile)) {
   throw new Error(`the client build left no ${templateFile} to fill; WEB_OUT may point at the wrong folder.`);
@@ -255,6 +278,7 @@ for (const route of ROUTES) {
   const head = [
     `<link rel="canonical" href="${url(route.path)}">`,
     `<link rel="me" href="${REPO_URL}">`,
+    ...VERIFY_TAGS,
     `<meta property="og:url" content="${url(route.path)}">`,
     `<meta property="og:image" content="${SITE}/assets/og.png">`,
     `<meta property="og:image:width" content="1200">`,
@@ -291,15 +315,32 @@ const BOTS = [
   "ChatGPT-User", "ClaudeBot", "Claude-User", "Claude-SearchBot", "anthropic-ai", "PerplexityBot", "Perplexity-User", "CCBot",
   "Meta-ExternalAgent", "Meta-ExternalFetcher", "Amazonbot", "Bytespider", "cohere-ai", "MistralAI-User", "YouBot", "DuckAssistBot",
 ];
+// Exactly one Sitemap line. Two sitemaps in robots.txt makes Google fetch and validate both, and a
+// sitemap of .txt files reads as a file full of "URL not allowed" in the Sitemaps report. The agent
+// files are advertised from llms.txt, which is where an agent looks for them anyway.
 writeFileSync(
   join(out, "robots.txt"),
-  `# ${NAME}: public pages. Search engines and AI crawlers are welcome to read, index and cite them.\n\n${BOTS.map((b) => `User-agent: ${b}`).join("\n")}\nAllow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\nSitemap: ${SITE}/sitemap-agents.xml\n`,
+  `# ${NAME}: public pages. Search engines and AI crawlers are welcome to read, index and cite them.\n\n${BOTS.map((b) => `User-agent: ${b}`).join("\n")}\nAllow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`,
 );
+
+/**
+ * sitemaps.org accepts a bare date, but the video extension (and every sitemap validator) wants a
+ * full W3C datetime. Normalising here means a bad value can only come from content.ts, never from
+ * the writer.
+ */
+const w3c = (d: string) => (d.length === 10 ? `${d}T00:00:00+00:00` : d);
+/** `PT1M11S` → 71, the seconds the video sitemap entry requires. */
+const durationSeconds = (iso: string) => {
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso);
+  return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
+};
+const VIDEO_SECONDS = durationSeconds(DEMO.durationIso);
+if (!VIDEO_SECONDS) throw new Error(`DEMO.durationIso is not an ISO 8601 duration: ${DEMO.durationIso}`);
 
 const urlEntry = (r: Route) =>
   `  <url>
     <loc>${url(r.path)}</loc>
-    <lastmod>${UPDATED}</lastmod>
+    <lastmod>${w3c(r.updated ?? UPDATED)}</lastmod>
     <changefreq>${r.path === "/" ? "weekly" : "monthly"}</changefreq>
     <priority>${r.path === "/" ? "1.0" : "0.8"}</priority>${
       r.path === "/"
@@ -309,13 +350,52 @@ const urlEntry = (r: Route) =>
       <video:title>${esc(DEMO.title)}</video:title>
       <video:description>${esc(DEMO.description)}</video:description>
       <video:content_loc>${SITE}/assets/demo.mp4</video:content_loc>
-      <video:duration>71</video:duration>
-      <video:publication_date>${DEMO.uploadDate}</video:publication_date>
+      <video:duration>${VIDEO_SECONDS}</video:duration>
+      <video:publication_date>${w3c(DEMO.youtubeUrl ? DEMO.youtubeUploadDate : DEMO.uploadDate)}</video:publication_date>
       <video:family_friendly>yes</video:family_friendly>
     </video:video>`
         : ""
     }
   </url>`;
+
+/**
+ * Search Console reports "Couldn't fetch" only when it cannot retrieve the file at all. Everything
+ * else it reports is a validation error, and every validation error is one of these. Validating at
+ * build time means the sitemap cannot ship with a value that generates one.
+ */
+function assertSitemap(file: string, xml: string) {
+  if (!xml.startsWith(`<?xml version="1.0" encoding="UTF-8"?>\n`)) throw new Error(`${file}: the XML declaration must be the first thing in the file`);
+  const open = (xml.match(/<url>/g) ?? []).length;
+  const close = (xml.match(/<\/url>/g) ?? []).length;
+  if (open !== close) throw new Error(`${file}: ${open} <url> entries but ${close} </url> closes`);
+  if (!xml.trimEnd().endsWith("</urlset>")) throw new Error(`${file}: the document does not close </urlset>`);
+
+  const host = new URL(SITE).host;
+  const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1]!);
+  if (locs.length !== open) throw new Error(`${file}: ${open} entries but ${locs.length} <loc> values`);
+  if (new Set(locs).size !== locs.length) throw new Error(`${file}: duplicate <loc> entries`);
+
+  // A crawl budget spent on a 404 is worse than no entry at all, so every URL is checked here and
+  // again, over HTTP, by `npm run seo:doctor` once it is deployed.
+  const tomorrow = Date.now() + 24 * 60 * 60 * 1000;
+  for (const loc of locs) {
+    let parsed: URL;
+    try {
+      parsed = new URL(loc);
+    } catch {
+      throw new Error(`${file}: <loc> is not an absolute URL: ${loc}`);
+    }
+    if (parsed.protocol !== "https:") throw new Error(`${file}: <loc> is not https: ${loc}`);
+    if (parsed.host !== host) throw new Error(`${file}: <loc> is not on ${host} (canonical host mismatch): ${loc}`);
+    if (parsed.search || parsed.hash) throw new Error(`${file}: <loc> carries a query or fragment: ${loc}`);
+  }
+  for (const [, raw] of xml.matchAll(/<lastmod>([^<]*)<\/lastmod>/g)) {
+    const t = Date.parse(raw!);
+    if (Number.isNaN(t)) throw new Error(`${file}: <lastmod> is not a date: ${raw}`);
+    // A future date is the one <lastmod> error engines act on, so it is never worth risking.
+    if (t > tomorrow) throw new Error(`${file}: <lastmod> is in the future: ${raw}`);
+  }
+}
 const pages = ROUTES.map((r) => `- [${r.label}](${url(r.path)}): ${r.description}`).join("\n");
 const links = [
   `- [Download for Windows (.exe)](${WINDOWS_EXE_URL}): recommended installer, no admin rights needed`,
@@ -324,8 +404,11 @@ const links = [
   `- [Source code](${REPO_URL}): MIT licensed`,
   `- [Pricing in plain text](${SITE}/pricing.md): the price, in a format an agent can parse`,
   `- [Full answers](${SITE}/llms-full.txt): every FAQ answer in plain text`,
+  `- [XML sitemap](${SITE}/sitemap.xml): every page, with the demo recording as a video entry`,
+  `- [Agent sitemap](${SITE}/sitemap-agents.xml): the plain-text files above, as XML`,
 ].join("\n");
 const facts = [
+  `- Last updated: ${UPDATED}`,
   "- Platform: Windows 10 and 11 (64-bit, .exe or .msi), and 64-bit Linux (AppImage or .deb)",
   `- Version: ${VERSION}`,
   "- Price: free, MIT licensed, no paid tier, no watermark",
@@ -350,41 +433,39 @@ writeFileSync(
   `# Pricing — ${NAME}\n\nLast updated: ${UPDATED}\n\n## Free\n\n- Price: $0 total, forever\n- License: MIT\n- Seats: unlimited. There is no account system and no per-user pricing.\n- Recordings per day: no limit. The only ceiling is your machine.\n- Pages per recording: up to 30, on one site.\n- Watermark: none.\n- Paid tier: none. There is no paid tier and no plan for one.\n- Cloud narration voices: optional and not required. Use the built-in offline voices at no cost,\n  or bring your own ElevenLabs or OpenAI key.\n- Disk: about 600 MB (the app plus the recording browser it downloads once).\n- Network: only the sites you record. Recordings are never uploaded.\n\n## What you get\n\n- A desktop app for Windows 10 or 11 (64-bit) and 64-bit Linux.\n- One link in, one video out: an MP4 with a spoken voice-over, WebVTT captions, a transcript,\n  the narration as a WAV file, and a list of every page visited with its HTTP status.\n- Pages behind a login, recorded with a test account you provide.\n- Walkcast Lab, in the same app: failed browser AI agent runs turned into classified causes\n  and replayable regression fixtures.\n\n## What it does not do\n\n- It does not record your screen. It records your website, in its own browser.\n- It does not submit forms. It stops at CAPTCHA and two-factor prompts.\n- It does not edit or splice video. It records one continuous visit.\n\n## Links\n\n- [Pricing page](${url("/pricing")})\n- [Download](${url("/download")})\n- [Source code](${REPO_URL})\n`,
 );
 
-// The machine-readable files belong in the crawlable map too, so a crawler that reads the
-// sitemap finds the text versions of the pages that matter to it.
-writeFileSync(
-  join(out, "sitemap.xml"),
-  `<?xml version="1.0" encoding="UTF-8"?>
+// The one sitemap a search engine should submit. Only HTML pages belong in it: a .txt or .md file
+// is not a page, and listing one makes Search Console report every entry as "URL not allowed".
+const pageSitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
 ${ROUTES.map(urlEntry).join("\n")}
 </urlset>
-`,
-);
-writeFileSync(
-  join(out, "sitemap-agents.xml"),
-  `<?xml version="1.0" encoding="UTF-8"?>
+`;
+assertSitemap("sitemap.xml", pageSitemap);
+writeFileSync(join(out, "sitemap.xml"), pageSitemap);
+
+// The machine-readable files still get an index of their own, for an agent that would rather read
+// XML than prose. It is not advertised in robots.txt as a search sitemap, because it is not one;
+// llms.txt links it instead.
+const agentSitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${SITE}/pricing.md</loc>
-    <lastmod>${UPDATED}</lastmod>
+${[
+  ["/pricing.md", "0.6"],
+  ["/llms.txt", "0.5"],
+  ["/llms-full.txt", "0.5"],
+]
+  .map(
+    ([path, priority]) => `  <url>
+    <loc>${url(path!)}</loc>
+    <lastmod>${w3c(UPDATED)}</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>${SITE}/llms.txt</loc>
-    <lastmod>${UPDATED}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>${SITE}/llms-full.txt</loc>
-    <lastmod>${UPDATED}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
+    <priority>${priority}</priority>
+  </url>`,
+  )
+  .join("\n")}
 </urlset>
-`,
-);
+`;
+assertSitemap("sitemap-agents.xml", agentSitemap);
+writeFileSync(join(out, "sitemap-agents.xml"), agentSitemap);
 
 writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
 

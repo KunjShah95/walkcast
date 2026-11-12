@@ -1,0 +1,23 @@
+product,priority,channel,submit_url,angle,status,public_url,ref_tag,submitted_on,referral_sessions_28d,notes
+Lattice,P0,Hacker News (Show HN),https://news.ycombinator.com/submit,"Show HN: 112 AI infrastructure tools indexed by stack layer, each with a skip-when",todo,,?ref=hn,,,Read Show HN norms: title states what was built, first comment explains the method
+Lattice,P0,GitHub awesome-lists,confirm each list's CONTRIBUTING,Curated AI infrastructure resources; one PR per list,todo,,?ref=github,,,Never bulk-blast; a closed PR costs the maintainer relationship
+Lattice,P0,DEV Community,https://dev.to/new,Technical article using the index as evidence and linking one comparison page,todo,,?ref=devto,,,Canonical link back to the Lattice essay
+Lattice,P1,Peerlist,https://peerlist.io,Existing listing: sharpen description and outbound link,existing-update,,?ref=peerlist,,,Update before adding new listings
+Lattice,P1,Product Hunt,https://www.producthunt.com,A map of the AI infrastructure stack,todo,,?ref=producthunt,,,Directory products are a hard sell; lead with the engineering problem
+Lattice,P1,Hashnode,https://hashnode.com,Same article rewritten for a different audience with canonical to Lattice,todo,,?ref=hashnode,,,
+Lattice,P1,r/LocalLLaMA,https://www.reddit.com/r/LocalLLaMA/,Inference and serving discussion; no bare link drop,todo,,?ref=reddit,,,Check self-promotion rules before posting
+Lattice,P2,AlternativeTo,https://alternativeto.net,Only if a category genuinely fits,todo,,?ref=alternativeto,,,A directory is not an app alternative; likely skip
+Lattice,P2,AgentIndex,confirm URL,Developer AI infrastructure discovery,todo,,?ref=agentindex,,,Best topical fit if the site is live; URL unverified in this pass
+Lattice,P2,AI For Developers,confirm URL,Developer AI discovery,todo,,?ref=aifordevelopers,,,URL unverified in this pass
+Lattice,P2,r/MachineLearning,https://www.reddit.com/r/MachineLearning/,Research-adjacent framing only,todo,,?ref=reddit,,,Tool promotion is rejected here; skip unless the post is substantive
+Walkcast,P0,GitHub repository,https://github.com/KunjShah95/walkcast,"Topics, description, README first screen, release notes",todo,,?ref=github,,,The repo is the developer landing page
+Walkcast,P0,DEV Community,https://dev.to/new,A browser agent that reported success and had not; then the fixture,todo,,?ref=devto,,,
+Walkcast,P0,Hacker News (Show HN),https://news.ycombinator.com/submit,Turn a failed browser agent run into a replayable regression test,todo,,?ref=hn,,,
+Walkcast,P1,Product Hunt,https://www.producthunt.com,Improve the existing launch listing,existing-update,,?ref=producthunt,,,A duplicate launch violates the rules
+Walkcast,P1,Peerlist,https://peerlist.io,Developer tool listing with Lab as the lead capability,todo,,?ref=peerlist,,,
+Walkcast,P1,r/QualityAssurance,https://www.reddit.com/r/QualityAssurance/,Regression testing framing with the fixture format,todo,,?ref=reddit,,,
+Walkcast,P1,Playwright / browser automation communities,confirm current community home,Reproducible failures from real Playwright-driven agents,todo,,?ref=playwright,,,
+Walkcast,P1,Hashnode,https://hashnode.com,Lab walkthrough with simulator output,todo,,?ref=hashnode,,,
+Walkcast,P2,There's An AI For That,https://theresanaiforthat.com,Browser automation and AI testing categories,todo,,?ref=taaft,,,
+Walkcast,P2,Toolify,https://www.toolify.ai,Broad AI directory,todo,,?ref=toolify,,,Expect little qualified traffic
+Walkcast,P2,AgentFirst Directory,confirm URL,Browser Automation and Agent Testing & QA categories,todo,,?ref=agentfirst,,,Strongest fit if live; URL unverified in this pass

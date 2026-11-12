@@ -349,7 +349,7 @@ export function PrivacyPage() {
 
       <h2>This website</h2>
       <p>
-        walkcast.kunjshah.in is a static site served by Vercel. It uses Vercel Web Analytics for aggregate page views and basic interaction events, such as demo playback and download clicks. Vercel says its analytics does not use third-party cookies or collect personal identifiers; its temporary hashed visitor identifier is discarded after 24 hours, and reports are aggregated. The desktop app itself has no analytics or telemetry. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel's Web Analytics privacy details</a>. Fonts are served by Google Fonts.
+        walkcast.kunjshah.in is a static site served by Vercel. It uses Vercel Web Analytics for aggregate page views and basic interaction events, such as demo playback and download clicks. Vercel says its analytics does not use third-party cookies or collect personal identifiers; its temporary hashed visitor identifier is discarded after 24 hours, and reports are aggregated. The desktop app itself has no analytics or telemetry. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel's Web Analytics privacy details</a>. Fonts are self-hosted with the site: the browser never fetches them from a third party.
       </p>
 
       <h2>Source</h2>
