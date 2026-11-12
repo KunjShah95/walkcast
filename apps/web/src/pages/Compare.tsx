@@ -100,9 +100,7 @@ function CompareArticle({ compare }: { compare: Compare }) {
       <dl className="faq-list">
         {faq.map(([q, a]) => (
           <div key={q} id={q.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}>
-            <dt>
-              <h3>{q}</h3>
-            </dt>
+            <dt>{q}</dt>
             <dd>{a}</dd>
           </div>
         ))}

@@ -37,9 +37,7 @@ export function LabPage() {
       <dl className="faq-list">
         {LAB_FACTS.map(([term, meaning]) => (
           <div key={term}>
-            <dt>
-              <h3>{term}</h3>
-            </dt>
+            <dt>{term}</dt>
             <dd>{meaning}</dd>
           </div>
         ))}
@@ -116,9 +114,7 @@ export function LabPage() {
       <dl className="faq-list">
         {LAB_FAQ.map(([q, a]) => (
           <div key={q} id={q.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}>
-            <dt>
-              <h3>{q}</h3>
-            </dt>
+            <dt>{q}</dt>
             <dd>{a}</dd>
           </div>
         ))}

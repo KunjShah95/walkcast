@@ -207,9 +207,7 @@ export function FaqPage() {
       <dl className="faq-list">
         {all.map(([q, a]) => (
           <div key={q} id={q.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}>
-            <dt>
-              <h2>{q}</h2>
-            </dt>
+            <dt>{q}</dt>
             <dd>{a}</dd>
           </div>
         ))}

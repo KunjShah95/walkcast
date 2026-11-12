@@ -205,6 +205,27 @@ test("no page promises a platform the releases do not ship", { timeout: 180_000 
   }
 });
 
+test("the built HTML has no invalid nesting that breaks hydration", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const out = build();
+  const invalid = [
+    // A heading inside dt is not permitted content; the browser closes the dt early and React
+    // cannot hydrate, so the whole tree regenerates on the client. This broke hydration on 12
+    // of 14 pages until it was caught with a browser-driven check.
+    { name: "<dt> directly inside a heading parent", pattern: /<dt>(?:(?!<\/dt>).)*?<h[123]/s },
+    { name: "<ul> directly inside <p>", pattern: /<p\b[^>]*>(?:(?!<\/p>).)*?<ul\b/s },
+    { name: "<table> directly inside <p>", pattern: /<p\b[^>]*>(?:(?!<\/p>).)*?<table\b/s },
+    { name: "<a> directly inside <a>", pattern: /<a\b[^>]*>(?:(?!<\/a>).)*?<a\b/s },
+  ];
+  for (const r of ROUTES) {
+    const file = r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`;
+    const html = read(out, file);
+    for (const rule of invalid) {
+      assert.ok(!rule.pattern.test(html), `${r.path} has ${rule.name}`);
+    }
+  }
+});
+
 test("the guides index lists every guide as a structured list", { timeout: 180_000 }, async () => {
   const { GUIDES } = await import("../apps/web/src/content.ts");
   const out = build();
