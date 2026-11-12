@@ -245,9 +245,52 @@ Verified after the change:
 - the five recovered essays: titles, one `<h1>` each, and all internal links resolve to routes that
   exist; `/blog` lists all five
 
-Neither repository is committed or deployed. Lattice already had uncommitted work in the tree
-(`globals.css`, `page.tsx`, `review/page.tsx`, `stack-builder/page.tsx`, `start/page.tsx` and deleted
-`e2e/*.spec.ts`); none of it was touched.
+### What actually shipped, and what the tree looked like
+
+The plan above assumed this checkout was the origin of `main`. It was not, and the difference
+mattered. Two things corrected that:
+
+1. **The five missing essays were already on `origin/main`** — merged via PRs #5–#11 in the two
+   weeks before this pass (`dd570b4..c544b3c`). The local checkout sat on `da397da`, a commit from
+   before them, and contained them in no branch. The copy recovered above was rebuilt from the
+   live HTML; when the rebase onto `origin/main` happened, the authored source won and the
+   reconstructed files were dropped in favour of `origin/main`'s versions.
+2. **The local uncommitted redesign work (your `PageHero` `/start` path, the palette changes in
+   `globals.css`, the stack pages, stack builder, review pages) conflicts with those PRs on the
+   same lines, in a different direction.** Per your decision, `origin/main` was kept and the
+   local versions were not carried into the commit. Nothing was deleted: the local work remains
+   on branch `safety/f0875b3-seo-raw` in the Lattice checkout, exactly as it was.
+
+Both repositories were committed and pushed to `main` on 12 November 2026:
+
+- **Lattice** `a4d24d5` — G1 H1 fix, the `/alternatives` hub (+ its entry tests, sitemap, footer,
+  `/compare` and `/llms.txt` links), the `comparisons.ts` related-essay fix, and the e2e specs
+  restored to `origin/main`'s versions (the exception ratchet is now empty by design). One
+  follow-up note: your pre-existing deletion of `e2e/a11y.spec.ts`, `e2e/a11y-exceptions.ts` and
+  `e2e/interactions.spec.ts` is undone by this; the remote fix raised the contrast tokens, so the
+  suite now runs clean. If you intended those files gone for another reason, redo the delete in its
+  own commit.
+- **Walkcast** `250005c` — the build now supports per-route `lastmod` (`route.updated ?? UPDATED`)
+  and the `/lab` observability FAQ. A further commit `1f7f05c` (hydration fix on document pages)
+  was made on top of it by someone else before this pass finished; it is included in `origin/main`.
+- The untracked capture files (`lint.txt`, `out.txt`, `out2.txt`, `tsc.txt` in the Lattice checkout,
+  `apps/desktop/gitfile.txt` in the Walkcast checkout) were left out of the commits deliberately.
+
+Verification before push, on the merged tree:
+
+- `npx tsc --noEmit` — clean (after `next typegen` regenerated the route table)
+- `npx vitest run` — 51 files, 1287 tests pass
+- `npm run lint` — 0 errors (6 pre-existing `no-img-element` warnings)
+- `npm run generate:check` — in step (16 essay bodies, 11 corrections)
+- `npm run test:submissions` / `npm run budget` — both pass
+- `node scripts/audit-seo.mjs http://localhost:3111 --rewrite --strict` — exit 0; 287 sitemap URLs,
+  0 non-200, 287 valid JSON-LD graphs, no duplicate titles/descriptions
+- live-authentic diff: the built sitemap now contains everything the deployed site publishes, plus
+  `/alternatives`
+
+Lattice CI (`ci.yml`) runs on every push to `main`: lint, the full vitest suite, the submission
+harness, `generate:check`, the Worker bundle smoke test, `next:build`, the client bundle budget, and
+`audit-seo --strict` against the locally booted server. Walkcast CI runs the Playwright suite.
 
 ## 6. Thirty-day order of work
 
@@ -259,7 +302,9 @@ Ranked by expected effect per hour. Nothing here needs new content volume.
 2. ~~Lattice G3~~ — done, §5. It gives 39 existing pages a crawl path and a reason to rank.
 3. Export GSC for both properties: Pages → Indexing, Sitemaps, Performance (queries and pages), Core Web
    Vitals, Links. Then check URL Inspection on 20 Lattice tool pages and all 14 Walkcast URLs.
-4. Deploy both repositories, then run Walkcast's IndexNow.
+4. ~~Deploy both repositories~~ — done; both are on `main`. Walkcast's IndexNow runs via GitHub from
+   the Vercel production deployment. Verify the live site serves `/alternatives` (Lattice) and the
+   `/lab` date change (Walkcast) once deploys finish.
 
 **Week 2 — improve the pages that already have intent**
 
