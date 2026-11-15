@@ -1,0 +1,154 @@
+/* The Lab demo: a failed run becomes a test. Scoped to .lb. */
+.lb {
+  --gutter: 28px;
+
+  & .ss-stage {
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--ss-well);
+  }
+
+  .lb-win {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    width: 704px;
+    height: 372px;
+    box-shadow: var(--ss-shadow-hero);
+  }
+  & [data-layout="compact"] .lb-win {
+    left: 16px;
+    top: 16px;
+    width: 326px;
+    height: 472px;
+  }
+
+  .lb-body {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    height: 100%;
+    background: var(--ss-surface);
+  }
+  .lb-body[data-layout="compact"] {
+    grid-template-columns: 1fr;
+    align-content: start;
+  }
+
+  .lb-trace {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 12px;
+    border-right: 1px solid var(--ss-line);
+  }
+  .lb-body[data-layout="compact"] .lb-trace {
+    border-right: 0;
+    border-bottom: 1px solid var(--ss-line);
+  }
+  .lb-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px 10px;
+    font: 700 13px/1 var(--ss-font);
+    color: var(--ss-text-strong);
+  }
+  .lb-cmd {
+    font: 500 12.5px/1 var(--ss-mono);
+  }
+  .lb-note {
+    font: 500 11px/1 var(--ss-mono);
+    color: var(--ss-text-faint);
+  }
+  .lb-note[data-bad] {
+    color: var(--ss-danger-text);
+  }
+  .lb-x {
+    display: grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--ss-danger);
+    color: #fff;
+    font: 700 11px/1 var(--ss-font);
+  }
+  .lb-filler {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 14px 8px 0;
+  }
+
+  .lb-side {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+  }
+  .lb-cause {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--ss-line);
+    border-radius: 10px;
+    background: var(--ss-canvas);
+  }
+  .lb-label {
+    font: 700 10px/1 var(--ss-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ss-text-faint);
+  }
+  .lb-evidence {
+    margin: 0;
+    font: 400 12.5px/1.45 var(--ss-font);
+    color: var(--ss-text);
+  }
+  .lb-evidence code {
+    font: 500 11.5px var(--ss-mono);
+    color: var(--ss-text-strong);
+  }
+  .lb-fixture {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--ss-line);
+    border-radius: 8px;
+    background: var(--ss-surface);
+    box-shadow: var(--ss-shadow-card);
+    font-size: 12px;
+  }
+  .lb-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+  }
+}
+
+.lb {
+  .lb-runs {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 2px;
+  }
+  .lb-dots {
+    display: inline-flex;
+    gap: 5px;
+  }
+  .lb-dots i {
+    width: 18px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--ss-danger);
+    transition: background 0.45s;
+  }
+  .lb-dots i[data-ok] {
+    background: var(--ss-success);
+  }
+}

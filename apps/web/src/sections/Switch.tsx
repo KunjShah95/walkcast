@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Check, Minus, Scale, Wallet, X } from "lucide-react";
+import { ArrowRight, Check, Minus, X } from "lucide-react";
 import { useState } from "react";
-import { DownloadButton, Eyebrow, Reveal, Tile } from "../ui.tsx";
+import { DownloadButton, Eyebrow, Reveal } from "../ui.tsx";
 
 /* ------------------------------------------------------------------ the comparison matrix */
 
@@ -65,15 +65,11 @@ export function Versus() {
         <Reveal className="sec-head center">
           <Eyebrow n={2}>Compared</Eyebrow>
           <h2>
-            Loom films you. <Tile icon={Scale} tone="ink" tilt={-6} />
+            Loom films you.
             <br />
             <span className="dim">Walkcast films your site.</span>
           </h2>
-          <p className="lede">
-            Screen recorders need someone at the keyboard, a microphone and an edit. Walkcast drives its own browser,
-            so the tour comes out the same every time you re-run it. Here is the honest version, including where the
-            others are better.
-          </p>
+          <p className="lede">Screen recorders need someone at the keyboard. Walkcast drives its own browser, so every re-run comes out the same.</p>
         </Reveal>
 
         <Reveal className="vs" delay={0.08}>
@@ -151,7 +147,7 @@ export function Savings() {
           <Reveal className="save-copy">
             <Eyebrow n={5}>Pricing</Eyebrow>
             <h2>
-              Free to <Tile icon={Wallet} tone="green" tilt={-6} /> use.
+              Free to use.
               <br />
               <span className="dim">For the whole team.</span>
             </h2>

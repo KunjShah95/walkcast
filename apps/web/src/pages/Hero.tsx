@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowDown, ArrowRight, Check, EyeOff, FileText, Film, Sparkles, Volume2 } from "lucide-react";
+import { ArrowDown, ArrowRight, Check } from "lucide-react";
 import { type CSSProperties, useEffect } from "react";
 import { DownloadButton, Reveal } from "../ui.tsx";
 import { VERSION } from "../site.ts";
@@ -43,10 +43,9 @@ export function Hero() {
               rel="noopener"
               {...enter(0)}
             >
-              <span className="landing-release-icon"><Sparkles size={13} /></span>
               <span>Walkcast {VERSION}</span>
               <span className="landing-release-sep" />
-              <span>Meet your new product tour</span>
+              <span>Video tours from a link</span>
               <ArrowRight size={13} />
             </motion.a>
           </Reveal>
@@ -58,7 +57,7 @@ export function Hero() {
               into a <em>video tour.</em>
             </motion.h1>
             <motion.p className="landing-lede" {...enter(0.13)}>
-              Walkcast visits your website in a real browser and gives you a narrated walkthrough, captions, transcript and step-by-step guide. Paste a link; there is nothing to film.
+              Paste a link. A real browser walks your site and hands you the video, captions and transcript.
             </motion.p>
             <motion.div className="landing-actions" {...enter(0.2)}>
               <DownloadButton big placement="hero" />
@@ -69,9 +68,6 @@ export function Hero() {
                 <li key={item} style={{ "--i": i } as CSSProperties}><Check size={14} strokeWidth={2.6} />{item}</li>
               ))}
             </motion.ul>
-            <motion.p className="landing-note" {...enter(0.3)}>
-              <span className="landing-note-dot" /> Windows and Linux desktop app. Recordings stay on your computer.
-            </motion.p>
           </Reveal>
 
           <Reveal className="landing-hero-visual" delay={0.16}>
@@ -95,25 +91,9 @@ export function Hero() {
                 <track kind="captions" src="/assets/demo.vtt" srcLang="en" label="English" default />
                 Your browser does not support the video tag.
               </video>
-              <div className="landing-output">
-                <div className="landing-output-head"><span>One visit. Everything you need.</span><span className="mono">5 files</span></div>
-                <div className="landing-output-files">
-                  <span><Film size={14} /> MP4 + WebM</span>
-                  <span><EyeOff size={14} /> Captions</span>
-                  <span><Volume2 size={14} /> Voice-over</span>
-                  <span><FileText size={14} /> Transcript + guide</span>
-                </div>
-              </div>
             </div>
             <div className="landing-visual-caption"><span>01</span> A real browser. Your real product. One take.</div>
           </Reveal>
-
-          <div className="landing-proofline" aria-label="How Walkcast works">
-            <div><span className="landing-proof-n">01</span><span><b>Paste your link</b><small>Start on any page</small></span></div>
-            <div><span className="landing-proof-n">02</span><span><b>Let Walkcast walk</b><small>Real browser, real clicks</small></span></div>
-            <div><span className="landing-proof-n">03</span><span><b>Share the tour</b><small>Video, captions and guide</small></span></div>
-            <a href="#what">See how it works <ArrowRight size={14} /></a>
-          </div>
         </div>
       </div>
     </section>

@@ -4,7 +4,6 @@ import {
   AudioLines,
   CalendarClock,
   Captions,
-  Clapperboard,
   FileText,
   Film,
   GraduationCap,
@@ -19,12 +18,11 @@ import {
   Rocket,
   ScanEye,
   ShieldCheck,
-  Sparkles,
   Webhook,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ISSUES_URL, LAB_URL, LICENSE_URL, LINUX_APPIMAGE_URL, LINUX_DEB_URL, RELEASES_URL, REPO_URL, VERSION, WINDOWS_EXE_URL, WINDOWS_MSI_URL } from "../site.ts";
-import { BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, Tile, WindowsIcon } from "../ui.tsx";
+import { BrandMark, DownloadButton, Eyebrow, GithubIcon, LinuxIcon, Reveal, WindowsIcon } from "../ui.tsx";
 import { AUTHOR, FAQ, UPDATED } from "../content.ts";
 
 /* ------------------------------------------------------------------ bento */
@@ -120,7 +118,7 @@ export function Bento() {
         <Reveal className="sec-head center">
           <Eyebrow n={4}>The app</Eyebrow>
           <h2>
-            One run, <Tile icon={Clapperboard} tone="ink" tilt={-6} /> five files.
+            One run, five files.
             <br />
             <span className="dim">Every page visited, with its status.</span>
           </h2>
@@ -373,7 +371,7 @@ export function Uses() {
       <div className="wrap uses-head">
         <Reveal>
           <h2>
-            One recorder. <Tile icon={Sparkles} tone="violet" tilt={-6} />
+            One recorder.
             <br />
             <span className="dim">Six ways to use the same visit.</span>
           </h2>
@@ -524,9 +522,9 @@ export function Closing() {
       <div className="wrap">
         <Reveal className="closing">
           <h2>
-            Your site has <Tile icon={AppWindow} tone="ink" tilt={-6} /> pages.
+            Your site has pages.
             <br />
-            <span className="dim">Now it has a <Tile icon={Play} tone="rec" tilt={5} fill /> video tour.</span>
+            <span className="dim">Now it has a video tour.</span>
           </h2>
           <div ref={ref} className="hub" style={{ height: H }}>
             <svg width={w} height={H} aria-hidden="true">

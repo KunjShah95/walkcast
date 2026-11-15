@@ -15,7 +15,7 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Eyebrow, Reveal, Tile, WindowBar } from "../ui.tsx";
+import { Eyebrow, Reveal, WindowBar } from "../ui.tsx";
 
 /* ------------------------------------------------------------------ recorder mock */
 
@@ -66,9 +66,9 @@ export function Recorder() {
         <Reveal className="sec-head center">
           <Eyebrow n={3}>Behind the login</Eyebrow>
           <h2>
-            Records the pages <Tile icon={Lock} tone="ink" tilt={-6} /> only users see. <span className="dim">Your password <Tile icon={KeyRound} tone="green" tilt={5} /> never hits disk.</span>
+            Records the pages only users see. <span className="dim">Your password never hits disk.</span>
           </h2>
-          <p className="lede">Walkcast finds the sign-in form, including two-step email-then-password flows, signs in with what you give it, and walks the signed-in site.</p>
+          <p className="lede">It signs in with what you give it, then walks the signed-in site.</p>
           <div className="chips">
             <span className="chip"><KeyRound size={15} />Held in memory only</span>
             <span className="chip"><OctagonX size={15} />Stops at CAPTCHA and 2FA</span>

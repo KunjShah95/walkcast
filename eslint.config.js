@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["node_modules", "dist", "**/dist", "apps/desktop/src-tauri/target", "apps/desktop/src-tauri/sidecar", "apps/desktop/src-tauri/gen", "results", "runs", "fixtures", "recordings", ".lab", "docs/architecture/preview", "apps/mobile/android", "apps/mobile/ios", "apps/mobile/node_modules"],
+    ignores: ["node_modules", ".agents", "apps/web/src/stageshow", "dist", "**/dist", "apps/desktop/src-tauri/target", "apps/desktop/src-tauri/sidecar", "apps/desktop/src-tauri/gen", "results", "runs", "fixtures", "recordings", ".lab", "docs/architecture/preview", "apps/mobile/android", "apps/mobile/ios", "apps/mobile/node_modules"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

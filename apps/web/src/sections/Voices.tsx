@@ -10,9 +10,9 @@ import {
   type Transition,
   type Variants,
 } from "motion/react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, MessageSquareQuote, Pause, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play } from "lucide-react";
 import { type ComponentProps, type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { GithubIcon, Reveal, Tile } from "../ui.tsx";
+import { GithubIcon, Reveal } from "../ui.tsx";
 import { VOICE_PLACEHOLDERS, VOICES, type Voice } from "../voices.ts";
 
 /** Fewer than this and a carousel reads as padding, so the section stays out. */
@@ -150,7 +150,7 @@ function VoicesSection({ items }: { items: Voice[] }) {
       <div className="wrap uses-head">
         <Reveal>
           <h2>
-            Said in public. <Tile icon={MessageSquareQuote} tone="yellow" tilt={6} />
+            Said in public.
             <br />
             <span className="dim">Every quote links to the post.</span>
           </h2>
