@@ -154,10 +154,11 @@ test("the comparison pages are structured for citation", { timeout: 180_000 }, a
     const types = ld["@graph"].map((n) => n["@type"]);
     assert.ok(types.includes("Article"), `${c.path} is an Article`);
     assert.ok(types.includes("FAQPage"), `${c.path} has a FAQPage`);
-    assert.ok(types.includes("SoftwareApplication"), `${c.path} names the product`);
-    // The competitor is named as an entity, so an engine can relate the two.
+    assert.ok(ld["@graph"].some((n) => n.name === "Walkcast" && n["@type"] !== "Organization" && n["@type"] !== "WebSite"), `${c.path} names the product`);
+    // The competitor is named as an entity, so an engine can relate the two. Not as a
+    // SoftwareApplication: that asks Google for a rating the page cannot honestly give.
     assert.ok(
-      ld["@graph"].some((n) => n["@type"] === "SoftwareApplication" && n.url?.startsWith("http") && !n.url.startsWith(SITE)),
+      ld["@graph"].some((n) => n["@type"] === "Thing" && n.url?.startsWith("http") && !n.url.startsWith(SITE)),
       `${c.path} names the competitor as its own entity`,
     );
     // A fair comparison says what the other tool is good at, and dates its prices.
@@ -281,4 +282,29 @@ test("the sitemap is a file a crawler cannot reject", { timeout: 180_000 }, asyn
 
   // The XML sitemap is for pages. The plain-text files get their own file, linked from llms.txt.
   assert.ok(!xml.includes("llms.txt"), "the page sitemap does not list plain-text files");
+});
+
+test("the sponsor slot is empty until a sponsor is agreed, and never sits on a decision page", async () => {
+  const { SPONSOR, SPONSOR_PAGES } = await import("../apps/web/src/site.ts");
+  assert.equal(SPONSOR, null, "no sponsor ships by default");
+  for (const decision of ["/download", "/pricing", "/privacy", "/faq"]) {
+    assert.ok(!SPONSOR_PAGES.includes(decision), `${decision} carries no sponsor line`);
+  }
+});
+
+test("only the pages about the app carry a SoftwareApplication node, so no page asks for a rating it cannot have", { timeout: 180_000 }, async () => {
+  const { ROUTES } = await import("../apps/web/src/content.ts");
+  const out = build();
+  const aboutTheApp = new Set(["/", "/download"]);
+  for (const r of ROUTES) {
+    const file = r.path === "/" ? "index.html" : `${r.path.slice(1)}/index.html`;
+    const html = read(out, file);
+    const ld = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)![1]!) as { "@graph": { "@type": string; "@id"?: string; aggregateRating?: unknown; review?: unknown }[] };
+    const apps = ld["@graph"].filter((n) => n["@type"] === "SoftwareApplication");
+    if (aboutTheApp.has(r.path)) assert.equal(apps.length, 1, `${r.path} describes the app`);
+    else assert.equal(apps.length, 0, `${r.path} does not carry a SoftwareApplication (Google asks it for a rating or review)`);
+    // Whatever is there must resolve: the page's `about` points at a node on the same page.
+    assert.ok(ld["@graph"].some((n) => n["@id"] === `${SITE}/#app`), `${r.path} defines the app it is about`);
+    for (const n of apps) assert.ok(!n.aggregateRating && !n.review, "no invented ratings");
+  }
 });

@@ -23,3 +23,22 @@ export const ISSUES_URL = `${REPO_URL}/issues`;
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 /** The Walkcast Lab chapter of the README: browser-agent regression testing. */
 export const LAB_URL = `${REPO_URL}#walkcast-lab`;
+
+/**
+ * One sponsor line at the foot of the guides and comparison pages. `null` shows nothing.
+ *
+ * A fixed-price slot sold directly, not an ad network: no script, no tracking pixel, one plain
+ * link. It is always labelled "Sponsored" and marked rel="sponsored", and it never appears on the
+ * download, privacy or pricing pages, so nobody is nudged away from the product at the moment of
+ * choosing it. Fill it in only for an agreed sponsor, and say so in the sponsor's own words.
+ */
+export interface Sponsor {
+  name: string;
+  url: string;
+  /** One sentence, in the sponsor's words. */
+  line: string;
+}
+export const SPONSOR: Sponsor | null = null;
+
+/** Pages that may carry the sponsor line. Decision pages never do. */
+export const SPONSOR_PAGES: readonly string[] = ["/guides", "/guides/product-demo-video", "/guides/website-tutorial-video", "/guides/narrated-website-walkthrough", "/guides/stagehand-evals", "/guides/how-browser-agents-fail", "/lab"];

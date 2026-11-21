@@ -8,6 +8,7 @@ import { Doc } from "./Doc.tsx";
  */
 export function GuidesIndexPage() {
   const route = ROUTES.find((r) => r.path === "/guides")!;
+  const updated = route.updated ?? UPDATED;
   return (
     <article className="doc">
       <div className="wrap doc-wrap">
@@ -18,7 +19,7 @@ export function GuidesIndexPage() {
         </nav>
         <p className="eyebrow">
           <span className="eyebrow-n">Guides</span>
-          Updated <time dateTime={UPDATED}>{new Date(UPDATED + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time> · by{" "}
+          Updated <time dateTime={updated}>{new Date(updated + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</time> · by{" "}
           <a href={AUTHOR.url} target="_blank" rel="noopener">{AUTHOR.name}</a>
         </p>
 
@@ -68,6 +69,14 @@ export function GuidesIndexPage() {
             <tr>
               <td>Find out why your browser AI agent keeps failing</td>
               <td><a href="/lab">Walkcast Lab</a></td>
+            </tr>
+            <tr>
+              <td>Test a Stagehand agent and keep each failure as a test</td>
+              <td><a href="/guides/stagehand-evals">Stagehand evals and testing</a></td>
+            </tr>
+            <tr>
+              <td>Compare demo tools, including the open-source option</td>
+              <td><a href="/compare/open-source-alternatives">Open source alternatives to Guidde, Tella, Storylane and Supademo</a></td>
             </tr>
           </tbody>
         </table>
@@ -187,6 +196,15 @@ export function ProductDemoPage() {
         through. The maximum is 30 pages. If your product needs more than that, record the flow twice rather than making
         one long video: two focused videos are easier to share and easier to re-record than one.
       </p>
+      <p>
+        That is not only a hunch. In{" "}
+        <a href="https://www.wyzowl.com/video-marketing-statistics/" rel="noopener" target="_blank">
+          Wyzowl's 2026 State of Video Marketing survey
+        </a>{" "}
+        of 266 marketers and consumers, 71% of video marketers said 30 seconds to two minutes is the most effective
+        length, and 63% of consumers said they would rather learn about a product from a short video than from an
+        article, an infographic or a sales call.
+      </p>
 
       <h2>Make it look like your product, not a template</h2>
       <ul>
@@ -220,11 +238,26 @@ export function ProductDemoPage() {
 </video>`}</code>
       </pre>
 
+      <h2>Sources</h2>
+      <ul className="sources">
+        <li>
+          Wyzowl,{" "}
+          <a href="https://www.wyzowl.com/video-marketing-statistics/" rel="noopener" target="_blank">
+            State of Video Marketing 2026
+          </a>
+          : 266 respondents, fieldwork late 2025. The figures quoted above are from that report: 96% have watched an
+          explainer video to learn about a product, 85% have been convinced to buy by watching a video, 63% would
+          rather learn from a short video, and 71% of video marketers say 30 seconds to two minutes works best.
+        </li>
+      </ul>
+
       <h2>Compare the alternatives</h2>
       <ul>
         <li><a href="/compare/loom">Loom alternative</a>: if you have been recording your screen instead of your site.</li>
         <li><a href="/compare/screen-studio">Screen Studio alternative</a>: if you want the polished screencast look, and you are on a Mac.</li>
         <li><a href="/compare/scribe">Scribe alternative</a>: if you want screenshots and steps rather than a video.</li>
+        <li><a href="/compare/guidde">Guidde alternative</a>, <a href="/compare/supademo">Supademo alternative</a> and <a href="/compare/storylane">Storylane alternative</a>: if you are weighing how-to video and interactive demo tools. The <a href="/guides/interactive-demo-vs-video">guide on interactive demo against video</a> helps you choose.</li>
+        <li><a href="/compare/open-source-alternatives">Open source alternatives to Guidde, Tella, Storylane and Supademo</a>: if you are comparing demo tools and want the licence and the output in one place.</li>
       </ul>
     </Doc>
   );

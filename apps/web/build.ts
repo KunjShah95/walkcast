@@ -6,6 +6,7 @@ import {
   ANSWER_PAGES,
   AUTHOR,
   COMPARE_FAQ,
+  COMPARE_INDEX,
   COMPARES,
   DEFINITION,
   DEMO,
@@ -162,19 +163,37 @@ const howToFor = (path: string, name: string, minutes: number) => {
   };
 };
 
-/** The competitor in a comparison page, described as an entity so engines can relate the two. */
+/**
+ * The competitor in a comparison page, described as an entity so engines can relate the two.
+ *
+ * A plain Thing, not a SoftwareApplication: Google's software-app rich result requires an
+ * aggregateRating or a review, and a competitor's rating is not ours to state. Typed as an app it
+ * was a validation error on every comparison page for a result the page could never earn.
+ */
 const competitor = (path: string) => {
   const c = COMPARES.find((x) => x.path === path);
   if (!c) return null;
   return {
-    "@type": "SoftwareApplication",
+    "@type": "Thing",
     "@id": `${c.themUrl}#app`,
     name: c.them,
     url: c.themUrl,
-    applicationCategory: "MultimediaApplication",
     description: c.price,
   };
 };
+
+/**
+ * The pages whose subject is the app itself. Only these carry the full SoftwareApplication node.
+ * Google validates that node for the software-app rich result, which needs an aggregateRating or a
+ * review; Walkcast has no genuine ratings and never invents them, so the node is kept where the app
+ * is the entity being described (home, download) and every other page refers to it by name and URL.
+ * That took the validation error from every page that mentioned the app down to the two that are
+ * about it.
+ */
+const APP_PAGES = new Set(["/", "/download"]);
+
+/** What a page that is not about the app says the app is: enough to resolve `about`, nothing a rich result checks. */
+const APP_REFERENCE = { "@type": "Thing", "@id": `${SITE}/#app`, name: NAME, url: `${SITE}/`, description: DEFINITION };
 
 function graphFor(route: Route) {
   const kind = route.kind ?? "webpage";
@@ -209,7 +228,7 @@ function graphFor(route: Route) {
   if (kind === "index") {
     page.mainEntity = {
       "@type": "ItemList",
-      itemListElement: GUIDES.map((g, i) => ({ "@type": "ListItem", position: i + 1, name: g.label, url: url(g.path) })),
+      itemListElement: (route.path === "/compare" ? COMPARE_INDEX.flatMap((g) => g.items) : GUIDES).map((g, i) => ({ "@type": "ListItem", position: i + 1, name: g.label, url: url(g.path) })),
     };
   }
   if (kind === "faq") {
@@ -219,27 +238,24 @@ function graphFor(route: Route) {
   // Breadcrumbs: a guide sits under /guides, so the trail has three steps, not two.
   const trail: { name: string; item: string }[] = [{ name: NAME, item: `${SITE}/` }];
   if (route.path.startsWith("/guides/")) trail.push({ name: "Guides", item: url("/guides") });
-  if (route.path.startsWith("/compare/")) trail.push({ name: "Compare", item: url("/compare/screen-recording") });
+  if (route.path.startsWith("/compare/")) trail.push({ name: "Compare", item: url("/compare") });
   if (route.path !== "/") trail.push({ name: route.label, item: url(route.path) });
   const crumbs = {
     "@type": "BreadcrumbList",
     itemListElement: trail.map((t, i) => ({ "@type": "ListItem", position: i + 1, name: t.name, item: t.item })),
   };
 
-  const extra: unknown[] = [];
+  // Every page's `about` points at the app, so every page defines it: in full where the page is
+  // about the app, as a plain reference elsewhere.
+  const extra: unknown[] = [APP_PAGES.has(route.path) ? APP : APP_REFERENCE];
   if (kind === "landing") {
-    extra.push(APP, VIDEO, { ...howTo, "@id": `${SITE}/#howto` }, faqPage(`${SITE}/#faq`, FAQ));
-  } else if (kind === "index") {
-    extra.push(APP);
+    extra.push(VIDEO, { ...howTo, "@id": `${SITE}/#howto` }, faqPage(`${SITE}/#faq`, FAQ));
   } else if (kind === "guide") {
-    extra.push(APP, VIDEO);
+    extra.push(VIDEO);
     if (GUIDE_STEPS[route.path]) extra.push(howToFor(route.path, route.label, 5));
   } else if (kind === "compare") {
-    extra.push(APP);
     const comp = competitor(route.path);
     if (comp) extra.push(comp);
-  } else if (kind === "lab" || kind === "pricing" || kind === "download") {
-    extra.push(APP);
   }
 
   // A page's own questions, emitted as FAQPage so an engine can lift them directly.

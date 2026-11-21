@@ -11,9 +11,11 @@ import "@fontsource-variable/bricolage-grotesque/wdth.css";
 import "@fontsource-variable/fraunces/opsz-italic.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { App } from "./App.tsx";
+import { trackGithubClicks } from "./analytics.ts";
 import "./styles.css";
 
 inject();
+trackGithubClicks();
 
 const root = document.getElementById("root")!;
 const path = location.pathname.replace(/\/+$/, "") || "/";

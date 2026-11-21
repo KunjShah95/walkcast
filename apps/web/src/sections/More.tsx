@@ -640,9 +640,15 @@ export function Footer() {
               <li><a href="/guides">All guides</a></li>
               <li><a href="/guides/product-demo-video">Product demo video</a></li>
               <li><a href="/guides/website-tutorial-video">Website tutorial video</a></li>
+              <li><a href="/compare">All comparisons</a></li>
               <li><a href="/compare/loom">Loom alternative</a></li>
+              <li><a href="/compare/guidde">Guidde alternative</a></li>
+              <li><a href="/compare/supademo">Supademo alternative</a></li>
+              <li><a href="/compare/storylane">Storylane alternative</a></li>
+              <li><a href="/guides/interactive-demo-vs-video">Interactive demo or video</a></li>
               <li><a href="/compare/scribe">Scribe alternative</a></li>
               <li><a href="/compare/screen-studio">Screen Studio alternative</a></li>
+              <li><a href="/compare/open-source-alternatives">Open source demo tools</a></li>
               <li><a href="/compare/screen-recording">vs screen recording</a></li>
               <li><a href="/faq">All questions</a></li>
             </ul>

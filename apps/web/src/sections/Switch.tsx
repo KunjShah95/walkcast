@@ -112,6 +112,9 @@ export function Versus() {
                   vs {t.name} <ArrowRight size={13} />
                 </a>
               ))}
+              <a href="/compare/open-source-alternatives">
+                Open source demo tools <ArrowRight size={13} />
+              </a>
             </nav>
           </div>
         </Reveal>

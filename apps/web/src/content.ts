@@ -47,6 +47,7 @@ export interface Route {
     path: "/guides",
     label: "Guides",
     kind: "index",
+    updated: "2026-11-20",
     title: "Walkcast guides: product demo videos, tutorials, agent tests",
     description:
       "Step-by-step guides: make a product demo video from your live site, record a website tutorial without a screen recorder, and test browser AI agents.",
@@ -83,7 +84,8 @@ export interface Route {
     path: "/guides/product-demo-video",
     label: "How to make a product demo video",
     kind: "guide",
-    title: "How to make a product demo video of your live app · Walkcast",
+    updated: "2026-11-20",
+    title: "Product demo video maker for your live app · Walkcast",
     description:
       "Make a product demo video from the real product: paste your app URL, get an MP4 with narration, captions and a transcript. You never record anything yourself.",
     faq: [
@@ -101,7 +103,8 @@ export interface Route {
     path: "/guides/website-tutorial-video",
     label: "How to make a website tutorial video",
     kind: "guide",
-    title: "How to make a website tutorial video · Walkcast",
+    updated: "2026-11-20",
+    title: "Website tutorial video maker (free) · Walkcast",
     description:
       "Record a website tutorial video from the live site: narrated, captioned, and re-recordable after every change. Windows and Linux, free.",
     faq: [
@@ -112,6 +115,60 @@ export interface Route {
       [
         "What do I get when the recording is done?",
         "An MP4 with an embedded caption track, WebVTT captions, the narration as a WAV, a transcript, a WebM copy, and a list of every page visited with its title and HTTP status.",
+      ],
+    ],
+  },
+  {
+    path: "/guides/stagehand-evals",
+    label: "Stagehand evals and testing",
+    kind: "guide",
+    updated: "2026-11-15",
+    title: "Stagehand evals and testing for browser agents · Walkcast",
+    description:
+      "Stagehand runs your browser agent. Walkcast Lab finds why a run failed, saves it as a fixture and replays it offline against the next version.",
+    faq: [
+      [
+        "How do I test a Stagehand agent?",
+        "Run it through Walkcast Lab against a real browser. A failed run is classified from the browser's own trace into a cause, saved as a fixture, and replayed against your next agent version from the recorded model calls, so a fix is checked rather than assumed.",
+      ],
+      [
+        "What are Stagehand evals missing?",
+        "An eval says whether a task passed. It does not say why a run failed, and a pass rate over a few runs cannot separate a real improvement from a lucky one. Lab adds the classified cause with its evidence, a replayable fixture, and comparisons over repeated trials.",
+      ],
+      [
+        "Is there a Stagehand alternative?",
+        "For driving a browser, the alternatives are Playwright directly or browser-use. For testing an agent after a run fails, Walkcast Lab is built for that job and works with Stagehand, Playwright and browser-use agents.",
+      ],
+      [
+        "Stagehand vs browser-use vs Playwright: which should I use?",
+        "They are different tools for driving a browser, so the choice depends on how you want to write the automation: Playwright is a browser automation library you script directly, Stagehand adds natural-language actions on top of Playwright, and browser-use is an agent you run from Python. None of them decides why a run failed or proves a fix held. Walkcast Lab is the testing step after any of them.",
+      ],
+      [
+        "Do I need an API key to replay a Stagehand run?",
+        "No. Stagehand's model calls are recorded when the run is made, and a replay serves those recorded responses instead of calling a provider, so it needs no key and no network.",
+      ],
+    ],
+  },
+  {
+    path: "/guides/how-browser-agents-fail",
+    label: "How browser agents fail",
+    kind: "guide",
+    updated: "2026-11-15",
+    title: "How browser agents fail: 5 causes, with evidence · Walkcast",
+    description:
+      "Five real browser agent failures, each with the trace evidence that proves the cause. Three end with the agent reporting success.",
+    faq: [
+      [
+        "Why do browser agents fail?",
+        "In the five failures recorded here: acting on a stale view of the page, retrying a write without checking whether it worked, losing the session mid-task, an application that silently drops a field, and a page that changed under a fixed selector. Three of the five end with the agent reporting success.",
+      ],
+      [
+        "How can an agent report success when the task failed?",
+        "It trusts a confirmation message instead of the application's records. A toast, a redirect or a 200 response says a form was accepted, not that the right data was stored. Checking the saved record against what was entered is what catches it.",
+      ],
+      [
+        "Are these results from a language model?",
+        "No. The agents in these runs are deterministic scripts and each fault is injected into a sample app on purpose, so the causes are unambiguous and reproducible. The page shows what each failure looks like in a trace, not how often a model makes it.",
       ],
     ],
   },
@@ -146,6 +203,104 @@ export interface Route {
     title: "Scribe alternative: video instead of screenshots · Walkcast",
     description:
       "A Scribe alternative that outputs narrated video instead of screenshots. It is free and open source, runs on your own machine, and records pages behind a login.",
+  },
+  {
+    path: "/compare/open-source-alternatives",
+    label: "Open source demo tool alternatives",
+    kind: "compare",
+    updated: "2026-11-20",
+    title: "Open source alternatives to Guidde, Tella and Storylane",
+    description:
+      "Guidde, Tella, Storylane and Supademo compared with Walkcast: what each does, what it costs, and when a free MIT-licensed website recorder is the honest choice.",
+    faq: [
+      [
+        "What is the best open source alternative to Guidde?",
+        "Walkcast is the closest open-source option for the job Guidde is often used for: a narrated video of a web workflow. It is MIT licensed, free and runs on your PC. Guidde is the better fit when you need editable how-to guides, desktop and mobile capture, brand kits, interactive demos, or enterprise review with SSO.",
+      ],
+      [
+        "Is there an open source alternative to Tella?",
+        "Walkcast covers the website-demo job without a subscription, but it is not a Tella replacement. Tella records a person, their screen and their camera, then edits the take with AI. Walkcast films its own browser and writes the narration from what the browser did. If you need a talking-head video or a timeline editor, Tella is built for that.",
+      ],
+      [
+        "Can Walkcast replace Storylane or Supademo?",
+        "Not for interactive demos. Storylane and Supademo produce click-through demos that a visitor drives, with lead capture and analytics. Walkcast produces a narrated MP4, captions, a transcript and a written guide. Use Walkcast for a product tour or documentation; use an interactive demo platform when the buyer needs to click the product themselves.",
+      ],
+      [
+        "What do Guidde, Tella, Storylane and Supademo cost?",
+        "On 20 November 2026: Guidde's free plan allows 25 how-to videos, and Pro is $29 per creator a month or $19 billed yearly. Tella's Pro is $29 a month or $16 billed yearly, with no free plan after a 7-day trial. Storylane's free plan allows one published demo, and Starter is $50 a month or $40 billed yearly. Supademo's free plan allows five demos, and Scale is $50 a month or $38 billed yearly. Each vendor's own pricing page is linked from this page.",
+      ],
+      [
+        "Is any of these tools open source?",
+        "Walkcast is: the whole app is MIT licensed and the source is on GitHub. Guidde, Tella, Storylane and Supademo are commercial products. Their free plans cost nothing to use, but the software itself is not open source.",
+      ],
+      [
+        "Which tool should I use to document a workflow?",
+        "For an editable screenshot guide, Scribe or Guidde. For a narrated video of a live website, Walkcast. For a click-through demo a buyer can drive, Storylane or Supademo. For a video with a person on camera, Tella. The outputs differ, so pick by the artefact you need, not by the category.",
+      ],
+    ],
+  },
+  {
+    path: "/compare",
+    label: "Compare",
+    kind: "index",
+    updated: "2026-11-21",
+    title: "Walkcast vs Loom, Scribe, Guidde, Supademo and more",
+    description:
+      "Fair, sourced comparisons of Walkcast with screen recorders, guide makers and interactive demo tools. Each page says when to pick the other tool.",
+  },
+  {
+    path: "/compare/guidde",
+    label: "Guidde alternative",
+    kind: "compare",
+    updated: "2026-11-21",
+    title: "Guidde alternative: free, open source · Walkcast",
+    description:
+      "A free Guidde alternative for narrated website walkthroughs: no watermark, no video cap. Guidde's prices, sources and when to pick it instead.",
+  },
+  {
+    path: "/compare/supademo",
+    label: "Supademo alternative",
+    kind: "compare",
+    updated: "2026-11-21",
+    title: "Supademo alternative for narrated website videos · Walkcast",
+    description:
+      "Walkcast against Supademo: click-through demos or a narrated video of your live site. Prices checked 20 November 2026, and what Walkcast cannot do.",
+  },
+  {
+    path: "/compare/storylane",
+    label: "Storylane alternative",
+    kind: "compare",
+    updated: "2026-11-21",
+    title: "Storylane alternative for onboarding videos · Walkcast",
+    description:
+      "When a free narrated video of your site is enough, and when you need Storylane's interactive demos and analytics. Prices checked 20 November 2026.",
+  },
+  {
+    path: "/guides/interactive-demo-vs-video",
+    label: "Interactive demo vs video",
+    kind: "guide",
+    updated: "2026-11-21",
+    title: "Interactive demo or video demo: how to choose · Walkcast",
+    description:
+      "Interactive demos and product videos do different jobs. How to choose by what the viewer has to do, and how to keep either from going stale.",
+    faq: [
+      [
+        "What is the difference between an interactive demo and a video demo?",
+        "An interactive demo lets a visitor click through a replica of the product at their own pace, and it can record where they went. A video demo is something they watch from start to end. Use an interactive demo when the visitor should drive the product; use a video when they should watch and understand.",
+      ],
+      [
+        "Which converts better, an interactive demo or a video?",
+        "No independent study we could find answers this. Nearly every published comparison is written by a vendor that sells one of the two formats, and their definitions of conversion differ. Test both on your own page for a fixed period and compare what you actually care about.",
+      ],
+      [
+        "Why do product demos go out of date?",
+        "A demo is a copy of the product on the day it was made. Every release that moves a button or renames a page makes the copy a little wrong, and nobody is assigned to notice. A tour recorded by a program that walks the live site can be run again after each release instead of rebuilt by hand.",
+      ],
+      [
+        "Can I use both?",
+        "Yes, and many teams do: an interactive demo on the pricing page for people evaluating the product, and a narrated video in the documentation, onboarding emails and release notes for people learning it.",
+      ],
+    ],
   },
   {
     path: "/lab",
@@ -184,6 +339,7 @@ export interface Route {
     path: "/privacy",
     label: "Privacy",
     kind: "privacy",
+    updated: "2026-11-20",
     title: "Walkcast privacy: what stays on your PC · Walkcast",
     description:
       "Walkcast runs on your own PC. Recordings, the browser and your passwords stay there; the app has no analytics. Exactly which network requests it makes, and why.",
@@ -199,10 +355,18 @@ export const ANSWER_PAGES = new Set([
   "/guides/narrated-website-walkthrough",
   "/guides/product-demo-video",
   "/guides/website-tutorial-video",
+  "/guides/stagehand-evals",
+  "/guides/how-browser-agents-fail",
   "/compare/screen-recording",
   "/compare/loom",
   "/compare/screen-studio",
   "/compare/scribe",
+  "/compare/open-source-alternatives",
+  "/compare",
+  "/compare/guidde",
+  "/compare/supademo",
+  "/compare/storylane",
+  "/guides/interactive-demo-vs-video",
   "/lab",
   "/pricing",
   "/privacy",
@@ -228,6 +392,56 @@ export const GUIDES: { path: string; label: string; blurb: string; minutes: stri
     blurb: "The full walkthrough: what you need, the four steps, the files you get, and how to embed it with captions.",
     minutes: "6 min",
   },
+  {
+    path: "/guides/stagehand-evals",
+    label: "Stagehand evals and testing",
+    blurb: "Find out why a Stagehand agent run failed, keep it as a fixture, and replay it against the next version without an API key.",
+    minutes: "5 min",
+  },
+  {
+    path: "/guides/how-browser-agents-fail",
+    label: "How browser agents fail",
+    blurb: "Five real failures with the trace evidence behind each cause, and why three of them end with the agent saying it worked.",
+    minutes: "4 min",
+  },
+  {
+    path: "/guides/interactive-demo-vs-video",
+    label: "Interactive demo or video",
+    blurb: "A plain way to choose by what the viewer has to do, what the published numbers can and cannot tell you, and how to keep either one from going stale.",
+    minutes: "5 min",
+  },
+];
+
+/** The comparison index: every comparison page, grouped by the job the other tool does. */
+export const COMPARE_INDEX: { group: string; items: { path: string; label: string; blurb: string }[] }[] = [
+  {
+    group: "Record a person or a screen",
+    items: [
+      { path: "/compare/loom", label: "Loom", blurb: "Films you and your screen. Walkcast films your website, with nobody on camera." },
+      { path: "/compare/screen-studio", label: "Screen Studio", blurb: "A polished Mac screen recorder. Walkcast is a free recorder for Windows and Linux." },
+      { path: "/compare/screen-recording", label: "Screen recording in general", blurb: "When a generated, narrated walkthrough beats recording your own screen, and when it does not." },
+    ],
+  },
+  {
+    group: "Make step-by-step guides",
+    items: [
+      { path: "/compare/scribe", label: "Scribe", blurb: "Screenshot guides. Walkcast adds narrated video to the same written steps." },
+      { path: "/compare/guidde", label: "Guidde", blurb: "AI-narrated how-to videos of a workflow you perform. Walkcast walks the site by itself." },
+    ],
+  },
+  {
+    group: "Build interactive demos",
+    items: [
+      { path: "/compare/supademo", label: "Supademo", blurb: "Click-through demos with branching. Walkcast makes a video, not a click-through." },
+      { path: "/compare/storylane", label: "Storylane", blurb: "Demos with lead capture and analytics for sales. Walkcast has no tracking at all." },
+    ],
+  },
+  {
+    group: "Several at once",
+    items: [
+      { path: "/compare/open-source-alternatives", label: "Open source alternatives", blurb: "Guidde, Tella, Storylane and Supademo side by side, with prices and sources." },
+    ],
+  },
 ];
 
 /**
@@ -235,6 +449,60 @@ export const GUIDES: { path: string; label: string; blurb: string; minutes: stri
  * the FAQPage schema and llms.txt never drift apart.
  */
 export const COMPARE_FAQ: Record<string, [string, string][]> = {
+  "/compare/guidde": [
+    [
+      "Is Walkcast a free Guidde alternative?",
+      "For one job, yes. Walkcast is MIT licensed and free, with no seat limit, no watermark and no cap on videos, and it turns a live website into a narrated video, captions, a transcript and a written guide. Guidde's free plan allows up to 25 videos with a watermark. Guidde does more: it captures desktop and mobile workflows, edits steps, applies brand kits and offers single sign-on.",
+    ],
+    [
+      "What is the difference between Walkcast and Guidde?",
+      "Guidde records a workflow that a person performs, then turns the capture into an AI-narrated video or guide. Walkcast drives its own browser through your site and narrates what it did, so nobody performs anything and the result is the same each time you run it.",
+    ],
+    [
+      "Can Walkcast capture desktop apps the way Guidde can?",
+      "No. Walkcast records websites in its own browser window. If you document desktop or mobile software, Guidde is the better fit.",
+    ],
+    [
+      "How much does Guidde cost?",
+      `On 20 November 2026, Guidde's free plan allowed up to 25 how-to videos with a watermark. Pro was $29 per creator a month, or $19 billed yearly, and Business was $59 a month, or $39 billed yearly. Check Guidde's pricing page for today's figures.`,
+    ],
+  ],
+  "/compare/supademo": [
+    [
+      "Is Walkcast an alternative to Supademo?",
+      "Only for part of what Supademo does. Walkcast makes a narrated video, captions, a transcript and a written guide from a real website visit. It does not make click-through interactive demos, branching paths or a conversational AI demo, which are what Supademo is built for.",
+    ],
+    [
+      "Does Supademo have a free plan?",
+      `Yes. On 20 November 2026 it allowed one creator, five guided demos, 50 video recordings and unlimited views. Scale was $50 a month, or $38 billed yearly, per creator. Walkcast is free with no limit on tours.`,
+    ],
+    [
+      "Can Walkcast make an interactive demo?",
+      "No. A Walkcast tour is a video you watch, with a written guide beside it. If a visitor should drive the product, use an interactive demo tool such as Supademo or Storylane.",
+    ],
+    [
+      "When should I use Walkcast instead of Supademo?",
+      "When the goal is documentation, onboarding or release notes, and the tour has to stay current. Walkcast walks the live site again after each release, so nobody rebuilds a demo by hand.",
+    ],
+  ],
+  "/compare/storylane": [
+    [
+      "Is Walkcast a Storylane alternative?",
+      "Not for a sales team that needs lead capture, personalisation and demo analytics. Storylane is built for that. Walkcast is a free alternative when you need a narrated video of your live website for onboarding, documentation or QA evidence.",
+    ],
+    [
+      "How much does Storylane cost?",
+      `On 20 November 2026, Storylane's free plan allowed one creator, one published demo and 200 AI credits a month. Starter was $50 a month, or $40 billed yearly, and Growth was $625 a month, or $500 billed yearly. Check Storylane's pricing page for today's figures.`,
+    ],
+    [
+      "Does Walkcast track who watched a tour?",
+      "No. Walkcast has no viewer tracking, lead capture or analytics. A share link plays the video in a browser and expires on the day you set.",
+    ],
+    [
+      "Should I use an interactive demo or a video?",
+      "Pick by what the viewer has to do. If they should drive the product, use an interactive demo. If they should watch and understand, use a video. The guide on interactive demo against video walks through the choice.",
+    ],
+  ],
   "/compare/loom": [
     [
       "Is Walkcast really a free Loom alternative?",
@@ -443,7 +711,69 @@ export interface Compare {
   rows: CompareRow[];
   /** Facts with a source, for engines and readers who want to check them. */
   facts: [string, string][];
+  /**
+   * The short answer, when the generic one ("a free alternative that records your website") would
+   * overstate the fit, as it does for an interactive-demo tool Walkcast cannot replace.
+   */
+  answer?: string;
 }
+
+/**
+ * The four commercial tools in the open-source roundup. Kept apart from Compare because a
+ * roundup has four competitors and no side-by-side mark table; forcing it into the single-tool
+ * shape would have meant inventing a "them" that does not exist.
+ */
+export interface AlternativeTool {
+  name: string;
+  /** The vendor's own pricing page, so every figure can be checked at its source. */
+  url: string;
+  /** What it is, in one sentence, without a judgement. */
+  what: string;
+  /** What the free plan actually allows. */
+  free: string;
+  /** The entry paid price, with the billing period named. */
+  paid: string;
+  /** What it is genuinely good at. Written to be true, not to flatter us. */
+  goodAt: string;
+}
+
+/** Every price below was read from the vendor's page on this date. */
+export const ALTERNATIVES_CHECKED = "20 November 2026";
+
+export const ALTERNATIVE_TOOLS: AlternativeTool[] = [
+  {
+    name: "Guidde",
+    url: "https://www.guidde.com/pricing",
+    what: "Turns a workflow capture into an AI-narrated how-to video or a written guide; interactive demos and desktop capture are on paid tiers.",
+    free: "Free: up to 25 how-to videos, with a watermark.",
+    paid: "Pro $29 per creator a month, or $19 billed yearly. Business $59 a month, or $39 billed yearly.",
+    goodAt: "Editing steps, brand kits, export to video, PowerPoint and PDF, desktop and mobile capture, and enterprise review with SSO.",
+  },
+  {
+    name: "Tella",
+    url: "https://www.tella.com/pricing",
+    what: "An all-in-one screen recorder with AI editing: it records a person, their screen and their camera, then removes mistakes and filler words.",
+    free: "No free plan: every account starts with a 7-day Pro trial.",
+    paid: "Pro $29 a month, or $16 billed yearly, per user. Premium $39 a month, or $24 billed yearly.",
+    goodAt: "Recording a person on camera, teleprompter, transcript editing, 4K and 60 fps export, and a real timeline editor.",
+  },
+  {
+    name: "Storylane",
+    url: "https://www.storylane.io/pricing",
+    what: "Builds click-through interactive product demos from screenshots, video or HTML, with buyer hubs and demo analytics.",
+    free: "Free: one creator, one published demo and 200 AI credits a month.",
+    paid: "Starter $50 a month, or $40 billed yearly. Growth $625 a month, or $500 billed yearly.",
+    goodAt: "Demos a visitor drives themselves, lead capture, account reveal, A/B testing, personalisation tokens and buyer hubs.",
+  },
+  {
+    name: "Supademo",
+    url: "https://supademo.com/pricing",
+    what: "Builds guided interactive demos and HTML product replicas, with an optional AI demo agent that runs a demo conversationally.",
+    free: "Free: one creator, five guided demos, 50 video recordings and unlimited views.",
+    paid: "Scale $50 a month, or $38 billed yearly, per creator. Business $249 a month, or $199 billed yearly.",
+    goodAt: "Interactive demo editing with branching and variables, HTML demos, showcase collections, and an AI agent billed per conversation.",
+  },
+];
 
 export const COMPARES: Compare[] = [
   {
@@ -573,6 +903,135 @@ export const COMPARES: Compare[] = [
       ["Walkcast records a browser session to MP4 and WebM, WebVTT captions, a transcript, a page list and a step-by-step guide.", "https://github.com/KunjShah95/walkcast"],
     ],
   },
+  {
+    path: "/compare/guidde",
+    them: "Guidde",
+    themUrl: "https://www.guidde.com/pricing",
+    price: "Guidde's free plan allows up to 25 how-to videos, with a watermark. Pro is $29 per creator a month, or $19 billed yearly.",
+    priceChecked: ALTERNATIVES_CHECKED,
+    answer:
+      "Walkcast is the free, open-source choice when you want a narrated video of a live website that you can regenerate after every release. Guidde is the better choice when you capture a workflow yourself. It lets you edit the steps, apply a brand kit, share with a team and record desktop and mobile apps.",
+    theyAreGoodAt: [
+      "Editing the steps of a capture, with brand kits and export to video, PowerPoint and PDF.",
+      "Capturing desktop and mobile workflows as well as web pages.",
+      "Enterprise review, with single sign-on.",
+      "Interactive demos, on its paid tiers.",
+    ],
+    chooseThem: [
+      "You document desktop or mobile software as well as websites.",
+      "You want to edit each step, apply your brand and export to PowerPoint or PDF.",
+      "Your company needs single sign-on and a review step before guides are published.",
+      "The workflow is one only a person can judge as they go, so it has to be performed by hand.",
+    ],
+    chooseUs: [
+      "You want a tour of a website regenerated after every release, the same way each time.",
+      "You want a free tool with no watermark and no cap on how many videos you make.",
+      "You want the files on your own computer and the code open to read.",
+      "What you need is a walk through pages, not a record of one person's workflow.",
+    ],
+    rows: [
+      ["Price", "yes", "some", "Walkcast is free and MIT licensed, with no seats. Guidde's free plan stops at 25 videos."],
+      ["Narrated how-to video", "yes", "yes", "Both. Guidde's narration is AI-generated from your capture; Walkcast's is written from what its own browser did."],
+      ["A written step-by-step guide", "yes", "yes", "Both turn the visit into steps with a picture for each."],
+      ["No watermark on the free plan", "yes", "no", "Guidde's free plan adds a watermark to its videos."],
+      ["You have to perform the workflow to capture it", "no", "yes", "Walkcast walks the site by itself. Guidde records what you do."],
+      ["Same result every time you re-record", "yes", "no", "Capturing again with Guidde means performing the workflow again."],
+      ["Desktop and mobile capture", "no", "yes", "Walkcast records websites only."],
+      ["Step editor and brand kit", "some", "yes", "Walkcast lets you edit the narration script and re-voice it. It has no step editor and no brand kit."],
+      ["Interactive demos", "no", "some", "Guidde offers them on paid tiers. Walkcast produces video and a guide only."],
+      ["Single sign-on and enterprise review", "no", "yes", "Walkcast has no team features beyond the share links it makes."],
+      ["Source code you can read", "yes", "no", "Walkcast is open source on GitHub. Guidde is a commercial product."],
+    ],
+    facts: [
+      ["Guidde's free plan allows up to 25 how-to videos with a watermark. Pro is $29 per creator a month, or $19 billed yearly; Business is $59 a month, or $39 billed yearly.", "https://www.guidde.com/pricing"],
+      ["Guidde turns a workflow capture into an AI-narrated how-to video or a written guide; desktop capture and interactive demos are on paid tiers.", "https://www.guidde.com/pricing"],
+      ["Walkcast is MIT licensed, with no paid tier and no seat limit.", "https://github.com/KunjShah95/walkcast"],
+    ],
+  },
+  {
+    path: "/compare/supademo",
+    them: "Supademo",
+    themUrl: "https://supademo.com/pricing",
+    price: "Supademo's free plan allows one creator, five guided demos and 50 video recordings. Scale is $50 a month, or $38 billed yearly, per creator.",
+    priceChecked: ALTERNATIVES_CHECKED,
+    answer:
+      "Walkcast does not make click-through demos, so it cannot replace Supademo when a visitor has to drive the demo themselves. It is the free alternative when what you need is a narrated video, captions and a written guide of your real website, regenerated after each release. Supademo is the better choice for guided interactive demos with branching, HTML replicas and an AI demo agent.",
+    theyAreGoodAt: [
+      "Interactive demos a visitor clicks through, with branching and variables.",
+      "HTML demos that replicate a product screen.",
+      "Showcase collections, to gather demos on one page.",
+      "An AI agent that runs a demo as a conversation, billed per conversation.",
+    ],
+    chooseThem: [
+      "A visitor should drive the product themselves, and you want to see where they go.",
+      "You need branching paths for different buyers.",
+      "You want a conversational AI demo on your site.",
+      "You are building demos for sales, not documentation.",
+    ],
+    chooseUs: [
+      "You want a narrated MP4 with captions and a transcript, not a click-through.",
+      "The tour has to be regenerated whenever the product changes.",
+      "You want a free tool with no limit on how many tours you make.",
+      "You need the files on your own computer, or want to read the code.",
+    ],
+    rows: [
+      ["Price", "yes", "some", "Walkcast is free and MIT licensed. Supademo has a free plan with five guided demos; paid plans start at $38 per creator a month, billed yearly."],
+      ["Click-through interactive demo", "no", "yes", "This is the job Supademo is built for. Walkcast does not make interactive demos."],
+      ["Branching and variables", "no", "yes", "Supademo demos can change path and fill in a viewer's details."],
+      ["AI demo agent", "no", "yes", "Supademo's agent runs a demo conversationally and is billed per conversation."],
+      ["Narrated MP4 with captions and a transcript", "yes", "some", "Walkcast produces all three from one visit. Supademo's free plan includes 50 video recordings."],
+      ["Same result every time you re-record", "yes", "no", "Walkcast walks the live site again. A Supademo demo is rebuilt by its creator."],
+      ["A written step-by-step guide", "yes", "some", "Walkcast writes numbered steps with a picture per click. Supademo's guided demos are steps a viewer clicks through."],
+      ["Source code you can read", "yes", "no", "Walkcast is open source on GitHub. Supademo is a commercial product."],
+    ],
+    facts: [
+      ["Supademo's free plan allows one creator, five guided demos, 50 video recordings and unlimited views. Scale is $50 a month, or $38 billed yearly, per creator; Business is $249 a month, or $199 billed yearly.", "https://supademo.com/pricing"],
+      ["Supademo builds guided interactive demos and HTML product replicas, with an optional AI demo agent that runs a demo conversationally.", "https://supademo.com/pricing"],
+      ["Walkcast is MIT licensed, with no paid tier and no seat limit.", "https://github.com/KunjShah95/walkcast"],
+    ],
+  },
+  {
+    path: "/compare/storylane",
+    them: "Storylane",
+    themUrl: "https://www.storylane.io/pricing",
+    price: "Storylane's free plan allows one creator, one published demo and 200 AI credits a month. Starter is $50 a month, or $40 billed yearly. Growth is $625 a month, or $500 billed yearly.",
+    priceChecked: ALTERNATIVES_CHECKED,
+    answer:
+      "Walkcast is not a Storylane replacement for a sales team. Storylane builds click-through demos that a buyer drives, with lead capture and analytics. Walkcast makes a narrated video, captions, a transcript and a written guide of your live website, for free. Use Walkcast for onboarding, documentation, release notes and QA evidence; use Storylane when the goal is to qualify a buyer.",
+    theyAreGoodAt: [
+      "Demos a visitor drives themselves, built from screenshots, video or HTML.",
+      "Lead capture and account reveal, so sales can see who watched.",
+      "A/B testing and personalisation tokens.",
+      "Buyer hubs and demo analytics.",
+    ],
+    chooseThem: [
+      "The point of the demo is to capture and qualify a lead.",
+      "You need to personalise a demo for each account and measure what each viewer did.",
+      "Your sales team shares a hub of materials with a buying group.",
+      "You have the budget for a per-seat sales tool.",
+    ],
+    chooseUs: [
+      "You need a tour for onboarding, documentation, support or release notes.",
+      "You want evidence of what a page looked like on a given day, as a video you keep.",
+      "You want to regenerate the tour after every release without anyone rebuilding it.",
+      "You want free software, with the code open and the files on your computer.",
+    ],
+    rows: [
+      ["Price", "yes", "some", "Walkcast is free and MIT licensed. Storylane has a free plan with one published demo; Starter is $40 a month, billed yearly."],
+      ["Interactive demo a buyer drives", "no", "yes", "The core of Storylane. Walkcast makes video, not click-throughs."],
+      ["Lead capture and account reveal", "no", "yes", "Walkcast has no viewer tracking at all."],
+      ["Demo analytics and A/B testing", "no", "yes", "Storylane measures what each viewer did. Walkcast does not."],
+      ["Personalisation for each account", "no", "yes", "Storylane uses tokens to tailor a demo. A Walkcast tour is the same for everyone."],
+      ["Walks the site by itself and narrates what it did", "yes", "no", "Walkcast drives its own browser and writes the narration. Storylane captures what a person does."],
+      ["Same result every time you re-record", "yes", "no", "Walkcast walks the live site again, with nobody rebuilding a demo."],
+      ["Source code you can read", "yes", "no", "Walkcast is open source on GitHub. Storylane is a commercial product."],
+    ],
+    facts: [
+      ["Storylane's free plan allows one creator, one published demo and 200 AI credits a month. Starter is $50 a month, or $40 billed yearly; Growth is $625 a month, or $500 billed yearly.", "https://www.storylane.io/pricing"],
+      ["Storylane builds click-through interactive product demos from screenshots, video or HTML, with buyer hubs and demo analytics.", "https://www.storylane.io/pricing"],
+      ["Walkcast is MIT licensed, with no paid tier and no seat limit.", "https://github.com/KunjShah95/walkcast"],
+    ],
+  },
 ];
 
 /** The lab: the second product on the same recorder. */
@@ -586,6 +1045,14 @@ export const LAB_FACTS: [string, string][] = [
 ];
 
 export const LAB_FAQ: [string, string][] = [
+  [
+    "What is an AI agent eval harness?",
+    "An eval harness is the machinery around an agent that runs it on a task, captures what happened, and checks the result against something other than the agent's own claim. Walkcast Lab is an eval harness for browser agents: it runs the agent in a real browser, records the trace, checks the application's records as the ground truth, classifies the cause of a failure, and replays it as a fixture.",
+  ],
+  [
+    "Is Walkcast Lab an eval framework for browser agents?",
+    "It covers the parts of one that are hardest to build by hand: capturing a run as evidence, deciding the cause from that evidence, replaying a failure deterministically, and comparing agent versions over repeated trials with confidence intervals. It does not write your tasks or your agent for you, and it is MIT licensed so you can read exactly how a verdict is reached.",
+  ],
   [
     "What is browser agent testing?",
     "It is testing an AI agent that drives a web browser: you give the agent a task such as 'sign in and open the invoices page', and you check whether it completed it, and if not, why. The hard part is the 'why'. An agent that fails usually cannot explain itself, so the failure has to be captured as evidence and classified.",
@@ -692,6 +1159,28 @@ export const GUIDE_STEPS: Record<string, GuideStep[]> = {
     {
       title: "Review, re-record, share",
       text: "Play the result in the app. Rewrite any line of the narration and re-narrate it, or replace the voice with your own recording. Then share recording.mp4, or embed it with its captions on your site.",
+    },
+  ],
+  "/guides/stagehand-evals": [
+    {
+      title: "Run your Stagehand agent through Lab",
+      text: "Lab drives the agent against a real browser and a sample app with an injected fault, and records everything it does: the pages, the elements, the requests and Stagehand's own model calls.",
+    },
+    {
+      title: "Read the cause, not the log",
+      text: "A failed run is classified from the browser's own trace into a symptom and a cause with the step and request that show it. A failure the rules cannot explain is marked unexplained instead of being guessed.",
+    },
+    {
+      title: "Keep the failure as a fixture",
+      text: "The failed run is saved with its task, starting state and recorded model calls, so it can be replayed without a provider key or a network connection.",
+    },
+    {
+      title: "Replay it against the next version",
+      text: "Replay the fixture several times against your changed agent. A fix is confirmed by repeated passes, not by one lucky run.",
+    },
+    {
+      title: "Compare versions in CI",
+      text: "Run compare over all your fixtures. It exits non-zero when the candidate still fails, so a regression stops the release instead of reaching users.",
     },
   ],
   "/guides/website-tutorial-video": [

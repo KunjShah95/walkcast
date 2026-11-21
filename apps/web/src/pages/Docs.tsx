@@ -6,9 +6,13 @@ import { LinuxIcon, WindowsIcon } from "../ui.tsx";
 import { trackSiteEvent } from "../analytics.ts";
 import { Doc } from "./Doc.tsx";
 import { GuidesIndexPage, ProductDemoPage, WebsiteTutorialPage } from "./Guides.tsx";
-import { LoomComparePage, ScribeComparePage, ScreenStudioComparePage } from "./Compare.tsx";
+import { CompareIndexPage, GuiddeComparePage, LoomComparePage, ScribeComparePage, ScreenStudioComparePage, StorylaneComparePage, SupademoComparePage } from "./Compare.tsx";
+import { InteractiveVsVideoPage } from "./InteractiveVsVideo.tsx";
+import { OpenSourceAlternativesPage } from "./OpenSourceAlternatives.tsx";
 import { LabPage } from "./Lab.tsx";
 import { PricingPage } from "./Pricing.tsx";
+import { StagehandEvalsPage } from "./StagehandEvals.tsx";
+import { AgentFailuresPage } from "./AgentFailures.tsx";
 
 /**
  * The documents beside the landing page. Each answers one question completely, in plain HTML
@@ -347,7 +351,7 @@ export function PrivacyPage() {
 
       <h2>This website</h2>
       <p>
-        walkcast.kunjshah.in is a static site served by Vercel. It uses Vercel Web Analytics for aggregate page views and basic interaction events, such as demo playback and download clicks. Vercel says its analytics does not use third-party cookies or collect personal identifiers; its temporary hashed visitor identifier is discarded after 24 hours, and reports are aggregated. The desktop app itself has no analytics or telemetry. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel's Web Analytics privacy details</a>. Fonts are self-hosted with the site: the browser never fetches them from a third party.
+        walkcast.kunjshah.in is a static site served by Vercel. It uses Vercel Web Analytics for aggregate page views and basic interaction events, such as demo playback and download clicks. Vercel says its analytics does not use third-party cookies or collect personal identifiers; its temporary hashed visitor identifier is discarded after 24 hours, and reports are aggregated. The desktop app itself has no analytics or telemetry. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel's Web Analytics privacy details</a>. It also loads Ahrefs Web Analytics (a script from analytics.ahrefs.com) for aggregate traffic counts. Ahrefs says its analytics works without cookies or persistent identifiers and does not store personal data; see <a href="https://help.ahrefs.com/en/articles/10247870-about-ahrefs-web-analytics" target="_blank" rel="noopener">Ahrefs' description of Web Analytics</a>. Fonts are self-hosted with the site: the browser never fetches them from a third party.
       </p>
 
       <h2>Source</h2>
@@ -363,10 +367,18 @@ export const DOC_PAGES: Record<string, () => ReactNode> = {
   "/guides/narrated-website-walkthrough": GuidePage,
   "/guides/product-demo-video": ProductDemoPage,
   "/guides/website-tutorial-video": WebsiteTutorialPage,
+  "/guides/stagehand-evals": StagehandEvalsPage,
+  "/guides/how-browser-agents-fail": AgentFailuresPage,
+  "/guides/interactive-demo-vs-video": InteractiveVsVideoPage,
+  "/compare": CompareIndexPage,
   "/compare/screen-recording": ComparePage,
+  "/compare/guidde": GuiddeComparePage,
+  "/compare/supademo": SupademoComparePage,
+  "/compare/storylane": StorylaneComparePage,
   "/compare/loom": LoomComparePage,
   "/compare/screen-studio": ScreenStudioComparePage,
   "/compare/scribe": ScribeComparePage,
+  "/compare/open-source-alternatives": OpenSourceAlternativesPage,
   "/lab": LabPage,
   "/pricing": PricingPage,
   "/faq": FaqPage,

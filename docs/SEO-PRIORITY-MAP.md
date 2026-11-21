@@ -1,7 +1,9 @@
 # Walkcast keyword and citation map
 
-**Reviewed 5 November 2026.** Use this map to decide which page to improve next. Each URL owns one main search intent; supporting phrases belong in useful headings, examples and answers on that page.
+**Reviewed 5 November 2026; extended 21 November 2026.** Use this map to decide which page to improve next. Each URL owns one main search intent; supporting phrases belong in useful headings, examples and answers on that page.
 
+> The 21 November 2026 pass added `/compare` and three tool pages (rows 9 to 12 below). The reasons, the market research behind them and the outreach plan are in [`BRAND-GROWTH-PLAYBOOK.md`](BRAND-GROWTH-PLAYBOOK.md).
+>
 > The 12 November 2026 execution pass — live HTTP verification of both sites, the full keyword-to-URL map, and the indexed-gap register — is in [`SEO-EXECUTION-2026-11-12.md`](SEO-EXECUTION-2026-11-12.md). Directory and citation targets are in [`directory-submissions.md`](directory-submissions.md).
 
 ## What the evidence can and cannot say
@@ -24,6 +26,11 @@ References: [Google AI features and your website](https://developers.google.com/
 | 6 | `AI browser agent`; `Stagehand evals`, testing and alternatives | [`/lab`](../apps/web/src/content.ts) | Developer research | `AI browser agent` returned 147 suggestions; `Stagehand` returned 276, but much of that seed is unrelated noise. Target the narrow developer intent and show a reproducible failed-run fixture. |
 | 7 | `website video maker` | [`/guides/website-tutorial-video`](../apps/web/src/content.ts) | Find a tool | The seed returned 71 suggestions. Treat it as a secondary phrase on the tutorial page; do not create a near-duplicate landing page just to repeat the phrase. |
 | 8 | `Walkcast pricing`; `is Walkcast free` | [`/pricing`](../apps/web/src/content.ts) | Verify cost | Answer with the current MIT licence and product limits. Link the licence and keep every product claim aligned with the release that is available. |
+| 9 | `guidde alternative`; free and open-source variants | [`/compare/guidde`](../apps/web/src/content.ts) | Choosing a replacement | Added 21 November 2026. Results for this query are mostly competitor-written. Lead with the job difference: Guidde records a workflow a person performs, Walkcast walks the site by itself. Prices dated 20 November 2026, read from Guidde's pricing page. |
+| 10 | `supademo alternative` | [`/compare/supademo`](../apps/web/src/content.ts) | Choosing a replacement | Added 21 November 2026. State first that Walkcast makes no click-through demos. The honest answer converts better than an overclaim and survives a reader checking it. |
+| 11 | `storylane alternative` | [`/compare/storylane`](../apps/web/src/content.ts) | Choosing a replacement | Added 21 November 2026. Storylane is a sales tool with lead capture and analytics; Walkcast serves onboarding, documentation and QA evidence. Say so on the page. |
+| 12 | `interactive demo vs video` | [`/guides/interactive-demo-vs-video`](../apps/web/src/content.ts) | Choosing a format | Added 21 November 2026. Published comparisons are vendor-written and nothing independent was found, so the page repeats no vendor figure and gives a way to choose. |
+| — | `walkcast vs`, `compare screen recorders` | [`/compare`](../apps/web/src/content.ts) | Navigation and topical hub | Added 21 November 2026. Groups every comparison by the job the other tool does. Not a target for a keyword of its own. |
 
 Suggestion counts are not comparable across seeds and do not establish demand by themselves. Before making a new route, check Search Console queries and landing-page performance for an existing page that can satisfy the intent.
 
@@ -38,7 +45,7 @@ Keep each factual comparison claim adjacent to its source. Prefer the product ow
 | `/compare/scribe` | [Scribe pricing](https://scribe.com/pricing), [Walkcast source](https://github.com/KunjShah95/walkcast) |
 | Guides and `/lab` | Walkcast README, release notes, reproducible demos, and linked primary documentation for any third-party technical claims |
 
-Recheck prices before changing published copy. Record the date in `COMPARES.priceChecked` and keep the source URL beside the fact in `COMPARES.facts`. Do not add a statistic without a source that supports the exact number and context.
+Guidde, Supademo and Storylane prices come from `ALTERNATIVE_TOOLS` in `content.ts` and were read from each vendor's pricing page on 20 November 2026. Arcade is not yet covered because published sources disagree on its prices; read its own page first. Recheck prices before changing published copy. Record the date in `COMPARES.priceChecked` and keep the source URL beside the fact in `COMPARES.facts`. Do not add a statistic without a source that supports the exact number and context.
 
 ## Crawl and citation operations
 

@@ -1,5 +1,5 @@
 import { Check, Minus, X } from "lucide-react";
-import { COMPARE_FAQ, COMPARES, type Compare, type Verdict } from "../content.ts";
+import { COMPARE_FAQ, COMPARE_INDEX, COMPARES, type Compare, type Verdict } from "../content.ts";
 import { Doc } from "./Doc.tsx";
 
 function MarkCell({ m }: { m: Verdict }) {
@@ -22,11 +22,19 @@ function CompareArticle({ compare }: { compare: Compare }) {
         {compare.them} alternative: <span className="dim">Walkcast, compared fairly.</span>
       </h1>
       <p className="answer" id="compare-answer">
+        {compare.answer ? (
+          <>
+            <strong>Short answer:</strong> {compare.answer}
+          </>
+        ) : (
+          <>
         <strong>Short answer:</strong> Walkcast is a free, open-source alternative to {compare.them} that records your
         website rather than your screen. It signs in, walks the pages and hands back an MP4 with narration, captions and
         a transcript. Regenerate it after every change. But {compare.them} is the better tool for{" "}
         {compare.theyAreGoodAt[0]?.replace(/^./, (c) => c.toLowerCase()).replace(/:\s*/, ", ")} We are not trying to say{" "}
         {compare.them} is bad.
+          </>
+        )}
       </p>
 
       <h2>What {compare.them} costs</h2>
@@ -125,4 +133,71 @@ export function ScreenStudioComparePage() {
 }
 export function ScribeComparePage() {
   return <CompareArticle compare={COMPARES[2]!} />;
+}
+
+const byPath = (path: string) => COMPARES.find((c) => c.path === path)!;
+export function GuiddeComparePage() {
+  return <CompareArticle compare={byPath("/compare/guidde")} />;
+}
+export function SupademoComparePage() {
+  return <CompareArticle compare={byPath("/compare/supademo")} />;
+}
+export function StorylaneComparePage() {
+  return <CompareArticle compare={byPath("/compare/storylane")} />;
+}
+
+/**
+ * The comparison index. People arrive with a tool in mind ("Loom alternative") or a job in mind
+ * ("how do I document a workflow"), so it is grouped by the job the other tool does and ends with
+ * a table that picks by the artefact wanted.
+ */
+export function CompareIndexPage() {
+  return (
+    <Doc path="/compare" eyebrow="Compare">
+      <h1>
+        Walkcast compared with the tools people weigh it against. <span className="dim">Fairly, with sources.</span>
+      </h1>
+      <p className="answer">
+        <strong>Short answer:</strong> Walkcast records a real website visit and returns a narrated video, captions, a transcript and a
+        written guide, for free. The tools below do different jobs: some film a person, some capture a workflow, some build
+        click-through demos. Every page says what the other tool is good at, what it costs on the date we checked, and when to pick
+        it instead.
+      </p>
+
+      {COMPARE_INDEX.map((g) => (
+        <section key={g.group}>
+          <h2>{g.group}</h2>
+          <ul>
+            {g.items.map((i) => (
+              <li key={i.path}>
+                <a href={i.path}>
+                  <strong>{i.label}</strong>
+                </a>
+                <span className="muted"> {i.blurb}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+
+      <h2>Pick by what you need to hand over</h2>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>You need</th>
+              <th>Start with</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>A narrated video of a live website, regenerated after each release</td><td>Walkcast</td></tr>
+            <tr><td>A video of you explaining something, face and voice</td><td><a href="/compare/loom">Loom</a> or Tella</td></tr>
+            <tr><td>An editable screenshot guide</td><td><a href="/compare/scribe">Scribe</a> or <a href="/compare/guidde">Guidde</a></td></tr>
+            <tr><td>A click-through demo a buyer drives, with lead capture</td><td><a href="/compare/storylane">Storylane</a> or <a href="/compare/supademo">Supademo</a></td></tr>
+            <tr><td>To choose between an interactive demo and a video</td><td>The <a href="/guides/interactive-demo-vs-video">guide on interactive demo against video</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </Doc>
+  );
 }
