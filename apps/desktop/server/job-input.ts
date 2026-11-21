@@ -138,6 +138,7 @@ export function validateRecord(b: Record<string, unknown>, exposed: boolean, own
       ...(b.narration === "plain" ? { narration: "plain" } : {}),
     ...(b.scriptWriter === "claude-code" && !exposed ? { scriptWriter: "claude-code" } : {}),
     ...(typeof b.voiceStyle === "string" && (VOICE_STYLES as readonly string[]).includes(b.voiceStyle) ? { voiceStyle: b.voiceStyle } : {}),
+    ...(b.reviewScript === true ? { reviewScript: true } : {}),
       blockPrivate: false,
     };
   }
@@ -162,6 +163,7 @@ export function validateRecord(b: Record<string, unknown>, exposed: boolean, own
     ...(b.narration === "plain" ? { narration: "plain" } : {}),
     ...(b.scriptWriter === "claude-code" && !exposed ? { scriptWriter: "claude-code" } : {}),
     ...(typeof b.voiceStyle === "string" && (VOICE_STYLES as readonly string[]).includes(b.voiceStyle) ? { voiceStyle: b.voiceStyle } : {}),
+    ...(b.reviewScript === true ? { reviewScript: true } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
     // The "I own this site or am authorized to test it" box, kept as a record of who confirmed
     // it, when, and for which address — not just a boolean the client sent and nobody kept.

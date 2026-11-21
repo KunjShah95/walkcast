@@ -106,6 +106,7 @@ export function normalizeRecording(raw: unknown): RecordingSummary {
       start: numOr(c?.start, 0),
       end: numOr(c?.end, 0),
       text: strOr(c?.text),
+      ...(typeof c?.chapter === "string" && c.chapter ? { chapter: c.chapter } : {}),
     })),
     media: {
       video: typeof media.video === "string" ? media.video : null,
@@ -125,6 +126,7 @@ export function normalizeRecording(raw: unknown): RecordingSummary {
   if (Array.isArray(o.actions)) summary.actions = o.actions as RecordingSummary["actions"];
   if (Array.isArray(o.shares)) summary.shares = o.shares as RecordingSummary["shares"];
   if (o.narration && typeof o.narration === "object") summary.narration = o.narration as RecordingSummary["narration"];
+  if (o.scriptDraft === true) summary.scriptDraft = true;
   return summary;
 }
 
@@ -219,7 +221,7 @@ export interface RecordingSummary {
   signIn: { attempted: boolean; outcome: string; detail: string };
   pages: { url: string; title: string; status: number | null; controls: number; screenshot?: string }[];
   skipped: { url: string; reason: string }[];
-  captions: { start: number; end: number; text: string }[];
+  captions: { start: number; end: number; text: string; chapter?: string }[];
   media: {
     video: string | null;
     mp4: string | null;
@@ -247,6 +249,8 @@ export interface RecordingSummary {
   shares?: ShareLink[];
   /** What the person asked the narration to be, and what spoke instead. */
   narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
+  /** The script is written and the video is silent: waiting for the person to read it and add the voice. */
+  scriptDraft?: boolean;
 }
 
 export interface LabIndex {

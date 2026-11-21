@@ -173,6 +173,73 @@ export async function polishCaptions(captions: Caption[], ctx: WriterContext, ru
   };
 }
 
+const TITLE_SYSTEM = [
+  "You title the chapters of a screen-recorded website tour.",
+  "You are given a JSON array of chapters, each with a working title and the narration spoken on it. Return a JSON array of plain strings, exactly one short title per chapter, in order, for example [\"Pricing Plans\", \"Sign In\"]. Not objects, only strings. Output only that JSON.",
+  "Rules:",
+  "- 2 to 5 words, Title Case, no trailing punctuation, no quotes, no emoji, no colon.",
+  "- Name what the viewer is looking at (the page or what it is for), using only words and numbers present in the chapter's input.",
+  "- Never use marketing filler: seamless, powerful, unlock, elevate, game-changing.",
+].join("\n");
+
+const TITLE_WORDS = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
+/** Whether `title` may replace a chapter's working title: short, plain, and made of what was said. */
+export function acceptTitle(title: unknown, source: string): title is string {
+  if (typeof title !== "string") return false;
+  const text = title.replace(/\s+/g, " ").trim();
+  if (!text || text.length > 48 || TITLE_WORDS(text) < 1 || TITLE_WORDS(text) > 6) return false;
+  if (/[:!?"“”]|[.]$/.test(text)) return false;
+  const known = source.replace(/,/g, "");
+  for (const m of text.matchAll(NUMBER)) if (!known.includes(m[0].replace(/,/g, "").replace(/[.]$/, ""))) return false;
+  return true;
+}
+
+export interface TitleResult {
+  captions: Caption[];
+  titled: number;
+}
+
+/**
+ * Gives each chapter (a caption with a `chapter`) a short title written for a viewer, from its
+ * working title, its page and the lines spoken on it. Never throws: a chapter that gets no
+ * acceptable title keeps its working one.
+ */
+export async function titleChapters(captions: Caption[], ctx: WriterContext, run: ModelRunner = runClaudeCode, signal?: AbortSignal): Promise<TitleResult> {
+  const starts = captions.flatMap((c, i) => (c.chapter ? [i] : []));
+  if (starts.length === 0) return { captions, titled: 0 };
+  const chapters = starts.map((at, n) => {
+    const until = starts[n + 1] ?? captions.length;
+    return { working: captions[at]!.chapter!, narration: captions.slice(at, until).map((c) => c.text).slice(0, 5) };
+  });
+  let reply: string;
+  try {
+    reply = await run({ system: TITLE_SYSTEM, prompt: `Site: ${ctx.site}
+Page titles on the visit: ${ctx.pages.slice(0, 20).join(" | ")}
+
+Chapters:
+${JSON.stringify(chapters)}`, ...(ctx.model ? { model: ctx.model } : {}), timeoutMs: 60_000, ...(signal ? { signal } : {}) });
+  } catch (e) {
+    if (signal?.aborted) throw signal.reason ?? e;
+    return { captions, titled: 0 };
+  }
+  // The model sometimes echoes the input's shape ({ working, title }); the title is what matters.
+  const titles = parseLines(reply)?.map((x) => (x && typeof x === "object" && "title" in x ? (x as { title: unknown }).title : x));
+  if (!titles || titles.length !== starts.length) return { captions, titled: 0 };
+  const out = [...captions];
+  let titled = 0;
+  for (const [n, at] of starts.entries()) {
+    const source = `${chapters[n]!.working} ${chapters[n]!.narration.join(" ")} ${ctx.pages.join(" ")}`;
+    const next = titles[n];
+    if (!acceptTitle(next, source)) continue;
+    const text = next.replace(/\s+/g, " ").trim();
+    if (text === out[at]!.chapter) continue;
+    out[at] = { ...out[at]!, chapter: text };
+    titled++;
+  }
+  return { captions: out, titled };
+}
+
 let probe: Promise<boolean> | undefined;
 /** Whether the `claude` tool is installed here. Probed once per process. */
 export function claudeCodeAvailable(bin = process.env.WALKCAST_CLAUDE_BIN?.trim() || "claude"): Promise<boolean> {

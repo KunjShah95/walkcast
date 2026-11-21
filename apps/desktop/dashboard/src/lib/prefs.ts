@@ -22,6 +22,8 @@ export interface RecordingPrefs {
   presenter: boolean;
   /** Have the person's own Claude Code polish the narration script before it is spoken. */
   claudeScript: boolean;
+  /** Stop after writing the script, so it can be read and fixed before the voice is made. */
+  reviewScript: boolean;
   /** How the narrator delivers the lines. */
   voiceStyle: VoiceStyle;
   /** The person answered the first-recording voice question (natural voice, offline voice or none). */
@@ -29,7 +31,7 @@ export interface RecordingPrefs {
 }
 
 const KEY = "walkcast:recording-prefs";
-const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, ttsLanguages: {}, maxPages: 8, maxSeconds: 120, captions: true, zoom: true, presenter: true, claudeScript: false, voiceStyle: "warm", voiceChosen: false };
+const DEFAULTS: RecordingPrefs = { voice: "slt", ttsProvider: "flite", ttsVoices: {}, ttsLanguages: {}, maxPages: 8, maxSeconds: 120, captions: true, zoom: true, presenter: true, claudeScript: false, reviewScript: false, voiceStyle: "warm", voiceChosen: false };
 const PROVIDERS: TtsProvider[] = ["kokoro", "flite", "none", "sarvam", "bhashini", "elevenlabs", "google", "azure", "awspolly", "openai", "murf", "reverie", "custom", "custom-voice"];
 
 export function readPrefs(): RecordingPrefs {
@@ -46,6 +48,7 @@ export function readPrefs(): RecordingPrefs {
       zoom: typeof raw.zoom === "boolean" ? raw.zoom : DEFAULTS.zoom,
       presenter: typeof raw.presenter === "boolean" ? raw.presenter : DEFAULTS.presenter,
       claudeScript: raw.claudeScript === true,
+      reviewScript: raw.reviewScript === true,
       voiceStyle: (["warm", "calm", "upbeat", "authoritative"] as const).includes(raw.voiceStyle as VoiceStyle) ? (raw.voiceStyle as VoiceStyle) : DEFAULTS.voiceStyle,
       voiceChosen: raw.voiceChosen === true,
     };

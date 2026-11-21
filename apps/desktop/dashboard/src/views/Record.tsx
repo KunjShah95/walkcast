@@ -42,6 +42,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [zoom, setZoom] = useState(prefs.zoom);
   const [presenter, setPresenter] = useState(prefs.presenter);
   const [claudeScript, setClaudeScript] = useState(prefs.claudeScript);
+  const [reviewScript, setReviewScript] = useState(prefs.reviewScript);
   const [voiceStyle, setVoiceStyle] = useState(prefs.voiceStyle);
   const [copiedScript, setCopiedScript] = useState(false);
   const [demo, setDemo] = useState(false);
@@ -149,7 +150,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     // instead of the site's links.
     const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
     // Off is said out loud; on is the recorder's default.
-    const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }), ...(claudeScript ? { scriptWriter: "claude-code" as const } : {}), ...(voiceStyle !== "warm" ? { voiceStyle } : {}) };
+    const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }), ...(claudeScript ? { scriptWriter: "claude-code" as const } : {}), ...(voiceStyle !== "warm" ? { voiceStyle } : {}), ...(reviewScript ? { reviewScript: true as const } : {}) };
     // The sample site records with the same voice as a real one, so what you hear in the demo is
     // the voice you picked.
     const dir = startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...motion } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path, ...motion }, (s) => setJob(s));
@@ -275,6 +276,21 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                   }}
                   disabled={busy}
                   label="Polish the script with Claude Code"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Review the script before the voice</span>
+                  <span className="block text-[12.5px] text-ink-3">Records the visit and writes the narration, then stops. Read and fix any line in the Studio, then add the voice. Nothing is spoken until you say so.</span>
+                </span>
+                <Toggle
+                  on={reviewScript}
+                  onChange={(on) => {
+                    setReviewScript(on);
+                    setPrefs({ reviewScript: on });
+                  }}
+                  disabled={busy}
+                  label="Review the script before the voice"
                 />
               </label>
               <div className="flex items-center justify-between gap-3">

@@ -8,6 +8,8 @@ export interface Caption {
   start: number;
   end: number;
   text: string;
+  /** Set on the line that opens a page: the chapter's title. Survives the line being reworded. */
+  chapter?: string;
 }
 
 interface Context {
@@ -33,8 +35,8 @@ export type NarrationStyle = "presenter" | "plain";
  */
 export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
   const steps = events.filter((e): e is StepEvent | ClaimEvent => e.type === "step" || e.type === "claim");
-  const out: { at: number; text: string }[] = [];
-  const say = (atMs: number, text: string) => out.push({ at: Math.max(0, (atMs - ctx.videoStart) / 1000), text });
+  const out: { at: number; text: string; chapter?: string }[] = [];
+  const say = (atMs: number, text: string, chapter?: string) => out.push({ at: Math.max(0, (atMs - ctx.videoStart) / 1000), text, ...(chapter ? { chapter } : {}) });
   let lastPath = "";
   const presenter = (ctx.style ?? "presenter") === "presenter";
   let brief: Brief | undefined = ctx.brief;
@@ -56,7 +58,7 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
     switch (step.tool) {
       case "goto": {
         const path = pathOf(String(step.args.path), ctx.origin);
-        say(step.startedAt, out.length === 0 ? `Opening ${hostOf(ctx.origin)}${path === "/" ? "" : `, at ${spoken(path)}`}.` : `Opening ${spoken(path)}.`);
+        say(step.startedAt, out.length === 0 ? `Opening ${hostOf(ctx.origin)}${path === "/" ? "" : `, at ${spoken(path)}`}.` : `Opening ${spoken(path)}.`, chapterTitle(path, hostOf(ctx.origin)));
         lastPath = path;
         pageIndex++;
         break;
@@ -146,9 +148,17 @@ export function captionsFor(events: TraceEvent[], ctx: Context): Caption[] {
     const c = out[i]!;
     const start = Math.max(c.at, timed.at(-1)?.end ?? 0);
     const end = Math.max(start + 1.5, out[i + 1]?.at ?? start + 3);
-    timed.push({ start: round(start), end: round(end), text: c.text });
+    timed.push({ start: round(start), end: round(end), text: c.text, ...(c.chapter ? { chapter: c.chapter } : {}) });
   }
   return timed;
+}
+
+/** "/leads/1002" -> "Leads 1002", "/" -> "Home": a readable default until a better title is written. */
+export function chapterTitle(path: string, host: string): string {
+  const parts = path.replace(/\?.*/, "").split("/").filter(Boolean).slice(-2);
+  if (parts.length === 0) return host || "Home";
+  const words = parts.join(" ").replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function signInSentence(s: Context["signIn"]): string {

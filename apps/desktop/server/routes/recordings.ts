@@ -1,3 +1,4 @@
+import { VOICE_STYLES } from "../../../../packages/core/src/record/voice-style.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,7 +46,17 @@ export const recordingRoutes: Route[] = [
         // one line doesn't swap a natural voice for the offline one.
         const spoke = typeof (summary as { narration?: { spoke?: unknown } }).narration?.spoke === "string" ? String((summary as { narration: { spoke: string } }).narration.spoke) : "";
         const [spokeProvider = "", ...spokeVoice] = spoke.split(":");
-        const cloud = spokeProvider && isCloudProvider(spokeProvider) ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined) : null;
+        // A draft has no voice of its own yet: the person's saved choice (provider, voice,
+        // language, delivery) comes with the request. Otherwise the recording's own voice is reused.
+        const asked = typeof b.ttsProvider === "string" ? b.ttsProvider.trim().toLowerCase() : "";
+        const askedVoice = typeof b.ttsVoice === "string" ? b.ttsVoice.trim().slice(0, 120) : "";
+        const askedLanguage = typeof b.ttsLanguage === "string" ? b.ttsLanguage.trim().slice(0, 20) : "";
+        const style = typeof b.voiceStyle === "string" && (VOICE_STYLES as readonly string[]).includes(b.voiceStyle) ? b.voiceStyle : undefined;
+        const cloud = asked && asked !== "none" && asked !== "flite"
+          ? engineFor(asked, voice, askedVoice || undefined, askedLanguage || undefined, style)
+          : spokeProvider && isCloudProvider(spokeProvider)
+            ? engineFor(spokeProvider, voice, spokeVoice.join(":") || undefined, undefined, style)
+            : null;
         result = await renarrate(dir, captions, voice, cloud);
       } else {
         const audioPath = await readBodyToTemp(req, 40_000_000, "voiceover");
@@ -59,6 +70,8 @@ export const recordingRoutes: Route[] = [
       // link or note created in the meantime is not written over by the copy read at the start.
       const fresh = rereadSummary(file, summary);
       if (captions) fresh.captions = captions;
+      // Voiced: it is no longer a draft.
+      if (what === "narration" && result.voice !== "none") delete (fresh as { scriptDraft?: boolean }).scriptDraft;
       fresh.media = { ...fresh.media, ...result, video: fresh.media.video };
       writeFileSync(file, JSON.stringify(fresh, null, 2));
       await saveRecordingSummary(id, row.owner, fresh);

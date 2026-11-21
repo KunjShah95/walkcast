@@ -121,3 +121,60 @@ test("a transient failure is retried once before a batch gives up", async () => 
   assert.equal(call, 2);
   assert.equal(r.captions[0]!.text, "Next, the pricing page.");
 });
+
+import { acceptTitle, titleChapters } from "../packages/core/src/record/script-writer.ts";
+import { chapterTitle } from "../packages/core/src/record/narration.ts";
+import { chaptersOf } from "../packages/core/src/record/transcript.ts";
+
+const chaptered = (): Caption[] => [
+  { start: 0, end: 2, text: "Opening acme.app.", chapter: "Acme" },
+  { start: 2, end: 4, text: "The page is headed Pricing." },
+  { start: 4, end: 6, text: "Opening the pricing page.", chapter: "Pricing" },
+];
+
+test("a chapter's working title comes from its page, not from the sentence that opens it", () => {
+  assert.equal(chapterTitle("/", "acme.app"), "acme.app");
+  assert.equal(chapterTitle("/pricing", "acme.app"), "Pricing");
+  assert.equal(chapterTitle("/leads/1002", "acme.app"), "Leads 1002");
+  assert.equal(chapterTitle("/get-started?x=1", "acme.app"), "Get started");
+});
+
+test("chapters survive the line that opens them being reworded", () => {
+  const reworded = chaptered().map((c) => (c.chapter ? { ...c, text: "Now, over to the next page." } : c));
+  assert.deepEqual(chaptersOf(reworded), [{ start: 0, title: "Acme" }, { start: 4, title: "Pricing" }]);
+  // A recording from before chapters were named still reads them from its "Opening" lines.
+  assert.deepEqual(chaptersOf([{ start: 1, end: 2, text: "Opening the pricing page." }]), [{ start: 1, title: "the pricing page" }]);
+});
+
+test("Claude Code titles each chapter and an unusable title keeps the working one", async () => {
+  const r = await titleChapters(chaptered(), ctx, async () => JSON.stringify(["Acme Home", "Pricing: Plans!"]));
+  assert.equal(r.captions[0]!.chapter, "Acme Home");
+  assert.equal(r.captions[2]!.chapter, "Pricing");
+  assert.equal(r.titled, 1);
+});
+
+test("a title may not carry a number the chapter never said", () => {
+  assert.equal(acceptTitle("Pricing Plans", "Pricing"), true);
+  assert.equal(acceptTitle("Top 10 Plans", "Pricing"), false);
+  assert.equal(acceptTitle("A very long chapter title that goes on and on forever", "x"), false);
+});
+
+test("chapter titles never cost a recording its chapters when the writer fails", async () => {
+  const input = chaptered();
+  const r = await titleChapters(input, ctx, async () => {
+    throw new Error("offline");
+  });
+  assert.equal(r.captions, input);
+  assert.equal(r.titled, 0);
+});
+
+test("a polished line keeps the chapter it opens", async () => {
+  const r = await polishCaptions([{ start: 0, end: 2, text: "Opening the pricing page.", chapter: "Pricing" }], ctx, reply(["Next, the pricing page."]));
+  assert.equal(r.captions[0]!.text, "Next, the pricing page.");
+  assert.equal(r.captions[0]!.chapter, "Pricing");
+});
+
+test("a reply that echoes each chapter as an object still gives its title", async () => {
+  const r = await titleChapters(chaptered(), ctx, async () => JSON.stringify([{ working: "Acme", title: "Acme Home" }, { working: "Pricing", title: "Pricing Plans" }]));
+  assert.deepEqual(r.captions.filter((c) => c.chapter).map((c) => c.chapter), ["Acme Home", "Pricing Plans"]);
+});

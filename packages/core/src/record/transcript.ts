@@ -16,6 +16,8 @@ export interface TranscriptCaption {
   start: number;
   end: number;
   text: string;
+  /** The chapter this line opens, when the recorder named one. */
+  chapter?: string;
 }
 
 export interface TranscriptNote {
@@ -70,6 +72,9 @@ export function toVtt(captions: TranscriptCaption[]): string {
  * chapters. A walkthrough with no narration has one chapter: the site itself.
  */
 export function chaptersOf(captions: TranscriptCaption[], fallback = "Walkthrough"): { start: number; title: string }[] {
+  // A named chapter wins, so rewording the line that opens a page never loses it. Recordings from
+  // before chapters were named still have only the "Opening …" lines.
+  if (captions.some((c) => c.chapter)) return captions.flatMap((c) => (c.chapter ? [{ start: c.start, title: c.chapter }] : []));
   const chapters = captions.flatMap((c) => (/^Opening\b/.test(c.text) ? [{ start: c.start, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
   if (chapters.length) return chapters;
   return captions.length ? [{ start: 0, title: fallback }] : [];

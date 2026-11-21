@@ -298,7 +298,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain"; scriptWriter?: "claude-code"; voiceStyle?: "warm" | "calm" | "upbeat" | "authoritative" },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain"; scriptWriter?: "claude-code"; voiceStyle?: "warm" | "calm" | "upbeat" | "authoritative"; reviewScript?: boolean },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);
@@ -474,8 +474,8 @@ async function recordingCall(id: string, what: "narration" | "voiceover", init: 
 }
 
 /** Re-speak an edited script with a chosen voice. */
-export function renarrate(id: string, captions: { start: number; end: number; text: string }[], voice: Voice): Promise<RecordingSummary> {
-  return recordingCall(id, "narration", { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ captions, voice }) });
+export function renarrate(id: string, captions: { start: number; end: number; text: string }[], voice: Voice, chosen?: { ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; voiceStyle?: string }): Promise<RecordingSummary> {
+  return recordingCall(id, "narration", { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ captions, voice, ...chosen }) }, chosen ? 180_000 : undefined);
 }
 
 /** Replace the narration with the user's own recording. */

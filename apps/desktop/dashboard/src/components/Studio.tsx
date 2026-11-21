@@ -47,7 +47,8 @@ export function hostOf(url: string): string {
 
 /** Chapters: the recorder opens each page with an "Opening …" line, so those lines start chapters. */
 export function chaptersOf(r: RecordingSummary): { start: number; title: string; line: number }[] {
-  const out = r.captions.flatMap((c, i) => (/^Opening\b/.test(c.text) ? [{ start: c.start, line: i, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
+  const named = r.captions.some((c) => c.chapter);
+  const out = r.captions.flatMap((c, i) => (named ? (c.chapter ? [{ start: c.start, line: i, title: c.chapter }] : []) : /^Opening\b/.test(c.text) ? [{ start: c.start, line: i, title: c.text.replace(/^Opening\s+/, "").replace(/\.$/, "") }] : []));
   return out.length ? out : r.captions.length ? [{ start: 0, line: 0, title: hostOf(r.url) }] : [];
 }
 
@@ -103,7 +104,8 @@ export function Studio({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(r.durationMs / 1000);
   const [prefs, setPrefs] = usePrefs();
-  const [tab, setTab] = useState<Tab>("transcript");
+  // A draft opens on its script: reading it is the next step.
+  const [tab, setTab] = useState<Tab>(r.scriptDraft ? "script" : "transcript");
   const tabsId = useId();
   const sources = sourcesOf(r);
   const vtt = mediaUrl(r.dir, r.media.captions);
@@ -786,7 +788,9 @@ function ScriptEditor({ recording: r, caps, onSaved }: { recording: RecordingSum
     setError(null);
     try {
       const captions = r.captions.map((c, i) => ({ ...c, text: lines[i]?.trim() || c.text }));
-      onSaved(await renarrate(r.id, captions, voice));
+      // A draft is voiced with what the person chose on the Record screen; anything else re-voices as before.
+      const chosen = r.scriptDraft ? { ttsProvider: prefs.ttsProvider, ...(prefs.ttsVoices[prefs.ttsProvider] ? { ttsVoice: prefs.ttsVoices[prefs.ttsProvider] } : {}), ...(prefs.ttsLanguages[prefs.ttsProvider] ? { ttsLanguage: prefs.ttsLanguages[prefs.ttsProvider] } : {}), voiceStyle: prefs.voiceStyle } : undefined;
+      onSaved(await renarrate(r.id, captions, voice, chosen));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -796,8 +800,16 @@ function ScriptEditor({ recording: r, caps, onSaved }: { recording: RecordingSum
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid gap-2 border-b border-line p-3">
-        <div className="text-[12.5px] text-ink-2">Voice for the new narration</div>
-        <VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />
+        {r.scriptDraft ? (
+          <p className="text-[12.5px] leading-snug text-ink-2">
+            <b className="font-semibold text-ink">Script draft.</b> The video is silent until you add the voice. Read the lines, fix anything, then add the voice you chose on the Record screen ({prefs.ttsProvider === "flite" ? "offline voice" : prefs.ttsProvider}, {prefs.voiceStyle}).
+          </p>
+        ) : (
+          <>
+            <div className="text-[12.5px] text-ink-2">Voice for the new narration</div>
+            <VoicePicker value={voice} onChange={setVoice} available={Boolean(caps?.voices?.available)} />
+          </>
+        )}
       </div>
       <ol className="max-h-[22rem] min-h-0 flex-1 overflow-y-auto p-2">
         {lines.map((text, i) => (
@@ -824,7 +836,7 @@ function ScriptEditor({ recording: r, caps, onSaved }: { recording: RecordingSum
             Reset
           </Button>
           <Button tone="primary" size="sm" className="ml-auto" disabled={Boolean(blocker) || busy} onClick={save}>
-                        {busy ? "Re-rendering…" : "Re-render narration"}
+                        {busy ? (r.scriptDraft ? "Adding the voice…" : "Re-rendering…") : r.scriptDraft ? "Add the voice" : "Re-render narration"}
           </Button>
         </div>
       </div>

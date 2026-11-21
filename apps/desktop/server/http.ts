@@ -74,15 +74,16 @@ export async function readBodyToTemp(req: IncomingMessage, limit: number, _prefi
   return file;
 }
 
-export function validateCaptions(raw: unknown): { start: number; end: number; text: string }[] {
+export function validateCaptions(raw: unknown): { start: number; end: number; text: string; chapter?: string }[] {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) throw new AuthError(400, "The script needs between 1 and 500 lines.");
   return raw.map((c, i) => {
-    const x = c as { start?: unknown; end?: unknown; text?: unknown };
+    const x = c as { start?: unknown; end?: unknown; text?: unknown; chapter?: unknown };
     const start = Number(x.start);
     const end = Number(x.end);
     const text = typeof x.text === "string" ? x.text.replace(/\s+/g, " ").trim().slice(0, 400) : "";
     if (!Number.isFinite(start) || start < 0 || !Number.isFinite(end) || !text) throw new AuthError(400, `Line ${i + 1} of the script is empty or has no time.`);
-    return { start, end: Math.max(end, start), text };
+    const chapter = typeof x.chapter === "string" ? x.chapter.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+    return { start, end: Math.max(end, start), text, ...(chapter ? { chapter } : {}) };
   });
 }
 

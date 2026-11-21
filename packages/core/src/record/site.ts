@@ -21,7 +21,8 @@ import { CURSOR_SCRIPT, clearRing, pointAt, press } from "./cursor.ts";
 import { writeFocus, type Focus } from "./zoom.ts";
 import type { GuideAction } from "./guide.ts";
 import { withDeadline } from "./deadline.ts";
-import { claudeCodeAvailable, polishCaptions, writerWanted } from "./script-writer.ts";
+import { hqCaptureWanted, startHqCapture, type HqCapture } from "./capture-hq.ts";
+import { claudeCodeAvailable, polishCaptions, titleChapters, writerWanted } from "./script-writer.ts";
 import { pushLiveFrame, startLiveView, stopLiveView } from "./live-view.ts";
 
 /**
@@ -86,6 +87,11 @@ export interface RecordOptions {
   scriptWriter?: string;
   /** How the narrator delivers the lines: warm (default), calm, upbeat or authoritative. See voice-style.ts. */
   voiceStyle?: string;
+  /**
+   * Stop before the voice: record, write the script, and keep the video silent so the person can
+   * read and fix the lines first. The Studio's script editor then adds the voice.
+   */
+  reviewScript?: boolean;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -176,7 +182,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   if (picked === "kokoro") await kokoroReady();
   const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
   const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage, options.voiceStyle) : null;
-  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt", options.voiceStyle)));
+  const engine = picked === "none" || options.reviewScript ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt", options.voiceStyle)));
   const started = Date.now();
   const pages: PageVisit[] = [];
   const skipped: { url: string; reason: string }[] = [];
@@ -222,6 +228,8 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       // Consent banners and chat bubbles stay out of the video (overlays.ts).
       if (overlaysEnabled()) await context.addInitScript(OVERLAY_SCRIPT);
       const page = await context.newPage();
+      // The sharper capture, beside Playwright's: it replaces video.webm when it finishes cleanly.
+      const hq: HqCapture | undefined = hqCaptureWanted() ? await startHqCapture(context, page, join(dir, "capture-hq.webm"), { width: 1920, height: 1080 }) : undefined;
       videoStart = recorder.now();
       recorder.attach(context, page);
       tools = new NarratedTools(page, recorder, start.origin, () => ({ videoStart, signIn, pages, origin: start.origin, style: options.narration ?? "presenter" }), engine, dir);
@@ -241,10 +249,13 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
         throw e;
       } finally {
         const video = page.video();
+        // Before the context closes: the screencast ends with the page.
+        const hqOk = hq ? await hq.stop().catch(() => false) : false;
         await context.close().catch(() => undefined);
         contextRef = null;
         const raw = video ? await video.path().catch(() => null) : null;
         if (raw && existsSync(raw)) renameSync(raw, join(dir, "video.webm"));
+        if (hqOk && existsSync(join(dir, "capture-hq.webm"))) renameSync(join(dir, "capture-hq.webm"), join(dir, "video.webm"));
       }
     } finally {
       if (contextRef) await contextRef.close().catch(() => undefined);
@@ -270,9 +281,12 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     if (writerWanted(options.scriptWriter)) {
       if (await claudeCodeAvailable()) {
         options.onProgress?.("Polishing the narration script with Claude Code");
-        const polished = await polishCaptions(captions, { site: start.hostname, pages: pages.map((p) => p.title).filter(Boolean), ...(process.env.WALKCAST_NARRATION_MODEL?.trim() ? { model: process.env.WALKCAST_NARRATION_MODEL.trim() } : {}) }, undefined, options.signal);
-        captions = polished.captions;
-        writerNote = polished.note;
+        const writer = { site: start.hostname, pages: pages.map((p) => p.title).filter(Boolean), ...(process.env.WALKCAST_NARRATION_MODEL?.trim() ? { model: process.env.WALKCAST_NARRATION_MODEL.trim() } : {}) };
+        // The script and the chapter titles are both written from the recorded lines, so they run together.
+        const [polished, titled] = await Promise.all([polishCaptions(captions, writer, undefined, options.signal), titleChapters(captions, writer, undefined, options.signal)]);
+        // Carry each polished line's text onto the captions that hold the chapter titles.
+        captions = polished.captions.map((c, i) => (titled.captions[i]?.chapter ? { ...c, chapter: titled.captions[i]!.chapter! } : c));
+        writerNote = [polished.note, titled.titled ? `${titled.titled} chapter titles written by Claude Code.` : ""].filter(Boolean).join(" ");
       } else {
         writerNote = "Claude Code is not installed or not on the PATH here, so the narration keeps its recorded wording.";
       }
@@ -304,8 +318,10 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
         }
       }
     }
+    // A draft says what it is, in place of the "add a voice key" hint a silent recording gets.
+    if (options.reviewScript) media.note = "Script draft: read and fix the lines in the Studio, then add the voice.";
     if (writerNote) media.note = `${media.note} ${writerNote}`.trim();
-    if (chose && !askedEngine) {
+    if (chose && !askedEngine && !options.reviewScript) {
       const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
       media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
     }
@@ -332,9 +348,10 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       media,
       dir,
       insights,
+      ...(options.reviewScript ? { scriptDraft: true } : {}),
       ...(tools?.actions.length ? { actions: tools.actions } : {}),
       ...(options.journey ? { journey: { steps: parsedJourney.steps.length, problems: parsedJourney.problems, ...(spec ? { spec } : {}) } } : {}),
-      ...(options.ttsProvider
+      ...(options.ttsProvider && !options.reviewScript
         ? {
             narration: {
               /** What was asked for, and what spoke — they differ when a provider is unreachable. */

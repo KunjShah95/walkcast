@@ -5,6 +5,27 @@ All notable changes to Walkcast are documented here. The format follows
 [Semantic Versioning](https://semver.org/). The GitHub release body for each version lives in
 `.github/release-notes/v<version>.md`.
 
+## [0.11.0] - 2026-11-21
+
+### Added
+
+- Optional Claude Code script writer: rewrites each narration line the way a presenter would, using the Claude Code already signed in on the computer. Lines are batched, retried and checked against the recorded facts; a failed check keeps the recorded wording.
+- Named chapters with short titles written by Claude Code, kept when the opening line is reworded or edited.
+- Review the script before the voice: record, write the script, keep the video silent, edit lines in the Studio, then add the voice.
+- Voice delivery styles (warm, calm, upbeat, authoritative) for Kokoro, ElevenLabs and OpenAI voices.
+- ElevenLabs voice clone from an uploaded sample of the owner's own voice.
+- Personal pronunciation dictionary (WALKCAST_PRONUNCIATIONS, WALKCAST_PRONUNCIATIONS_FILE).
+- High-quality browser capture through Chromium's screencast at a much higher bitrate, with the standard video as the fallback (WALKCAST_HQ_CAPTURE=0 turns it off).
+
+### Changed
+
+- Narration audio is faded per clip, compressed and set to -16 LUFS; the MP4 encodes at CRF 18 with 160 kbit/s AAC.
+- Text is rewritten for speech (hostnames, symbols, abbreviations) before it reaches a voice; captions are unchanged.
+
+### Fixed
+
+- Kokoro no longer drops a narration line when a word is missing from its dictionary.
+
 ## [0.10.10] - 2026-11-07
 
 ### Added
