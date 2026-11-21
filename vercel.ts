@@ -6,20 +6,11 @@
  * and the sitemap.
  */
 
-/** The IndexNow key file is served from the repo, so its URL is stable and can be cached. */
-const INDEXNOW_KEY_FILE = "4c0c276234846f5ee9ee59b6c145139b.txt";
-
-/** One hour. Long enough to spare the origin, short enough that a deploy is visible the same hour. */
-const CRAWLER_FILES = [
-  "robots\\.txt",
-  "sitemap\\.xml",
-  "sitemap-agents\\.xml",
-  "llms\\.txt",
-  "llms-full\\.txt",
-  "pricing\\.md",
-  INDEXNOW_KEY_FILE.replace(/\./g, "\\."),
-].join("|");
-
+/**
+ * Route patterns are written out as string literals on purpose. Vercel validates `vercel.ts`
+ * statically: a pattern built with a template literal or a `.replace()`/`.join()` expression is
+ * read as a missing `source` and the deployment is rejected before the build starts.
+ */
 export const config = {
   framework: null,
   buildCommand: "npm run web:build",
@@ -33,7 +24,7 @@ export const config = {
        * host — every www URL a crawler already holds lands on the canonical host.
        */
       source: "/:path*",
-      has: [{ type: "host" as const, value: "www.walkcast.kunjshah.in" }],
+      has: [{ type: "host", value: "www.walkcast.kunjshah.in" }],
       destination: "https://walkcast.kunjshah.in/:path*",
       permanent: true,
     },
@@ -45,7 +36,10 @@ export const config = {
       headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
     },
     {
-      source: `/(${CRAWLER_FILES})`,
+      // One hour. Long enough to spare the origin, short enough that a deploy is visible the same
+      // hour. The IndexNow key file is served from the repo, so its URL is stable and cacheable.
+      source:
+        "/(robots\\.txt|sitemap\\.xml|sitemap-agents\\.xml|llms\\.txt|llms-full\\.txt|pricing\\.md|4c0c276234846f5ee9ee59b6c145139b\\.txt)",
       headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
     },
     {
