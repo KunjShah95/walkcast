@@ -65,3 +65,15 @@ test("a walkthrough with no narration says so instead of pretending", () => {
   assert.match(doc, /## Transcript\n_This walkthrough has no narration\._/);
   assert.ok(!doc.includes("## Notes"), "no notes, no notes section");
 });
+
+test("caption files survive text that would split a cue, and never write a zero-length one", async () => {
+  const { toSrt, toVtt } = await import("../packages/core/src/record/transcript.ts");
+  const caps = [{ start: 1, end: 1, text: "Pricing --> plans\n\nfor <teams> & more" }];
+  const srt = toSrt(caps);
+  assert.ok(!/\n\n.*for/.test(srt.trim()), "no blank line inside the cue");
+  assert.match(srt, /00:00:01,000 --> 00:00:01,100/);
+  assert.match(srt, /Pricing → plans for <teams> & more/);
+  const vtt = toVtt(caps);
+  assert.match(vtt, /00:00:01\.000 --> 00:00:01\.100/);
+  assert.match(vtt, /for &lt;teams&gt; &amp; more/);
+});

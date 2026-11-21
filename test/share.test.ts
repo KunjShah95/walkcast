@@ -75,6 +75,10 @@ test("a share link plays the walkthrough for anyone who has it, and only for the
     assert.match(html, /Walkthrough/);
     assert.match(html, /Here are the products\./, "the transcript is on the page");
     assert.match(html, /shop\.example/);
+    // Each share is a small ad for the app: a tagged link that never carries the viewing token.
+    assert.match(html, /href="https:\/\/walkcast\.kunjshah\.in\/\?utm_source=share&amp;utm_medium=share-footer&amp;utm_campaign=made-with-walkcast"/);
+    assert.match(html, /rel="noopener noreferrer" referrerpolicy="no-referrer">Walkcast<\/a>/);
+    assert.ok(!html.includes(`utm_content`) && !/utm[^"]*(token|rec-)/.test(html), "the tag carries nothing about this recording");
 
     // The video and the captions are served through the same link.
     const video = await fetch(`${body.url}/recording.mp4`);
@@ -169,5 +173,19 @@ test("the embed can sit in another site's iframe; the share page and the app can
     assert.equal((await fetch(url)).headers.get("x-frame-options"), "SAMEORIGIN", "the full share page stays unframable");
   } finally {
     await srv.close?.();
+  }
+});
+
+test("the Made with Walkcast link can be switched off by the owner", async () => {
+  const { madeWith } = await import("../apps/desktop/server/pages.ts");
+  const before = process.env.WALKCAST_SHARE_BRANDING;
+  try {
+    process.env.WALKCAST_SHARE_BRANDING = "off";
+    assert.equal(madeWith("share-footer"), "Recorded with Walkcast.");
+    delete process.env.WALKCAST_SHARE_BRANDING;
+    assert.match(madeWith("share-footer"), /<a href=/);
+  } finally {
+    if (before === undefined) delete process.env.WALKCAST_SHARE_BRANDING;
+    else process.env.WALKCAST_SHARE_BRANDING = before;
   }
 });

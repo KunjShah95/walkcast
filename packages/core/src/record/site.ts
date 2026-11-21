@@ -11,15 +11,17 @@ import { defaultVoiceFor, providerLabel } from "./voices.ts";
 import { getBrowser, warmBrowserEnabled } from "./browser.ts";
 import { captionsFor, type Caption, type NarrationStyle } from "./narration.ts";
 import { briefInPage, type Brief } from "./brief.ts";
-import { blockedHost, guardContext, startGuardProxy } from "./ssrf.ts";
+import { blockedHost, guardContext, noteBlocked, startGuardProxy } from "./ssrf.ts";
 import { OVERLAY_SCRIPT, clearOverlays, overlaysEnabled } from "./overlays.ts";
 import { parseRobots, robotsAllows, type RobotsRule } from "./robots.ts";
 import { attachEvidence } from "./failure.ts";
 import { analyzeRecording, type RecordingInsights } from "./insights.ts";
-import { parseJourney, writeJourneySpec, type JourneyStep } from "./journey.ts";
+import { MAX_WAIT_MS, parseJourney, writeJourneySpec, type JourneyStep } from "./journey.ts";
 import { CURSOR_SCRIPT, clearRing, pointAt, press } from "./cursor.ts";
 import { writeFocus, type Focus } from "./zoom.ts";
 import type { GuideAction } from "./guide.ts";
+import { withDeadline } from "./deadline.ts";
+import { claudeCodeAvailable, polishCaptions, writerWanted } from "./script-writer.ts";
 import { pushLiveFrame, startLiveView, stopLiveView } from "./live-view.ts";
 
 /**
@@ -76,6 +78,14 @@ export interface RecordOptions {
   zoom?: boolean;
   /** How the narration talks: "presenter" (default) reads what each page says; "plain" only what the browser did. */
   narration?: NarrationStyle;
+  /**
+   * Who writes the narration lines. Unset keeps the recorded wording. "claude-code" has the
+   * person's own signed-in Claude Code polish it into a presenter's script (see script-writer.ts).
+   * WALKCAST_NARRATION_WRITER sets the default for every recording.
+   */
+  scriptWriter?: string;
+  /** How the narrator delivers the lines: warm (default), calm, upbeat or authoritative. See voice-style.ts. */
+  voiceStyle?: string;
 }
 
 export type SignInOutcome = "not-attempted" | "no-form" | "signed-in" | "rejected" | "captcha" | "mfa-required" | "unknown";
@@ -107,7 +117,7 @@ export interface RecordingResult {
   /** What the person asked the narration to be, and what actually spoke. */
   narration?: { asked: string; askedVoice: string; spoke: string; reachable: boolean };
   /** Why the walk ended, and how far it got. */
-  stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
+  stopped?: { reason: "pages" | "time" | "no-more-links" | "finished"; pages: number; seconds: number; limitSeconds?: number };
   /** What the recorder found on the site while it walked it. */
   insights?: RecordingInsights;
   /** The journey that was followed, and the lines of it that could not be read. */
@@ -165,8 +175,8 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   const picked = options.ttsProvider;
   if (picked === "kokoro") await kokoroReady();
   const chose = picked && picked !== "flite" && picked !== "none" ? picked : undefined;
-  const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage) : null;
-  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt")));
+  const askedEngine = chose ? engineFor(chose, options.voice ?? "slt", options.ttsVoice, options.ttsLanguage, options.voiceStyle) : null;
+  const engine = picked === "none" ? null : (askedEngine ?? (picked ? localVoice(options.voice ?? "slt") : pickEngine(options.voice ?? "slt", options.voiceStyle)));
   const started = Date.now();
   const pages: PageVisit[] = [];
   const skipped: { url: string; reason: string }[] = [];
@@ -174,7 +184,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
   let blockedRequests: string[] = [];
   let videoStart = 0;
   // Why the walk ended: the page cap, the length cap, or the site running out of links.
-  let stopReason: "pages" | "time" | "no-more-links" = "pages";
+  let stopReason: "pages" | "time" | "no-more-links" | "finished" = "pages";
 
   // A failure keeps what it knew (pages, sign-in, a screenshot, the partial video) on the error,
   // so the Lab can show why it failed instead of a one-line message.
@@ -241,7 +251,7 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       options.signal?.removeEventListener("abort", abort);
       if (proxy) {
         // What the proxy refused belongs in the same report as what the route guard refused.
-        for (const u of proxy.blocked) if (!blockedRequests.includes(u)) blockedRequests.push(u);
+        for (const u of proxy.blocked) noteBlocked(blockedRequests, u);
         await proxy.close();
       }
       // Only in disabled mode does this process own a browser; warm mode keeps it ready for
@@ -255,7 +265,18 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     recorder.flush();
     // Where the pointer went and when: the zoom plan for the MP4, kept beside the video.
     writeFocus(dir, { zoom: options.zoom !== false, width: 1920, height: 1080, moments: tools?.moments ?? [] });
-    const captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin, style: options.narration ?? "presenter" });
+    let captions = captionsFor(recorder.events, { videoStart, signIn, pages, origin: start.origin, style: options.narration ?? "presenter" });
+    let writerNote = "";
+    if (writerWanted(options.scriptWriter)) {
+      if (await claudeCodeAvailable()) {
+        options.onProgress?.("Polishing the narration script with Claude Code");
+        const polished = await polishCaptions(captions, { site: start.hostname, pages: pages.map((p) => p.title).filter(Boolean), ...(process.env.WALKCAST_NARRATION_MODEL?.trim() ? { model: process.env.WALKCAST_NARRATION_MODEL.trim() } : {}) }, undefined, options.signal);
+        captions = polished.captions;
+        writerNote = polished.note;
+      } else {
+        writerNote = "Claude Code is not installed or not on the PATH here, so the narration keeps its recorded wording.";
+      }
+    }
     // What the recorder saw on the site, measured while it was there: the console errors, the
     // requests that failed, how long each page took to load, the links each page offered and
     // the controls it saw. The trace holds all of it; without this step the dashboard threw
@@ -264,7 +285,8 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
     options.onProgress?.("Adding narration and encoding the video");
     // The narration loop and the encode below are the longest stretch of a recording that has
     // nothing to report, so they forward their own beats to the worker's stall guard.
-    let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress);
+    let media = await buildMedia(dir, captions, options.voice ?? "slt", engine, options.onProgress, options.signal);
+    options.signal?.throwIfAborted();
     // Someone who chose a voice should get one: when the cloud voice fails part-way (no credits,
     // a revoked key, the service down), narrate with the offline voice and say why, rather than
     // handing back a silent video.
@@ -274,16 +296,23 @@ export async function recordSite(options: RecordOptions): Promise<RecordingResul
       if (backup) {
         const why = media.note.replace(/; the video has captions and a transcript.$/, ".");
         options.onProgress?.("The chosen voice failed; narrating with the offline voice");
-        media = await buildMedia(dir, captions, options.voice ?? "slt", backup, options.onProgress);
+        media = await buildMedia(dir, captions, options.voice ?? "slt", backup, options.onProgress, options.signal);
+        options.signal?.throwIfAborted();
         if (media.voice !== "none") {
           media.note = `${why} Narrated with the basic offline voice instead.`;
           spokeEngine = backup;
         }
       }
     }
+    if (writerNote) media.note = `${media.note} ${writerNote}`.trim();
     if (chose && !askedEngine) {
       const fallback = media.voice === "none" ? "so the video has captions and no voice" : `so the "${engine?.id}" voice spoke instead`;
       media.note = `${media.note} ${providerLabel(chose)} was selected but this recording could not reach it, ${fallback}.`;
+    }
+    // A recording with nothing to watch is a failed recording, not a quiet success: the browser
+    // produced no video (it crashed, or the page never drew) and no encode could make one.
+    if (!media.mp4 && !media.webm && !media.video) {
+      throw new RecordError(`The recording has no video: ${media.note || "the browser produced none."}`);
     }
     // The flow as a test, in the recording's own folder: a copy of the recording is a copy of the
     // script that replays it, served from the same place as the video.
@@ -344,6 +373,8 @@ class NarratedTools extends BrowserTools {
   readonly moments: Focus[] = [];
   /** Each click and fill, for the step-by-step guide. */
   readonly actions: GuideAction[] = [];
+  /** Milliseconds left of the person's length cap, or null with no cap. Set by the walk. */
+  msLeft: () => number | null = () => null;
   /** Forget the page brief: a page that could not be read must not borrow the last one. */
   clearBrief(): void {
     this.brief = undefined;
@@ -451,7 +482,10 @@ class NarratedTools extends BrowserTools {
     // produces are the ones the mux will reuse, so a line is never spoken twice in a recording.
     const speech = await speechMsMany(lines, this.voice);
     const owed = speech - (this.recorder.now() - last.startedAt);
-    if (owed > 0) await this.page.waitForTimeout(owed);
+    // Holding for the voice must not run past the length the person asked for: the hold is the
+    // one wait nothing else bounds, and a long line on the last page could add a minute.
+    const left = this.msLeft();
+    if (owed > 0) await this.page.waitForTimeout(left === null ? owed : Math.min(owed, left));
     return value;
   }
 }
@@ -477,7 +511,7 @@ async function followJourney(
   pages: PageVisit[],
   dir: string,
   steps: JourneyStep[],
-  limits: { outOfTime: () => boolean; maxPages: number },
+  limits: { outOfTime: () => boolean; msLeft: () => number | null; maxPages: number },
 ): Promise<{ done: number; stopped: "time" | "pages" | null }> {
   let shot = 1;
   let done = 0;
@@ -485,6 +519,8 @@ async function followJourney(
   // it landed, once, at the top of the page.
   const notePage = async () => {
     const after = normalize(page.url());
+    // The page cap holds for pages reached by a click or a key press, not only by `goto`.
+    if (pages.length >= limits.maxPages) return;
     if (pages.length === 0 || pages[pages.length - 1]!.url !== after) {
       shot += 1;
       await recordPage(tools, page, recorder, pages, dir, `page-${String(shot).padStart(2, "0")}.jpg`, after, false);
@@ -503,7 +539,9 @@ async function followJourney(
     if (step.kind === "goto" && pages.length >= limits.maxPages) return { done, stopped: "pages" };
     done += 1;
     if (step.kind === "wait") {
-      await page.waitForTimeout(step.ms);
+      // Never longer than the cap, and never past the length the person asked for.
+      const left = limits.msLeft();
+      await page.waitForTimeout(Math.max(0, Math.min(step.ms, MAX_WAIT_MS, left ?? Infinity)));
       continue;
     }
     if (step.kind === "scroll") {
@@ -656,7 +694,9 @@ async function browse(
   maxSeconds: number | undefined,
   dir: string,
   journey: JourneyStep[] = [],
-): Promise<"pages" | "time" | "no-more-links"> {
+): Promise<"pages" | "time" | "no-more-links" | "finished"> {
+  // The clock for the length cap starts here, with the recording, before robots.txt and sign-in.
+  const began = Date.now();
   options.onProgress?.("Opening the site");
   const robots = options.ignoreRobots ? [] : await robotsRules(tools, start.origin);
   await tools.goto(start.toString());
@@ -677,18 +717,22 @@ async function browse(
   // Breadth-first over same-origin links, starting from wherever sign-in left us.
   const queue: string[] = [normalize(page.url())];
   const seen = new Set<string>(queue);
-  let reason: "pages" | "time" | "no-more-links" = "pages";
+  let reason: "pages" | "time" | "no-more-links" | "finished" = "pages";
   // The budget covers the pages themselves; sign-in already happened above and is narrated on its
   // own, so it must not eat the cap the person asked for.
-  const deadline = maxSeconds ? Date.now() + maxSeconds * 1000 : null;
+  // The clock started when the walk did (`began`), so a slow sign-in spends the person's
+  // time cap instead of quietly adding to it.
+  const deadline = maxSeconds ? began + maxSeconds * 1000 : null;
   const outOfTime = () => deadline !== null && Date.now() >= deadline;
+  const msLeft = () => (deadline === null ? null : Math.max(0, deadline - Date.now()));
+  tools.msLeft = msLeft;
   // A journey is a path somebody chose. It is followed exactly, and the walk ends when the
   // journey does — not when the site's links run out.
   if (journey.length > 0) {
     // The page the walkthrough starts on is part of it: the journey says where to go next,
     // not where to begin.
     await recordPage(tools, page, recorder, pages, dir, "page-01.jpg", normalize(page.url()), false);
-    const walked = await followJourney(tools, page, recorder, options, start, pages, dir, journey, { outOfTime, maxPages: options.maxPages });
+    const walked = await followJourney(tools, page, recorder, options, start, pages, dir, journey, { outOfTime, msLeft, maxPages: options.maxPages });
     const ok = !signIn.attempted || signIn.outcome === "signed-in";
     const steps = (n: number) => `${n} step${n === 1 ? "" : "s"}`;
     const tail =
@@ -698,7 +742,7 @@ async function browse(
           ? `Stopping at your ${options.maxPages}-page limit after ${steps(walked.done)} of ${journey.length}.`
           : `Followed ${steps(journey.length)}.`;
     await tools.done(ok, tail);
-    return walked.stopped ?? "pages";
+    return walked.stopped ?? "finished";
   }
   // Checked before a page and again after it: the budget ends the walk at the next page boundary,
   // never mid-page, so the last thing on screen is a whole page rather than a cut-off scroll.
@@ -875,10 +919,14 @@ async function collectLinks(tools: BrowserTools): Promise<{ href: string; text: 
     "collectLinks",
     {},
     () =>
-      tools.page.evaluate(() =>
-        Array.from(document.querySelectorAll("a[href]"))
-          .map((a) => ({ href: (a as HTMLAnchorElement).href, text: (a.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80) }))
-          .filter((l) => l.href.startsWith("http")),
+      withDeadline(
+        tools.page.evaluate(() =>
+          Array.from(document.querySelectorAll("a[href]"))
+            .map((a) => ({ href: (a as HTMLAnchorElement).href, text: (a.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80) }))
+            .filter((l) => l.href.startsWith("http")),
+        ),
+        undefined,
+        "Reading the page's links",
       ),
     (links) => ({ links: links.length }),
   );
@@ -894,20 +942,20 @@ async function readBrief(tools: NarratedTools): Promise<void> {
   // scroll narration plain instead of repeating the page before this one.
   tools.clearBrief();
   await tools
-    .record("brief", {}, () => tools.page.evaluate(briefInPage), (b) => b)
+    .record("brief", {}, () => withDeadline(tools.page.evaluate(briefInPage), undefined, "Reading the page"), (b) => b)
     .catch(() => undefined);
 }
 
 /** Scroll the page top to bottom in viewport steps so the video shows all of it. */
 async function scrollThrough(tools: BrowserTools): Promise<void> {
   await tools.record("scroll", {}, async () => {
-    const height = await tools.page.evaluate(() => document.documentElement.scrollHeight);
+    const height = await withDeadline(tools.page.evaluate(() => document.documentElement.scrollHeight), undefined, "Measuring the page");
     const viewport = 800;
     for (let y = viewport * 0.8; y < height && y < viewport * 8; y += viewport * 0.8) {
-      await tools.page.evaluate((top) => window.scrollTo({ top, behavior: "smooth" }), y);
+      await withDeadline(tools.page.evaluate((top) => window.scrollTo({ top, behavior: "smooth" }), y), 4000, "Scrolling the page");
       await tools.page.waitForTimeout(450);
     }
-    await tools.page.evaluate(() => window.scrollTo({ top: 0 }));
+    await withDeadline(tools.page.evaluate(() => window.scrollTo({ top: 0 })), 4000, "Scrolling the page");
     await tools.page.waitForTimeout(250);
     return { height };
   });

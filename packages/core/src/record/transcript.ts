@@ -40,14 +40,29 @@ function stamp(seconds: number, msSeparator: "," | "."): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}${msSeparator}${String(ms).padStart(3, "0")}`;
 }
 
+/**
+ * Cue text as a caption file can carry it. A blank line ends a cue and `-->` starts a timing line,
+ * so both would split one caption into garbage; the text comes from the recorded site (titles,
+ * headlines), so neither can be trusted to be absent. WebVTT also reads `<` and `&` as markup.
+ */
+function cueText(text: string, vtt: boolean): string {
+  const t = text.replace(/\s+/g, " ").trim().replace(/-->/g, "→");
+  return vtt ? t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : t;
+}
+
+/** A cue that ends where it starts is skipped by most players: give it a tenth of a second. */
+function cueEnd(c: TranscriptCaption): number {
+  return Math.max(c.end, c.start + 0.1);
+}
+
 /** SubRip: the format every video tool and every player accepts. */
 export function toSrt(captions: TranscriptCaption[]): string {
-  return captions.map((c, i) => `${i + 1}\n${stamp(c.start, ",")} --> ${stamp(c.end, ",")}\n${c.text}\n`).join("\n");
+  return captions.map((c, i) => `${i + 1}\n${stamp(c.start, ",")} --> ${stamp(cueEnd(c), ",")}\n${cueText(c.text, false)}\n`).join("\n");
 }
 
 /** WebVTT: the same captions for the web, with the header a browser expects. */
 export function toVtt(captions: TranscriptCaption[]): string {
-  return "WEBVTT\n\n" + captions.map((c) => `${stamp(c.start, ".")} --> ${stamp(c.end, ".")}\n${c.text}\n`).join("\n");
+  return "WEBVTT\n\n" + captions.map((c) => `${stamp(c.start, ".")} --> ${stamp(cueEnd(c), ".")}\n${cueText(c.text, true)}\n`).join("\n");
 }
 
 /**

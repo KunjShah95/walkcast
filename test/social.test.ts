@@ -32,3 +32,34 @@ test("1:1 insets the video, and with no captions there is no subtitles filter", 
   assert.doesNotMatch(f, /subtitles/);
   assert.match(f, /overlay=\(W-w\)\/2:\d+,format=yuv420p\[v\]$/);
 });
+
+test("a cut reads its span plainly and keeps the caption lines that fall inside it", async () => {
+  const { readSpan, trimCaptions } = await import("../packages/core/src/record/trim.ts");
+  assert.match(String(readSpan("", "9")), /numbers of seconds/);
+  assert.match(String(readSpan("abc", "9")), /numbers of seconds/);
+  assert.match(String(readSpan("-1", "9")), /before the start/);
+  assert.match(String(readSpan("5", "5.2")), /at least/);
+  assert.match(String(readSpan("50", "60", 40)), /past the end/);
+  assert.deepEqual(readSpan("4", "100", 38), { from: 4, to: 38 });
+  const captions = [
+    { start: 0, end: 3, text: "Opening the site." },
+    { start: 3, end: 8, text: "The headline reads this." },
+    { start: 12, end: 15, text: "Clicking Pricing." },
+  ];
+  assert.deepEqual(trimCaptions(captions, { from: 4, to: 13 }), [
+    { start: 0, end: 4, text: "The headline reads this." },
+    { start: 8, end: 9, text: "Clicking Pricing." },
+  ]);
+});
+
+test("caption presets change the look and the default stays the original", async () => {
+  const { socialFilter, isCaptionStyle } = await import("../packages/core/src/record/social.ts");
+  const clean = socialFilter("vertical", "captions.vtt");
+  assert.equal(socialFilter("vertical", "captions.vtt", "clean"), clean, "the default is the clean preset");
+  assert.match(clean, /BorderStyle=4/);
+  const bold = socialFilter("vertical", "captions.vtt", "bold");
+  assert.match(bold, /Bold=1/);
+  assert.notEqual(bold, clean);
+  assert.match(socialFilter("square", "captions.vtt", "minimal"), /Outline=1/);
+  assert.equal(isCaptionStyle("neon"), false);
+});

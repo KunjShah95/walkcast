@@ -192,3 +192,36 @@ test("with the cache off, every line is spoken every time", async () => {
   await speakLines(fresh("walkcast-say-"), texts, again.engine);
   assert.deepEqual(again.spoken, texts, "an off cache is a miss every time");
 });
+
+test("a voice that changes mid-batch caches its clips under the voice that actually spoke", async () => {
+  ownCache();
+  const texts = ["Opening the dashboard."];
+  // An engine whose voice falls back while speaking (ElevenLabs does this on a 402): asked as
+  // "asked", spoke as "premade". Its fingerprint is a getter, like the real one.
+  let voice = "asked";
+  const flipping: VoiceEngine = {
+    id: "cloudy",
+    kind: "cloud",
+    wordsPerSecond: 2.5,
+    available: () => true,
+    get fingerprint() {
+      return `cloudy:${voice}`;
+    },
+    async speak(text, file) {
+      voice = "premade";
+      writeFileSync(file, wavFor(text));
+    },
+  };
+  await speakLines(fresh("walkcast-say-"), texts, flipping);
+
+  // Asking for the voice that was requested must speak again, not play the fallback's audio.
+  voice = "asked";
+  const asked = fakeEngine("cloudy", { fingerprint: "cloudy:asked" });
+  await speakLines(fresh("walkcast-say-"), texts, asked.engine);
+  assert.deepEqual(asked.spoken, texts, "the fallback voice's clip is not the requested voice's");
+
+  // And the voice that did speak is cached under its own name.
+  const premade = fakeEngine("cloudy", { fingerprint: "cloudy:premade" });
+  await speakLines(fresh("walkcast-say-"), texts, premade.engine);
+  assert.deepEqual(premade.spoken, [], "the clip that was spoken is reused for the voice that spoke it");
+});

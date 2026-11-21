@@ -41,6 +41,8 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
   const [journey, setJourney] = useState("");
   const [zoom, setZoom] = useState(prefs.zoom);
   const [presenter, setPresenter] = useState(prefs.presenter);
+  const [claudeScript, setClaudeScript] = useState(prefs.claudeScript);
+  const [voiceStyle, setVoiceStyle] = useState(prefs.voiceStyle);
   const [copiedScript, setCopiedScript] = useState(false);
   const [demo, setDemo] = useState(false);
   const [caps, setCaps] = useState<Capabilities | null>(null);
@@ -147,7 +149,7 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
     // instead of the site's links.
     const path = journeyOn && journey.trim() ? { journey: journey.trim() } : {};
     // Off is said out loud; on is the recorder's default.
-    const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }) };
+    const motion = { ...(zoom ? {} : { zoom: false }), ...(presenter ? {} : { narration: "plain" as const }), ...(claudeScript ? { scriptWriter: "claude-code" as const } : {}), ...(voiceStyle !== "warm" ? { voiceStyle } : {}) };
     // The sample site records with the same voice as a real one, so what you hear in the demo is
     // the voice you picked.
     const dir = startRecording(demo ? { url: target, demo: true, maxPages: Math.min(maxPages, 10), authorized: true, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...motion } : { url: target, ...(signIn ? { username, password } : {}), maxPages, authorized, voice, ttsProvider, ...(ttsVoice ? { ttsVoice } : {}), ...(ttsLanguage ? { ttsLanguage } : {}), ...length, ...path, ...motion }, (s) => setJob(s));
@@ -260,6 +262,43 @@ export function Record({ index, refresh, initialUrl, go }: { index: LabIndex; re
                   label="Narrate like a presenter"
                 />
               </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Polish the script with Claude Code</span>
+                  <span className="block text-[12.5px] text-ink-3">Uses the Claude Code already signed in on this computer to say each line the way a person would. Needs Claude Code installed. Sends the narration lines, not your password or video, to Anthropic through it.</span>
+                </span>
+                <Toggle
+                  on={claudeScript}
+                  onChange={(on) => {
+                    setClaudeScript(on);
+                    setPrefs({ claudeScript: on });
+                  }}
+                  disabled={busy}
+                  label="Polish the script with Claude Code"
+                />
+              </label>
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-[13px] font-medium">Delivery</span>
+                  <span className="block text-[12.5px] text-ink-3">How the narrator talks: pace and expression. Works with Kokoro, ElevenLabs and OpenAI voices.</span>
+                </span>
+                <select
+                  className="rounded-lg border border-line bg-transparent px-2 py-1.5 text-[13px]"
+                  value={voiceStyle}
+                  disabled={busy}
+                  aria-label="Narration delivery"
+                  onChange={(e) => {
+                    const next = e.target.value as typeof voiceStyle;
+                    setVoiceStyle(next);
+                    setPrefs({ voiceStyle: next });
+                  }}
+                >
+                  <option value="warm">Warm: a friendly colleague</option>
+                  <option value="calm">Calm: unhurried, for tutorials</option>
+                  <option value="upbeat">Upbeat: brighter, for launches</option>
+                  <option value="authoritative">Authoritative: steady, for client demos</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid gap-3 rounded-xl border border-line p-4">

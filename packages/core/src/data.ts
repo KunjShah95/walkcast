@@ -67,6 +67,68 @@ export interface ExperimentSummary {
 }
 
 /**
+ * A RecordingSummary as stored on disk, folded into the shape the dashboard reads.
+ *
+ * `recording.json` is a snapshot of whatever the recorder knew when it wrote it, and files
+ * written by older builds (or half-written by a crash) lack fields the views dereference.
+ * The dashboard used to cast the raw JSON straight to RecordingSummary; one old file took
+ * out whole views. Normalize at the boundary instead, like `parseRun` does for runs.
+ */
+export function normalizeRecording(raw: unknown): RecordingSummary {
+  const o: Record<string, unknown> = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const str = (v: unknown, fallback: string | undefined): string => (typeof v === "string" && v ? v : fallback) as string;
+  const strOr = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
+  const numOr = (v: unknown, fallback = 0): number => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
+  const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+  const signIn = (o.signIn && typeof o.signIn === "object" ? o.signIn : {}) as Record<string, unknown>;
+  const media = (o.media && typeof o.media === "object" ? o.media : {}) as Record<string, unknown>;
+  const summary: RecordingSummary = {
+    id: str(o.id, ""),
+    owner: typeof o.owner === "string" ? o.owner : undefined,
+    dir: str(o.dir, ""),
+    url: str(o.url, ""),
+    createdAt: str(o.createdAt, new Date(0).toISOString()),
+    durationMs: numOr(o.durationMs, 0),
+    signIn: {
+      attempted: signIn.attempted === true,
+      outcome: strOr(signIn.outcome, "unknown"),
+      detail: strOr(signIn.detail, ""),
+    },
+    pages: arr<Record<string, unknown>>(o.pages).map((p) => ({
+      url: strOr(p?.url),
+      title: strOr(p?.title),
+      status: typeof p?.status === "number" && Number.isFinite(p.status) ? p.status : null,
+      controls: numOr(p?.controls, 0),
+      screenshot: typeof p?.screenshot === "string" ? p.screenshot : undefined,
+    })),
+    skipped: arr<Record<string, unknown>>(o.skipped).map((s) => ({ url: strOr(s?.url), reason: strOr(s?.reason, "unknown") })),
+    captions: arr<Record<string, unknown>>(o.captions).map((c) => ({
+      start: numOr(c?.start, 0),
+      end: numOr(c?.end, 0),
+      text: strOr(c?.text),
+    })),
+    media: {
+      video: typeof media.video === "string" ? media.video : null,
+      mp4: typeof media.mp4 === "string" ? media.mp4 : null,
+      webm: typeof media.webm === "string" ? media.webm : null,
+      audio: typeof media.audio === "string" ? media.audio : null,
+      captions: strOr(media.captions, "captions.vtt"),
+      voice: strOr(media.voice, "none"),
+      note: strOr(media.note),
+      exports: media.exports && typeof media.exports === "object" ? (media.exports as RecordingSummary["media"]["exports"]) : undefined,
+      silent: typeof media.silent === "string" ? media.silent : undefined,
+      launchVideos: Array.isArray(media.launchVideos) ? (media.launchVideos as RecordingSummary["media"]["launchVideos"]) : undefined,
+    },
+  };
+  if (o.stopped && typeof o.stopped === "object") summary.stopped = o.stopped as RecordingSummary["stopped"];
+  if (o.insights && typeof o.insights === "object") summary.insights = o.insights as RecordingSummary["insights"];
+  if (Array.isArray(o.actions)) summary.actions = o.actions as RecordingSummary["actions"];
+  if (Array.isArray(o.shares)) summary.shares = o.shares as RecordingSummary["shares"];
+  if (o.narration && typeof o.narration === "object") summary.narration = o.narration as RecordingSummary["narration"];
+  return summary;
+}
+
+/**
  * An experiment summary.json as stored on disk. The false-success section was added after the
  * first published experiment, so files written before it lack the field.
  */
@@ -170,11 +232,13 @@ export interface RecordingSummary {
     exports?: Partial<Record<"vertical" | "square", string>>;
     /** The same recording with no narration track, once someone has asked to download it that way. */
     silent?: string;
+    /** The recording cut to a span (no re-recording), once someone has asked for it. */
+    trimmed?: { file: string; captions: string; from: number; to: number; seconds: number };
     /** Launch films rendered from this walkthrough, newest first. */
     launchVideos?: LaunchVideo[];
   };
   /** Why the walk ended, when a length cap was set. */
-  stopped?: { reason: "pages" | "time" | "no-more-links"; pages: number; seconds: number; limitSeconds?: number };
+  stopped?: { reason: "pages" | "time" | "no-more-links" | "finished"; pages: number; seconds: number; limitSeconds?: number };
   /** What the recorder found on the site: console errors, failed requests, page timings. */
   insights?: RecordingInsights;
   /** Every click and fill, with the picture taken before it, for the step-by-step guide. */
@@ -261,7 +325,7 @@ export class LabData {
   recordingOwner(name: string): string | undefined {
     const path = join(this.root, "recordings", name, "recording.json");
     try {
-      return existsSync(path) ? (readJson(path) as RecordingSummary).owner : undefined;
+      return existsSync(path) ? normalizeRecording(readJson(path)).owner : undefined;
     } catch {
       return undefined;
     }
@@ -278,7 +342,7 @@ export class LabData {
       let r: RecordingSummary | null;
       if (hit && hit.mtimeMs === mtimeMs) r = hit.summary;
       else {
-        try { r = readJson(path) as RecordingSummary; } catch { r = null; }
+        try { r = normalizeRecording(readJson(path)); } catch { r = null; }
         this.recordingCache.set(path, { mtimeMs, summary: r });
       }
       if (!r) continue; // half-written recording

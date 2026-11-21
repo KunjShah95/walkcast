@@ -107,6 +107,8 @@ export interface RecordingInsights {
 /** One navigation and everything that happened until the next one. */
 interface Segment {
   url: string;
+  /** Where the browser actually ended up, when a redirect sent it somewhere else. */
+  landed?: string;
   title: string;
   start: number;
   end: number;
@@ -133,8 +135,8 @@ export interface ControlEntry {
 export function analyzeRecording(facts: RecordingFacts, events: TraceEvent[]): RecordingInsights {
   const steps = events.filter(isStep);
   const segments = segmentsOf(steps, events);
-  const pages = facts.pages.map((page, i) => {
-    const segment = matchSegment(page.url, segments, i);
+  const pages = facts.pages.map((page) => {
+    const segment = matchSegment(page.url, segments);
     return pageInsight(page, segment);
   });
 
@@ -413,22 +415,45 @@ function isApi(request: NetworkEvent): boolean {
  * after it and before the next one happened on that page.
  */
 function segmentsOf(steps: StepEvent[], events: TraceEvent[]): Segment[] {
-  const gotos = steps.filter((s) => s.tool === "goto");
-  if (gotos.length === 0) return [];
+  // A page boundary is any step that moved the browser to another page: a goto, but also a click
+  // on a link, a key press that submitted a form, or a route change in a single-page app. A
+  // journey that clicks through a site has few gotos and many pages; counting only gotos left
+  // those pages with no requests, errors or timings of their own.
+  const boundaries: { step: StepEvent; url: string }[] = [];
+  let current = "";
+  for (const step of steps) {
+    if (step.tool === "goto") {
+      const url = gotoUrl(step);
+      boundaries.push({ step, url });
+      current = normalize(step.after?.url || url);
+      continue;
+    }
+    const to = step.after?.url;
+    if (!to || /pending/.test(step.after?.title ?? "")) continue;
+    const from = current || (step.before?.url ? normalize(step.before.url) : "");
+    if (from && normalize(to) !== from) {
+      boundaries.push({ step, url: to });
+      current = normalize(to);
+    } else if (!current) {
+      current = normalize(to);
+    }
+  }
+  if (boundaries.length === 0) return [];
   const requests = events.filter(isRequest);
   const consoles = events.filter(isConsole);
   const segments: Segment[] = [];
-  for (let i = 0; i < gotos.length; i++) {
-    const step = gotos[i]!;
-    const next = gotos[i + 1];
+  for (let i = 0; i < boundaries.length; i++) {
+    const { step, url } = boundaries[i]!;
+    const next = boundaries[i + 1]?.step;
     const start = step.startedAt;
     const end = next ? next.startedAt : Number.MAX_SAFE_INTEGER;
-    const url = gotoUrl(step);
     const observes = steps.filter((s) => s.tool === "observe" && s.startedAt >= start && s.startedAt < end);
     const observe = observes.at(-1);
     const linkStep = steps.find((s) => s.tool === "collectLinks" && s.startedAt >= start && s.startedAt < end);
+    const landed = step.after?.url;
     segments.push({
       url,
+      ...(landed && normalize(landed) !== normalize(url) ? { landed } : {}),
       title: observe?.after?.title ?? step.after?.title ?? "",
       start,
       end,
@@ -604,16 +629,13 @@ function pageInsight(page: RecordingFacts["pages"][number], segment: Segment | u
 }
 
 /**
- * The segment a page belongs to.
+ * The segment a page belongs to: the one whose address, or whose redirect target, is the page's.
  *
- * The recorder visits pages in the order it walked them, so the n-th page is the n-th
- * navigation. When the counts disagree (a navigation that failed and left no page), the URL
- * decides instead.
+ * Never by position. A page that matches no segment has no measurements, and saying so is more
+ * honest than lending it the numbers of whichever page happened to come n-th.
  */
-function matchSegment(url: string, segments: Segment[], index: number): Segment | undefined {
-  const same = segments.find((s) => sameUrl(s.url, url));
-  if (same) return same;
-  return segments[index];
+function matchSegment(url: string, segments: Segment[]): Segment | undefined {
+  return segments.find((s) => sameUrl(s.url, url)) ?? segments.find((s) => s.landed !== undefined && sameUrl(s.landed, url));
 }
 
 /** Two URLs are the same page when they differ only in hash or trailing slash. */

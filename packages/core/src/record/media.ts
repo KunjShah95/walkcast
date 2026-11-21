@@ -1,5 +1,6 @@
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import { cachedClip, clipKey, storeClip } from "./voice-cache.ts";
 import { transcribe } from "./stt.ts";
 import { readFocus, writeFocus, zoomFilterFor } from "./zoom.ts";
 import { DISK_FULL_MESSAGE, isDiskFull } from "../ops/disk.ts";
+import { forSpeech } from "./speech-text.ts";
 
 export interface MediaResult {
   /** Raw browser video (WebM), relative to the recording directory. */
@@ -50,7 +52,17 @@ const VOICE: Voice = isVoice(process.env.LAB_VOICE) ? process.env.LAB_VOICE : "s
  * track, and muxed with the video plus a caption track. With no voice, or when the voice fails, the
  * recording is still a full MP4 of the visit with captions on, just silent.
  */
-export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice), onProgress?: (p: string) => void): Promise<MediaResult> {
+export async function buildMedia(dir: string, captions: Caption[], voice: Voice = VOICE, engine: VoiceEngine | null = pickEngine(voice), onProgress?: (p: string) => void, signal?: AbortSignal): Promise<MediaResult> {
+  // Every ffmpeg call below picks the signal up from here, so a cancelled job kills the encode
+  // instead of waiting out its five-minute cap.
+  return mediaSignal.run(signal, () => buildMediaInner(dir, captions, voice, engine, onProgress, signal));
+}
+
+/** The cancel signal of the encode in progress, read by `run` so it needs no extra parameter. */
+const mediaSignal = new AsyncLocalStorage<AbortSignal | undefined>();
+
+async function buildMediaInner(dir: string, captions: Caption[], voice: Voice, engine: VoiceEngine | null, onProgress?: (p: string) => void, signal?: AbortSignal): Promise<MediaResult> {
+  signal?.throwIfAborted();
   const video = existsSync(join(dir, "video.webm")) ? "video.webm" : null;
   const result: MediaResult = { video, mp4: null, webm: null, audio: null, captions: "captions.vtt", voice: "none", note: "" };
   const finish = (note: string) => {
@@ -70,7 +82,11 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
     // A narrated MP4 already on disk is the better recording. A failure in one of the last
     // steps must not replace a video that speaks with a silent one.
     const existing = join(dir, "recording.mp4");
-    if (existsSync(existing) && statSync(existing).size > 0) return finish(note);
+    if (existsSync(existing) && statSync(existing).size > 0) {
+      // Report the MP4 that is there; leaving `mp4: null` hid a playable file from the Library.
+      result.mp4 ??= "recording.mp4";
+      return finish(note);
+    }
     try {
       Object.assign(result, await muxSilent(dir, video, onProgress));
     } catch { /* the WebM and captions are still there */ }
@@ -81,6 +97,8 @@ export async function buildMedia(dir: string, captions: Caption[], voice: Voice 
   try {
     return await narrate(dir, video, captions, result, engine, onProgress);
   } catch (e) {
+    // A cancel is not a narration failure: do not fall back to a silent encode nobody wants.
+    if (signal?.aborted) throw signal.reason ?? e;
     return silent(`Narration failed (${failureReason(e)}); the video has captions and a transcript.`);
   } finally {
     for (const [i] of captions.entries()) {
@@ -95,7 +113,7 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   // without speaking a line this machine has already spoken. One beat per line: this loop is one
   // of only two long stretches of a recording that would otherwise report nothing at all, and a
   // job the worker hears nothing from is a job its stall guard aborts.
-  const clips = await speakLines(dir, captions.map((c) => c.text.replace(/[{}]/g, "")), engine, onProgress);
+  const clips = await speakLines(dir, captions.map((c) => forSpeech(c.text)), engine, onProgress);
 
   // 2. Lay them out: each line starts at its event time, or after the previous line finishes.
   let cursor = 0;
@@ -110,9 +128,12 @@ async function narrate(dir: string, video: string, captions: Caption[], result: 
   onProgress?.("Mixing the narration track");
   const audio = join(dir, "narration.wav");
   const inputs = clips.flatMap((c) => ["-i", c.file]);
-  const delays = captions.map((c, i) => `[${i}:a]adelay=${Math.round(c.start * 1000)}:all=1[a${i}]`);
-  const mix = `${captions.map((_, i) => `[a${i}]`).join("")}amix=inputs=${captions.length}:normalize=0:dropout_transition=0[out]`;
-  await run([...inputs, "-filter_complex", [...delays, mix].join(";"), "-map", "[out]", "-ar", "22050", "-ac", "1", audio]);
+  // A 20 ms fade in and a 50 ms fade out on every clip: butted speech clips click at their seams.
+  const delays = captions.map((c, i) => `[${i}:a]afade=t=in:d=0.02,afade=t=out:st=${Math.max(0, clips[i]!.seconds - 0.05).toFixed(3)}:d=0.05,adelay=${Math.round(c.start * 1000)}:all=1[a${i}]`);
+  // One finish over the whole track: a high-pass under the voice, a gentle compressor so a loud
+  // word and a quiet one sit together, then loudness to the level streaming platforms expect.
+  const mix = `${captions.map((_, i) => `[a${i}]`).join("")}amix=inputs=${captions.length}:normalize=0:dropout_transition=0,highpass=f=70,acompressor=threshold=-20dB:ratio=2.5:attack=8:release=120:makeup=2,loudnorm=I=-16:TP=-1.5:LRA=9[out]`;
+  await run([...inputs, "-filter_complex", [...delays, mix].join(";"), "-map", "[out]", "-ar", "44100", "-ac", "1", audio]);
   writeFileSync(join(dir, "captions.vtt"), toWebVtt(captions));
 
   // 4. Mux: hold the last frame if the narration runs past the end of the video.
@@ -171,7 +192,10 @@ export async function speakLines(dir: string, texts: string[], engine: VoiceEngi
     }
     for (const i of misses) {
       const file = files[i]!;
-      if (wavSeconds(file) > 0) storeClip(keys[i]!, file);
+      // Keyed on the voice as it is now, not as it was when the line was queued: an engine can
+      // change voice mid-batch (ElevenLabs falls back to a premade voice on a 402), and a clip
+      // stored under the voice that was asked for would later play as that voice when it isn't.
+      if (wavSeconds(file) > 0) storeClip(clipKey(engine, texts[i]!), file);
     }
   }
   return files.map((file) => ({ file, seconds: wavSeconds(file) }));
@@ -202,8 +226,8 @@ async function mux(dir: string, video: string, audio: string, audioSeconds: numb
       "-i", join(dir, "captions.vtt"),
       "-filter_complex", `[0:v]${zoom ? `${zoom},` : ""}tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)},format=yuv420p[v]`,
       "-map", "[v]", "-map", "1:a", "-map", "2:s",
-      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
-      "-c:a", "aac", "-b:a", "96k",
+      "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high", "-level", "4.2",
+      "-c:a", "aac", "-b:a", "160k",
       "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
       "-movflags", "+faststart",
       mp4,
@@ -238,7 +262,7 @@ async function muxSilent(dir: string, video: string, onProgress?: (p: string) =>
       "-i", join(dir, "captions.vtt"),
       "-map", "0:v", "-map", "1:s",
       "-vf", `${zoom ? `${zoom},` : ""}format=yuv420p`,
-      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-profile:v", "high", "-level", "4.2",
+      "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high", "-level", "4.2",
       "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
       "-movflags", "+faststart",
       mp4,
@@ -378,7 +402,6 @@ export async function cloudVoicePreview(provider: string, voice: string = "", la
   }
 }
 
-let cacheDir: string | undefined;
 const spoken = new Map<string, number>();
 
 /** Words in a line, the way the pacing estimate counts them. */
@@ -416,18 +439,20 @@ export async function speechMsMany(texts: string[], engine?: VoiceEngine | null)
     else total += cached;
   }
   if (cold.length === 0) return total;
-  cacheDir ??= mkdtempSync(join(tmpdir(), "lab-tts-"));
+  // A folder of this call's own, removed below: a shared one let two recordings measuring at once
+  // overwrite each other's `.tts-<i>.wav`, and was never cleaned up.
+  const scratch = mkdtempSync(join(tmpdir(), "lab-tts-"));
   // The clips `speakLines` writes are the ones to measure: it names them itself, and it has
   // already put them in the narration cache, so the mux will copy rather than speak them again.
-  const clips = await speakLines(cacheDir, cold, local);
   try {
+    const clips = await speakLines(scratch, cold, local);
     for (const [i, text] of cold.entries()) {
       const ms = Math.round((clips[i]?.seconds ?? 0) * 1000);
       spoken.set(`${local.id}|${text}`, ms);
       total += ms;
     }
   } finally {
-    for (const clip of clips) rmSync(clip.file, { force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
   return total;
 }
@@ -441,7 +466,12 @@ const execFileAsync = promisify(execFile);
 
 /** ffmpeg runs asynchronously so a server stays responsive while a recording is encoded. */
 async function run(args: string[], opts: { cwd?: string } = {}): Promise<void> {
-  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: FFMPEG_TIMEOUT_MS, killSignal: "SIGKILL", windowsHide: true });
+  await execFileAsync(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", ...args], { cwd: opts.cwd, maxBuffer: 4 * 1024 * 1024, timeout: FFMPEG_TIMEOUT_MS, killSignal: "SIGKILL", windowsHide: true, ...abortOption() });
+}
+
+function abortOption(): { signal?: AbortSignal } {
+  const signal = mediaSignal.getStore();
+  return signal ? { signal } : {};
 }
 
 let encoder: boolean | undefined;
@@ -490,16 +520,16 @@ export function robotVoiceAllowed(env: NodeJS.ProcessEnv = process.env): boolean
  * nothing was asked for and it's installed; then the robotic offline one if asked for; else
  * silent. Explicit LAB_TTS_PROVIDER=flite skips Kokoro and keeps the old behaviour on purpose.
  */
-export function pickEngine(voice: Voice = VOICE): VoiceEngine | null {
+export function pickEngine(voice: Voice = VOICE, style?: string): VoiceEngine | null {
   const provider = process.env.LAB_TTS_PROVIDER?.trim().toLowerCase();
   if (provider && provider !== "flite") {
-    const engine = chooseVoiceEngine();
+    const engine = chooseVoiceEngine(style);
     // Kokoro is a local engine, not the robotic fallback this cloud-only gate exists to keep
     // opt-in, so an explicit choice of it must not be rejected here.
     if (engine.kind === "cloud" || provider === "kokoro") return engine;
   }
   if (!provider) {
-    const kokoro = kokoroEngine();
+    const kokoro = kokoroEngine(undefined, style);
     if (kokoro) return kokoro;
   }
   return robotVoiceAllowed() ? localVoice(voice) : null;
@@ -554,7 +584,7 @@ export function failureReason(error: unknown): string {
   return last.slice(0, 300);
 }
 
-async function probeSeconds(file: string): Promise<number> {
+export async function probeSeconds(file: string): Promise<number> {
   const probe = (args: string[]) => execFileAsync(FFPROBE, ["-v", "error", ...args, file], { timeout: 60_000, maxBuffer: 16 * 1024 * 1024 }).then((r) => r.stdout, () => "");
   const n = Number.parseFloat(await probe(["-show_entries", "format=duration", "-of", "csv=p=0"]));
   if (Number.isFinite(n)) return n;

@@ -298,7 +298,7 @@ export function mediaUrl(dir: string, file: string): string | undefined {
 
 /** Records a site; resolves with the recording's directory when it is done. */
 export function startRecording(
-  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain" },
+  input: { url: string; demo?: boolean; username?: string; password?: string; maxPages: number; maxSeconds?: number; authorized: boolean; voice?: Voice; ttsProvider?: string; ttsVoice?: string; ttsLanguage?: string; journey?: string; zoom?: boolean; narration?: "presenter" | "plain"; scriptWriter?: "claude-code"; voiceStyle?: "warm" | "calm" | "upbeat" | "authoritative" },
   onProgress?: (s: JobStatus) => void,
 ): Promise<string> {
   return submitAndWait("/api/record", input, onProgress);

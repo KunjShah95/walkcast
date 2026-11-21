@@ -240,3 +240,35 @@ test("a walkthrough made before this existed is read from the trace it left behi
     await srv.close?.();
   }
 });
+
+test("a journey that clicks through a site gets a segment for every page, not only for gotos", () => {
+  const home = "https://shop.example/";
+  const pricing = "https://shop.example/pricing";
+  const state = (url: string, title: string) => ({ url, title, fingerprint: "fp" });
+  const events: TraceEvent[] = [
+    { type: "step", stepId: 1, tool: "goto", args: { path: home }, startedAt: 0, endedAt: 300, before: state("about:blank", ""), after: state(home, "Shop") },
+    { type: "step", stepId: 2, tool: "observe", args: {}, startedAt: 310, endedAt: 350, before: state(home, "Shop"), after: state(home, "Shop"), result: { elements: 1, fingerprint: "home", controls: [{ role: "link", name: "Pricing" }] } },
+    // One click navigates, with no goto: the page it lands on is a page of the walkthrough.
+    { type: "step", stepId: 3, tool: "click", args: { index: 0 }, startedAt: 400, endedAt: 900, before: state(home, "Shop"), after: state(pricing, "Pricing") },
+    { type: "request", stepId: 3, at: 450, method: "GET", url: pricing, status: 200, respondedAt: 480 },
+    { type: "request", stepId: 3, at: 600, method: "GET", url: "https://shop.example/api/quotes", status: 500, respondedAt: 640 },
+    { type: "console", stepId: 3, at: 700, level: "error", text: "Uncaught ReferenceError: quote is not defined" },
+    { type: "step", stepId: 4, tool: "observe", args: {}, startedAt: 910, endedAt: 950, before: state(pricing, "Pricing"), after: state(pricing, "Pricing"), result: { elements: 0, fingerprint: "pricing", controls: [{ role: "button", name: "" }] } },
+  ];
+  const insights = analyzeRecording(
+    { id: "walk-click", url: home, createdAt: "2026-10-20T10:00:00.000Z", durationMs: 1000, pages: [{ url: home, title: "Shop", status: 200, controls: 1 }, { url: pricing, title: "Pricing", status: 200, controls: 1 }] },
+    events,
+  );
+  assert.equal(insights.pages[0]!.errors, 0, "the home page did not log the pricing page's error");
+  assert.equal(insights.pages[1]!.errors, 1, "the error belongs to the page the click landed on");
+  assert.equal(insights.pages[1]!.failures, 1);
+  assert.equal(insights.consoleErrors[0]!.page, "/pricing");
+});
+
+test("a page no navigation explains gets no borrowed measurements", () => {
+  const url = "https://shop.example/";
+  const { facts, events } = walk([{ path: "/", title: "Shop", status: 200, controls: [{ role: "link", name: "Pricing" }], loadMs: 400, links: 5 }]);
+  const insights = analyzeRecording({ ...facts, pages: [...facts.pages, { url: `${url}elsewhere`, title: "Elsewhere", status: 200, controls: 0 }] }, events);
+  assert.equal(insights.pages[1]!.loadMs, null);
+  assert.equal(insights.pages[1]!.requests, 0);
+});

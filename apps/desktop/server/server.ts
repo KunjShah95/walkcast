@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LabData, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
+import { LabData, normalizeRecording, type LabIndex, type RecordingSummary, type RunDetail } from "../../../packages/core/src/data.ts";
 import { useLocalKeyFile } from "../../../packages/core/src/jobs/secret-box.ts";
 import { Worker, failureDir } from "../../../packages/core/src/jobs/worker.ts";
 import { type FailureReport, type RunFailure, explainFailure } from "../../../packages/core/src/record/failure.ts";
@@ -419,7 +419,7 @@ export function createApp(o: ServeOptions = {}): App {
   async function listRecordings(user: User | null): Promise<RecordingSummary[]> {
     if (store.kind === "file") return data.recordings();
     const rows = await store.recordings(requireAuth ? (user?.id ?? "-") : null, 100);
-    return rows.map((r) => ({ ...(r.summary as unknown as RecordingSummary), id: r.id, owner: r.owner ?? undefined, dir: `recordings/${r.id}` }));
+    return rows.map((r) => ({ ...normalizeRecording(r.summary), id: r.id, owner: r.owner ?? undefined, dir: `recordings/${r.id}` }));
   }
   async function findRecording(id: string): Promise<{ owner: string | null; summary?: RecordingSummary } | null> {
     if (store.kind === "file") {
@@ -427,7 +427,7 @@ export function createApp(o: ServeOptions = {}): App {
       return r ? { owner: r.owner ?? null, summary: r } : null;
     }
     const row = await store.recording(id);
-    return row ? { owner: row.owner ?? null, summary: row.summary as unknown as RecordingSummary } : null;
+    return row ? { owner: row.owner ?? null, summary: normalizeRecording(row.summary) } : null;
   }
 
   /**

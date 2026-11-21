@@ -157,6 +157,8 @@ const PROBES: Probe[] = [
   { route: "GET /api/diagnostics", method: "GET", path: "/api/diagnostics" },
   { route: "POST /api/recordings/:id/export", method: "POST", path: "/api/recordings/rec-1/export" },
   { route: "POST /api/recordings/:id/export", method: "POST", path: "/api/recordings/missing/export?shape=vertical" },
+  { route: "POST /api/recordings/:id/trim", method: "POST", path: "/api/recordings/rec-1/trim" },
+  { route: "POST /api/recordings/:id/trim", method: "POST", path: "/api/recordings/missing/trim?from=1&to=9" },
   { route: "POST /api/recordings/batch-render", method: "POST", path: "/api/recordings/batch-render", body: "{}" },
   { route: "POST /api/recordings/:id/no-voice", method: "POST", path: "/api/recordings/missing/no-voice" },
   { route: "POST|DELETE /api/recordings/:id/share", method: "POST", path: "/api/recordings/missing/share", body: "{}" },
@@ -370,6 +372,10 @@ const EXPECTED: Record<string, Seen> = {
   "in POST /api/recordings/rec-1/export": {"status":400,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: shape must be vertical or square"},
   "out POST /api/recordings/missing/export?shape=vertical": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
   "in POST /api/recordings/missing/export?shape=vertical": {"status":404,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Recording not found."},
+  "out POST /api/recordings/rec-1/trim": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
+  "in POST /api/recordings/rec-1/trim": {"status":400,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: from and to must be numbers of seconds, e.g. from=4&to=38."},
+  "out POST /api/recordings/missing/trim?from=1&to=9": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
+  "in POST /api/recordings/missing/trim?from=1&to=9": {"status":404,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Recording not found."},
   "out POST /api/recordings/batch-render body={}": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
   "in POST /api/recordings/batch-render body={}": {"status":400,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: recordingIds must be a non-empty array of recording ids."},
   "out POST /api/recordings/missing/no-voice": {"status":401,"type":"application/json","cache":"no-store","xfo":null,"csp":false,"body":"error: Sign in to use the dashboard."},
@@ -551,7 +557,7 @@ test("every route answers as it did before the route table", { timeout: 120_000 
       return;
     }
     const routes = new Set(PROBES.map((p) => p.route));
-    assert.equal(routes.size, 88, "routes probed (81 handlers plus 7 pipeline checks)");
+    assert.equal(routes.size, 89, "routes probed (82 handlers plus 7 pipeline checks)");
     const problems: string[] = [];
     for (const key of new Set([...Object.keys(EXPECTED), ...Object.keys(observed)])) {
       try {

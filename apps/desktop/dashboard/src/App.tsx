@@ -6,6 +6,7 @@ import { Breadcrumbs } from "./components/Breadcrumbs.tsx";
 import { CommandBar } from "./components/CommandBar.tsx";
 import { RecordBar } from "./components/RecordBar.tsx";
 import { ExhibitProvider, ThemeToggle } from "./components/ui.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { I18nProvider } from "./lib/i18n.tsx";
 import { type Me, isAuthError, isSnapshot, loadIndex, loadMe } from "./lib/api.ts";
 import { watchDeepLinks, watchUrlDrops } from "./lib/deep-link.ts";
@@ -314,6 +315,7 @@ export function App() {
               {TITLES[route.view]}
             </span>
             <div key={routeKey}>
+              <ErrorBoundary onDashboard={() => go({ view: "dashboard" })}>
                 {error && <LoadError error={error} />}
                 {!index && !error && <Loading />}
                 {index && route.view === "dashboard" && <Dashboard index={index} me={me} go={go} />}
@@ -334,6 +336,7 @@ export function App() {
                 {index && route.view === "webhooks" && <Webhooks />}
                 {index && route.view === "compare" && <Compare base={route.base} cand={route.cand} index={index} go={go} />}
                 {index && route.view === "mobile" && <Mobile index={index} go={go} refresh={refresh} />}
+              </ErrorBoundary>
             </div>
           </main>
         </div>

@@ -15,6 +15,7 @@
  * (`[data-walkcast]`) is never touched. LAB_KEEP_OVERLAYS=1 leaves every page as it comes.
  */
 import type { Page } from "playwright";
+import { withDeadline } from "./deadline.ts";
 
 /** Consent tools and chat widgets, by the containers they render into. */
 const HIDE = [
@@ -154,8 +155,8 @@ export async function clearOverlays(page: Page): Promise<string[]> {
   if (!overlaysEnabled()) return [];
   // The in-page function is compiled TypeScript and may call esbuild's __name helper; make sure
   // the page has it, whoever opened the page.
-  await page.evaluate("window.__name = window.__name || ((fn) => fn)").catch(() => undefined);
-  const did = await page.evaluate(clearInPage, ACCEPT).catch(() => [] as string[]);
+  await withDeadline(page.evaluate("window.__name = window.__name || ((fn) => fn)"), 3000).catch(() => undefined);
+  const did = await withDeadline(page.evaluate(clearInPage, ACCEPT), 5000).catch(() => [] as string[]);
   // A consent click can reflow the page or lift a scroll lock: give it a moment to settle.
   if (did.length) await page.waitForTimeout(250).catch(() => undefined);
   return did;

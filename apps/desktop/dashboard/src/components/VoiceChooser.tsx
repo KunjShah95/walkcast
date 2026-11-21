@@ -82,9 +82,17 @@ export function VoiceChooser({ onChoose, onCancel }: { onChoose: (provider: TtsP
       const check = await fetch(cloudVoicePreviewUrl(natural, ""));
       if (!check.ok) {
         const why = ((await check.json().catch(() => ({}))) as { error?: string }).error;
-        // Don't leave a key the provider refused behind: it would read as "key saved" from now on.
-        await fetch(`/api/credentials?env=${KEY_ENV[natural]}`, { method: "DELETE" }).catch(() => undefined);
-        throw new Error(`${NATURAL_LABEL[natural]} didn't accept that key${why ? `: ${why}` : "."} Check the key, or pick another option.`);
+        // Only a refused key destroys it. 401/403 mean the provider said no; anything else
+        // (429 rate limit, 5xx outage) is not a verdict on the key, and deleting a working
+        // credential over a blip would strand the user.
+        if (check.status === 401 || check.status === 403) {
+          await fetch(`/api/credentials?env=${KEY_ENV[natural]}`, { method: "DELETE" }).catch(() => undefined);
+          throw new Error(`${NATURAL_LABEL[natural]} didn't accept that key${why ? `: ${why}` : "."} Check the key, or pick another option.`);
+        }
+        // The key is saved and this is not a verdict on it, so let the user carry on: the
+        // first recording will surface a provider problem if there is one.
+        onChoose(natural);
+        return;
       }
       onChoose(natural);
     } catch (e) {

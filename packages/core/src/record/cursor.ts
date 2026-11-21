@@ -1,3 +1,4 @@
+import { withDeadline } from "./deadline.ts";
 import type { Page } from "playwright";
 
 /**
@@ -109,13 +110,14 @@ export const CURSOR_SCRIPT = `(() => {
  * caller still does the action, so a pointer that cannot find its target never stops a run.
  */
 export async function pointAt(page: Page, selector: string): Promise<Box | null> {
-  const box = await page
-    .$eval(selector, (el) => {
+  const box = await withDeadline(
+    page.$eval(selector, (el) => {
       el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" as ScrollBehavior });
       const r = el.getBoundingClientRect();
       return { x: r.left, y: r.top, w: r.width, h: r.height };
-    })
-    .catch(() => null);
+    }),
+    3000,
+  ).catch(() => null);
   if (!box || box.w <= 0 || box.h <= 0) return null;
   const tx = box.x + Math.min(box.w / 2, 24);
   const ty = box.y + box.h / 2;
@@ -131,12 +133,13 @@ export async function pointAt(page: Page, selector: string): Promise<Box | null>
     new Promise<void>((resolve) => (timer = setTimeout(resolve, GLIDE_MS + 1000))),
   ]);
   clearTimeout(timer);
-  await page
-    .evaluate(
+  await withDeadline(
+    page.evaluate(
       ([bx, by, bw, bh]) => (window as unknown as { __wcCursor?: { ring: (...a: number[]) => void } }).__wcCursor?.ring(bx!, by!, bw!, bh!),
       [box.x, box.y, box.w, box.h],
-    )
-    .catch(() => undefined);
+    ),
+    3000,
+  ).catch(() => undefined);
   // The ring fades in over 0.25 s; a picture taken before then shows no ring.
   await page.waitForTimeout(280);
   return box;
@@ -144,10 +147,10 @@ export async function pointAt(page: Page, selector: string): Promise<Box | null>
 
 /** The pointer presses down: a short squeeze, drawn as the click happens. */
 export async function press(page: Page): Promise<void> {
-  await page.evaluate(() => (window as unknown as { __wcCursor?: { press: () => void } }).__wcCursor?.press()).catch(() => undefined);
+  await withDeadline(page.evaluate(() => (window as unknown as { __wcCursor?: { press: () => void } }).__wcCursor?.press()), 2000).catch(() => undefined);
 }
 
 /** Take the ring away once the action is done. */
 export async function clearRing(page: Page): Promise<void> {
-  await page.evaluate(() => (window as unknown as { __wcCursor?: { clear: () => void } }).__wcCursor?.clear()).catch(() => undefined);
+  await withDeadline(page.evaluate(() => (window as unknown as { __wcCursor?: { clear: () => void } }).__wcCursor?.clear()), 2000).catch(() => undefined);
 }

@@ -11,6 +11,7 @@ import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { STYLES, resolveStyle } from "./voice-style.ts";
 import { join, basename } from "node:path";
 import { signHeaders } from "../media/s3.ts";
 import { resolveLanguage, resolveVoice } from "./voices.ts";
@@ -276,20 +277,84 @@ export function kokoroScriptMany(): string {
     "import soundfile as sf",
     "lines=json.load(open(sys.argv[1],encoding='utf-8'))",
     "voice=sys.argv[2]",
+    "speed=float(sys.argv[3]) if len(sys.argv)>3 else 1.0",
     "lang_code=voice[0] if voice else 'a'",
     "pipe=KPipeline(lang_code=lang_code)",
+    // A short breath between the sentences of one line, so a two-sentence caption is not one run.
+    "gap=np.zeros(int(24000*0.16),dtype='float32')",
+    // Kokoro's English phonemizer raises on a word its dictionary lacks when espeak is not
+    // installed (agentic, vercel, crm: the vocabulary of a product tour). A line that raises is
+    // retried with each unknown word split into two known words, or spelled out, so one product
+    // name never costs the recording its voice.
+    "import re",
+    "memo={}",
+    "def known(w):",
+    "    if w not in memo:",
+    "        try: pipe.g2p(w); memo[w]=True",
+    "        except Exception: memo[w]=False",
+    "    return memo[w]",
+    "def fix(w):",
+    "    if known(w): return w",
+    "    low=w.lower()",
+    "    for i in range(len(low)-3,2,-1):",
+    "        if known(low[:i]) and known(low[i:]): return low[:i]+' '+low[i:]",
+    "    return ' '.join(w.upper())",
+    "def prep(t): return re.sub(r\"[A-Za-z]+(?:'[A-Za-z]+)*\",lambda m: fix(m.group(0)),t)",
+    "def say(t): return [a for _,_,a in pipe(t,voice=voice,speed=speed)]",
+    // Stricter each time: the line as written, unknown words respelled, anything still unknown
+    // reduced to letters or dropped, and last of all one word at a time keeping what speaks.
+    "def attempt(t):",
+    "    try: return say(t)",
+    "    except Exception: return None",
+    "def scrub(t):",
+    "    keep=[]",
+    "    for w in t.split():",
+    "        if known(w): keep.append(w); continue",
+    "        core=re.sub(r\"[^A-Za-z']\",'',w)",
+    "        if core: keep.append(fix(core))",
+    "    return ' '.join(keep)",
+    "def speak(t):",
+    "    for cand in (t,prep(t),scrub(t)):",
+    "        got=attempt(cand)",
+    "        if got is not None: return got",
+    "    out=[]",
+    "    for w in t.split():",
+    "        got=attempt(w)",
+    "        if got is not None: out+=got",
+    "    return out",
     "for item in lines:",
-    "    chunks=[audio for _,_,audio in pipe(item['text'],voice=voice)]",
-    "    audio=np.concatenate(chunks) if chunks else np.zeros(0,dtype='float32')",
+    "    parts=[]",
+    "    pieces=speak(item['text'])",
+    "    for audio in pieces:",
+    "        if parts: parts.append(gap)",
+    "        parts.append(audio)",
+    "    audio=np.concatenate(parts) if parts else np.zeros(0,dtype='float32')",
     "    sf.write(item['out'],audio,24000)",
   ].join("\n");
 }
 
+let pythonProbe: "python3" | "python" | undefined;
+/**
+ * The Python to run Kokoro with. The probe blocks the event loop while it runs, so it runs once per
+ * process (not once per engine built, which was once per recording) and is cut off after 5 s.
+ */
+function pythonCommand(): "python3" | "python" {
+  if (pythonProbe) return pythonProbe;
+  if (process.platform === "win32") return (pythonProbe = "python");
+  const ok = spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true, timeout: 5000 }).status === 0;
+  return (pythonProbe = ok ? "python3" : "python");
+}
+
 /** Kokoro open-source TTS (hexgrad/Kokoro), run through Python. Free and offline. */
-export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
+export function kokoroEngine(cloudVoice?: string, styleOption?: string): VoiceEngine | null {
   if (!kokoroAvailable()) return null;
-  const voice = cloudVoice?.trim() || process.env.KOKORO_VOICE?.trim() || "af_heart";
-  const py = process.env.WALKCAST_KOKORO_PYTHON?.trim() || (process.platform === "win32" ? "python" : (spawnSync("python3", ["-c", "import sys;print(sys.version)"], { windowsHide: true }).status === 0 ? "python3" : "python"));
+  const style = STYLES[resolveStyle(styleOption)];
+  // Two voices joined by a comma are blended by Kokoro into one that is neither: a warmer or
+  // brighter narrator than either alone.
+  const voice = cloudVoice?.trim() || process.env.KOKORO_VOICE?.trim() || style.kokoro;
+  const py = process.env.WALKCAST_KOKORO_PYTHON?.trim() || pythonCommand();
+  // The voice's pace, 1 being its own. Clamped: past these the speech stops sounding like speech.
+  const speed = Math.min(1.2, Math.max(0.8, Number(process.env.KOKORO_SPEED) || style.pace));
   /** One Python process for `lines`: the model loads once. */
   const speakMany = async (lines: { text: string; file: string }[], cwd: string, onLine?: (done: number, total: number) => void): Promise<void> => {
     if (lines.length === 0) return;
@@ -298,7 +363,7 @@ export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
     try {
       // UTF-8 mode: kokoro reads its own config.json with a default open(), and on Windows the
       // default is the OEM code page, which cannot decode that file. Same speech either way.
-      await execFileAsync(py, ["-c", kokoroScriptMany(), manifest, voice], {
+      await execFileAsync(py, ["-c", kokoroScriptMany(), manifest, voice, String(speed)], {
         cwd,
         timeout: 5 * 60_000,
         windowsHide: true,
@@ -322,9 +387,9 @@ export function kokoroEngine(cloudVoice?: string): VoiceEngine | null {
     id: `kokoro:${voice}`,
     kind: "local",
     available: (): boolean => true,
-    wordsPerSecond: 2.9,
-    // The loaded model is not named by the id; KOKORO_VOICE the voice, nothing else moves.
-    fingerprint: `kokoro:${voice}`,
+    wordsPerSecond: 2.9 * speed,
+    // The loaded model is not named by the id; the voice and its pace are what move the bytes.
+    fingerprint: speed === 1 ? `kokoro:${voice}` : `kokoro:${voice}@${speed}`,
     speakMany,
     async speak(text, outFile, cwd) {
       await speakMany([{ text, file: outFile }], cwd);
@@ -512,53 +577,78 @@ async function ttsError(provider: string, res: Response): Promise<Error> {
   return new Error(`${provider} TTS failed (${res.status}): ${elevenLabsMessage(await res.text().catch(() => ""))}`);
 }
 
-export function elevenLabsEngine(cloudVoice?: string): VoiceEngine | null {
+export function elevenLabsEngine(cloudVoice?: string, styleOption?: string, exactVoice = false): VoiceEngine | null {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
   if (!key) return null;
-  let voiceId = resolveVoice("elevenlabs", cloudVoice);
+  // `exactVoice`: the id is one this account just made (a clone of the person's own voice), which
+  // is in no public list, so it must not be checked against one.
+  let voiceId = exactVoice && cloudVoice?.trim() ? cloudVoice.trim() : resolveVoice("elevenlabs", cloudVoice);
   const model = process.env.ELEVENLABS_MODEL?.trim() || "eleven_multilingual_v2";
-  const say = (text: string) =>
+  const styleName = resolveStyle(styleOption);
+  const style = STYLES[styleName];
+  /** One request. `near` is the line spoken just before and just after: given to the model, it
+   * carries the pitch and pace across a cut, so a run of short lines sounds like one person
+   * talking instead of a list being read. */
+  const say = (text: string, near?: { previous?: string; next?: string }) =>
     fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "xi-api-key": key, "Accept": "audio/mpeg" },
-      body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      body: JSON.stringify({
+        text,
+        model_id: model,
+        voice_settings: style.elevenlabs,
+        ...(near?.previous ? { previous_text: near.previous } : {}),
+        ...(near?.next ? { next_text: near.next } : {}),
+      }),
       signal: AbortSignal.timeout(60_000),
     });
+  const synth = async (text: string, outFile: string, cwd: string, near?: { previous?: string; next?: string }): Promise<void> => {
+    let res = await say(text, near);
+    // Free accounts may only use premade voices through the API; a library voice (one picked
+    // in an older build, or set in ELEVENLABS_VOICE_ID) answers 402. Switch to a premade voice
+    // for the rest of the recording rather than losing the narration.
+    if (res.status === 402 && voiceId !== ELEVENLABS_PREMADE) {
+      const body = await res.text();
+      if (/paid_plan_required|library voice/i.test(body)) {
+        voiceId = ELEVENLABS_PREMADE;
+        res = await say(text, near);
+      } else {
+        throw new Error(`elevenlabs TTS failed (402): ${elevenLabsMessage(body)}`);
+      }
+    }
+    if (!res.ok) throw new Error(`elevenlabs TTS failed (${res.status}): ${elevenLabsMessage(await res.text())}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const tmp = outFile + ".mp3";
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(tmp, buf);
+    await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
+    const { rmSync } = await import("node:fs");
+    rmSync(tmp, { force: true });
+    await ensureWav(outFile, cwd);
+  };
   return {
     get id() {
       return `elevenlabs:${voiceId}`;
     },
     kind: "cloud",
     available: (): boolean => Boolean(key),
-    wordsPerSecond: 2.9,
-    // A free account falls back to the premade voice, and the model comes from env: neither is in
-    // the id, and both change the bytes.
+    wordsPerSecond: 2.9 * style.pace,
+    // A free account falls back to the premade voice, and the model and style come from env or
+    // the recording's settings: none is in the id, and all change the bytes.
     get fingerprint() {
-      return `elevenlabs:${voiceId}:${model}`;
+      return `elevenlabs:${voiceId}:${model}:${styleName}`;
     },
     async speak(text, outFile, cwd) {
-      let res = await say(text);
-      // Free accounts may only use premade voices through the API; a library voice (one picked
-      // in an older build, or set in ELEVENLABS_VOICE_ID) answers 402. Switch to a premade voice
-      // for the rest of the recording rather than losing the narration.
-      if (res.status === 402 && voiceId !== ELEVENLABS_PREMADE) {
-        const body = await res.text();
-        if (/paid_plan_required|library voice/i.test(body)) {
-          voiceId = ELEVENLABS_PREMADE;
-          res = await say(text);
-        } else {
-          throw new Error(`elevenlabs TTS failed (402): ${elevenLabsMessage(body)}`);
-        }
+      await synth(text, outFile, cwd);
+    },
+    // In order, one after another: each line is told what comes before and after it.
+    async speakMany(lines, cwd, onLine) {
+      for (const [i, line] of lines.entries()) {
+        const previous = lines[i - 1]?.text;
+        const next = lines[i + 1]?.text;
+        await synth(line.text, line.file, cwd, { ...(previous ? { previous } : {}), ...(next ? { next } : {}) });
+        onLine?.(i + 1, lines.length);
       }
-      if (!res.ok) throw new Error(`elevenlabs TTS failed (${res.status}): ${elevenLabsMessage(await res.text())}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      const tmp = outFile + ".mp3";
-      const { writeFile } = await import("node:fs/promises");
-      await writeFile(tmp, buf);
-      await run(["-i", tmp, "-ar", "22050", "-ac", "1", outFile]);
-      const { rmSync } = await import("node:fs");
-      rmSync(tmp, { force: true });
-      await ensureWav(outFile, cwd);
     },
   };
 }
@@ -685,11 +775,14 @@ function pollyMessage(body: string): string {
 }
 
 /** OpenAI TTS (gpt-4o-mini-tts / tts-1). */
-export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
+export function openaiTtsEngine(cloudVoice?: string, styleOption?: string): VoiceEngine | null {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) return null;
   const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
   const voice = resolveVoice("openai", cloudVoice) || "alloy";
+  const styleName = resolveStyle(styleOption);
+  // Only the gpt-4o family takes delivery instructions; tts-1 would reject the field.
+  const instructions = /^gpt-4o/i.test(model) ? STYLES[styleName].instructions : "";
   return {
     id: `openai:${voice}`,
     kind: "cloud",
@@ -697,12 +790,12 @@ export function openaiTtsEngine(cloudVoice?: string): VoiceEngine | null {
     wordsPerSecond: 3,
     // The model is chosen by env and is not in the id: a clip cached under "openai:alloy" must not
     // outlive a switch from gpt-4o-mini-tts to tts-1.
-    fingerprint: `openai:${voice}:${model}`,
+    fingerprint: `openai:${voice}:${model}:${instructions ? styleName : ""}`,
     async speak(text, outFile, cwd) {
       const res = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-        body: JSON.stringify({ model, input: text, voice, response_format: "wav" }),
+        body: JSON.stringify({ model, input: text, voice, response_format: "wav", ...(instructions ? { instructions } : {}) }),
         signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) throw await ttsError("openai", res);
@@ -839,7 +932,70 @@ export function pickCustomVoiceSample(dir: string, picked?: string): string | nu
  * server, several accounts can have samples in the same folder, and `files[0]` would narrate in
  * whoever uploaded first.
  */
-function customVoiceEngine(picked?: string): VoiceEngine | null {
+/**
+ * Makes (or reuses) an ElevenLabs instant clone of `sample` and returns its voice id.
+ *
+ * The id is kept beside the sample, keyed to the sample's size and time, so a recording made
+ * tomorrow speaks with the same clone instead of making another: ElevenLabs counts clones against
+ * the account's voice slots. A new upload under the same name is a new sample and a new clone.
+ */
+export async function cloneSample(sample: string, sampleId: string, key: string): Promise<string> {
+  const memo = `${sample}.elevenlabs.json`;
+  try {
+    const saved = JSON.parse(readFileSync(memo, "utf8")) as { sampleId?: string; voiceId?: string };
+    if (saved.sampleId === sampleId && saved.voiceId) return saved.voiceId;
+  } catch {
+    /* no clone yet */
+  }
+  const form = new FormData();
+  form.set("name", `Walkcast ${createHash("sha1").update(sampleId).digest("hex").slice(0, 8)}`);
+  form.set("description", "Made by Walkcast from the owner's own recording.");
+  form.set("remove_background_noise", "true");
+  form.append("files", new Blob([readFileSync(sample)]), basename(sample));
+  const res = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+    method: "POST",
+    headers: { "xi-api-key": key },
+    body: form,
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!res.ok) throw await ttsError("elevenlabs voice clone", res);
+  const voiceId = ((await res.json()) as { voice_id?: string }).voice_id;
+  if (!voiceId) throw new Error("elevenlabs voice clone returned no voice id");
+  try {
+    writeFileSync(memo, JSON.stringify({ sampleId, voiceId }));
+  } catch {
+    /* a read-only folder costs a second clone next time, never this recording */
+  }
+  return voiceId;
+}
+
+/** The person's own voice, cloned once and then spoken through ElevenLabs in the chosen style. */
+function clonedVoiceEngine(sample: string, sampleId: string, key: string, styleOption?: string): VoiceEngine {
+  let inner: VoiceEngine | null = null;
+  const ready = async (): Promise<VoiceEngine> => {
+    if (inner) return inner;
+    const voiceId = await cloneSample(sample, sampleId, key);
+    inner = elevenLabsEngine(voiceId, styleOption, true);
+    if (!inner) throw new Error("elevenlabs is not configured");
+    return inner;
+  };
+  return {
+    id: "custom-voice:clone",
+    kind: "cloud",
+    available: () => true,
+    wordsPerSecond: 2.9 * STYLES[resolveStyle(styleOption)].pace,
+    fingerprint: `custom-voice:clone:${sampleId}:${resolveStyle(styleOption)}`,
+    async speak(text, outFile, cwd) {
+      await (await ready()).speak(text, outFile, cwd);
+    },
+    async speakMany(lines, cwd, onLine) {
+      const engine = await ready();
+      await engine.speakMany!(lines, cwd, onLine);
+    },
+  };
+}
+
+function customVoiceEngine(picked?: string, styleOption?: string): VoiceEngine | null {
   const dir = join(process.cwd(), "data", "voices");
   const chosen = pickCustomVoiceSample(dir, picked);
   if (!chosen) return null;
@@ -853,6 +1009,11 @@ function customVoiceEngine(picked?: string): VoiceEngine | null {
   } catch {
     /* unreadable sample: the copy will fail and the caller reports it */
   }
+  // With an ElevenLabs key the sample is not played back, it is cloned: the narration is the
+  // person's own voice saying the lines. Only their own voice: the picker says so, and the sample
+  // is the one they uploaded to this account. WALKCAST_CLONE_VOICE=0 keeps the old behaviour.
+  const eleven = process.env.ELEVENLABS_API_KEY?.trim();
+  if (eleven && process.env.WALKCAST_CLONE_VOICE !== "0") return clonedVoiceEngine(sample, sampleId, eleven, styleOption);
   return {
     id: "custom-voice",
     kind: "custom-voice",
@@ -874,20 +1035,20 @@ function customVoiceEngine(picked?: string): VoiceEngine | null {
  * `voice` is the local flite name; `cloudVoice` and `cloudLanguage` are the provider's voice id and
  * language as the dashboard picker chose them (see `voices.ts`). Each provider falls back to its own
  * default when they're absent. */
-export function engineFor(provider: string | undefined, voice: FliteVoice = "slt", cloudVoice?: string, cloudLanguage?: string): VoiceEngine | null {
+export function engineFor(provider: string | undefined, voice: FliteVoice = "slt", cloudVoice?: string, cloudLanguage?: string, style?: string): VoiceEngine | null {
   const p = (provider ?? process.env.LAB_TTS_PROVIDER ?? "flite").trim().toLowerCase();
   if (p === "sarvam") return sarvamEngine(cloudVoice, cloudLanguage);
   if (p === "bhashini") return bhashiniEngine(cloudVoice, cloudLanguage);
-  if (p === "elevenlabs") return elevenLabsEngine(cloudVoice);
+  if (p === "elevenlabs") return elevenLabsEngine(cloudVoice, style);
   if (p === "google") return googleCloudTtsEngine(cloudVoice, cloudLanguage);
   if (p === "azure") return azureTtsEngine(cloudVoice, cloudLanguage);
   if (p === "awspolly" || p === "polly") return awsPollyEngine(cloudVoice, cloudLanguage);
-  if (p === "openai") return openaiTtsEngine(cloudVoice);
+  if (p === "openai") return openaiTtsEngine(cloudVoice, style);
   if (p === "murf") return murfEngine(cloudVoice);
   if (p === "reverie") return reverieEngine(cloudVoice, cloudLanguage);
   if (p === "custom" || p === "maya") return customTtsEngine(cloudVoice, cloudLanguage);
-  if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine(cloudVoice);
-  if (p === "kokoro") return kokoroEngine(cloudVoice);
+  if (p === "custom-voice" || p === "custom_voice") return customVoiceEngine(cloudVoice, style);
+  if (p === "kokoro") return kokoroEngine(cloudVoice, style);
   // "flite" is what the dashboard sends for its local default: return null so the caller uses the
   // machine's built-in voice (media.localVoice: flite where ffmpeg has it, Windows speech otherwise).
   // Forcing flite here would fail on every Windows PC, whose ffmpeg builds have no flite.
@@ -901,7 +1062,7 @@ export function configuredCloudProviders(): string[] {
   return candidates.filter((p) => engineFor(p) !== null);
 }
 
-export function chooseVoiceEngine(): VoiceEngine {
+export function chooseVoiceEngine(style?: string): VoiceEngine {
   const choice = (process.env.LAB_TTS_PROVIDER ?? "flite").trim().toLowerCase();
   const tryEngine = (name: string, fn: () => VoiceEngine | null): VoiceEngine | null => {
     const e = fn();
@@ -911,16 +1072,16 @@ export function chooseVoiceEngine(): VoiceEngine {
   };
   if (choice === "sarvam") { const e = tryEngine("sarvam", sarvamEngine); if (e) return e; }
   else if (choice === "bhashini") { const e = tryEngine("bhashini", bhashiniEngine); if (e) return e; }
-  else if (choice === "elevenlabs") { const e = tryEngine("elevenlabs", elevenLabsEngine); if (e) return e; }
+  else if (choice === "elevenlabs") { const e = tryEngine("elevenlabs", () => elevenLabsEngine(undefined, style)); if (e) return e; }
   else if (choice === "google") { const e = tryEngine("google", googleCloudTtsEngine); if (e) return e; }
   else if (choice === "azure") { const e = tryEngine("azure", azureTtsEngine); if (e) return e; }
   else if (choice === "awspolly" || choice === "polly") { const e = tryEngine("awspolly", awsPollyEngine); if (e) return e; }
-  else if (choice === "openai") { const e = tryEngine("openai", openaiTtsEngine); if (e) return e; }
+  else if (choice === "openai") { const e = tryEngine("openai", () => openaiTtsEngine(undefined, style)); if (e) return e; }
   else if (choice === "murf") { const e = tryEngine("murf", murfEngine); if (e) return e; }
   else if (choice === "reverie") { const e = tryEngine("reverie", reverieEngine); if (e) return e; }
   else if (choice === "custom" || choice === "maya") { const e = tryEngine("custom", customTtsEngine); if (e) return e; }
   else if (choice === "custom-voice" || choice === "custom_voice") { const e = tryEngine("custom-voice", customVoiceEngine); if (e) return e; }
-  else if (choice === "kokoro") { const e = tryEngine("kokoro", kokoroEngine); if (e) return e; }
+  else if (choice === "kokoro") { const e = tryEngine("kokoro", () => kokoroEngine(undefined, style)); if (e) return e; }
   return fliteEngine(process.env.LAB_TTS_VOICE ? (process.env.LAB_TTS_VOICE as any) : "slt");
 }
 

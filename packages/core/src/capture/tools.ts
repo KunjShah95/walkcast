@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
 import { detectInjection } from "./injection.ts";
+import { withDeadline } from "../record/deadline.ts";
 import { type PageState, type Recorder, type TargetCheck, redact } from "./recorder.ts";
 
 /** One interactive element as an agent sees it. Compact on purpose: no raw DOM. */
@@ -52,12 +53,12 @@ export class BrowserTools {
 
   async observe(): Promise<Observation> {
     return this.record("observe", {}, async (stepId) => {
-      const snapshot = await this.page.evaluate(observeInPage);
+      const snapshot = await withDeadline(this.page.evaluate(observeInPage), undefined, "Reading the page");
       const observation: Observation = {
         stepId,
         at: this.recorder.now(),
         url: this.page.url(),
-        title: await this.page.title(),
+        title: await withDeadline(this.page.title(), 5000, "Reading the page title"),
         fingerprint: fingerprint(this.page.url(), snapshot.elements),
         elements: snapshot.elements,
         text: snapshot.text,
@@ -199,15 +200,19 @@ export class BrowserTools {
       "selectOptionAt",
       { index, optionIndex, observedLabel },
       async () => {
-        const selected = await this.page.$eval(
-          element.selector,
-          (el, i) => {
-            const select = el as HTMLSelectElement;
-            select.selectedIndex = i;
-            select.dispatchEvent(new Event("change", { bubbles: true }));
-            return select.options[i]?.label ?? "";
-          },
-          optionIndex,
+        const selected = await withDeadline(
+          this.page.$eval(
+            element.selector,
+            (el, i) => {
+              const select = el as HTMLSelectElement;
+              select.selectedIndex = i;
+              select.dispatchEvent(new Event("change", { bubbles: true }));
+              return select.options[i]?.label ?? "";
+            },
+            optionIndex,
+          ),
+          undefined,
+          "Choosing the option",
         );
         return selected;
       },
@@ -226,11 +231,15 @@ export class BrowserTools {
 
   async readValue(selector: string): Promise<string | null> {
     return this.record("readValue", { selector }, async () =>
-      this.page.$eval(selector, (el) => {
-        if (el instanceof HTMLSelectElement) return el.options[el.selectedIndex]?.label ?? "";
-        if (el instanceof HTMLInputElement) return el.value;
-        return el.textContent?.trim() ?? "";
-      }).catch(() => null),
+      withDeadline(
+        this.page.$eval(selector, (el) => {
+          if (el instanceof HTMLSelectElement) return el.options[el.selectedIndex]?.label ?? "";
+          if (el instanceof HTMLInputElement) return el.value;
+          return el.textContent?.trim() ?? "";
+        }),
+        undefined,
+        "Reading the value",
+      ).catch(() => null),
     );
   }
 
@@ -266,9 +275,10 @@ export class BrowserTools {
 
   private async checkTarget(element: ObservedElement, from?: Observation): Promise<TargetCheck> {
     const observation = (from ?? this.lastObservation)!;
-    const nameAtAction = await this.page
-      .$eval(element.selector, (el) => (window as unknown as { __labName: (e: Element) => string }).__labName?.(el) ?? null)
-      .catch(() => null);
+    const nameAtAction = await withDeadline(
+      this.page.$eval(element.selector, (el) => (window as unknown as { __labName: (e: Element) => string }).__labName?.(el) ?? null),
+      3000,
+    ).catch(() => null);
     const fp = await this.currentFingerprint();
     return {
       observedInStep: observation.stepId,
@@ -287,9 +297,10 @@ export class BrowserTools {
     from?: Observation,
   ): Promise<TargetCheck> {
     const observation = (from ?? this.lastObservation)!;
-    const labelAtAction = await this.page
-      .$eval(element.selector, (el, i) => (el as HTMLSelectElement).options[i]?.label ?? null, optionIndex)
-      .catch(() => null);
+    const labelAtAction = await withDeadline(
+      this.page.$eval(element.selector, (el, i) => (el as HTMLSelectElement).options[i]?.label ?? null, optionIndex),
+      3000,
+    ).catch(() => null);
     const fp = await this.currentFingerprint();
     return {
       observedInStep: observation.stepId,
@@ -303,7 +314,7 @@ export class BrowserTools {
   }
 
   private async currentFingerprint(): Promise<string> {
-    const snapshot = await this.page.evaluate(observeInPage).catch(() => ({ elements: [] as ObservedElement[], text: "" }));
+    const snapshot = await withDeadline(this.page.evaluate(observeInPage), 3000).catch(() => ({ elements: [] as ObservedElement[], text: "" }));
     return fingerprint(this.page.url(), snapshot.elements);
   }
 

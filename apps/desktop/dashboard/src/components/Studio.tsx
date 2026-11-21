@@ -267,8 +267,12 @@ export function Studio({
           <Stamp tone={outcome.tone}>{outcome.text}</Stamp>
           <span className="font-mono text-ink-3">
             {r.pages.length} pages · {ms(r.durationMs)} · {voiceLine}
-            {r.stopped?.reason === "time" ? ` · stopped at ${lengthLabel(r.stopped.limitSeconds ?? 0)}` : ""}
           </span>
+          {r.stopped && (
+            <span title={stopTitle(r.stopped)}>
+              <Stamp tone={r.stopped.reason === "finished" || r.stopped.reason === "no-more-links" ? "pass" : "warn"}>{stopLabel(r.stopped.reason)}</Stamp>
+            </span>
+          )}
           {voiceTrouble ? (
             <span className="text-[12px] text-warn">{voiceTrouble}</span>
           ) : (
@@ -721,6 +725,19 @@ export function VoicePicker({ value, onChange, available }: { value: Voice; onCh
 
 /** The lengths a walkthrough can be capped at, in seconds. 0 is "as long as it takes". */
 const LENGTHS = [30, 60, 120, 180, 300, 600, 0] as const;
+
+/** Why the walk ended, as the chip beside the recording says it. */
+export function stopLabel(reason: "pages" | "time" | "no-more-links" | "finished"): string {
+  return reason === "time" ? "Time cap" : reason === "pages" ? "Page cap" : reason === "no-more-links" ? "No more links" : "Finished";
+}
+
+function stopTitle(s: { reason: "pages" | "time" | "no-more-links" | "finished"; pages: number; seconds: number; limitSeconds?: number }): string {
+  const pages = `${s.pages} page${s.pages === 1 ? "" : "s"}`;
+  if (s.reason === "time") return `Stopped at the ${lengthLabel(s.limitSeconds ?? s.seconds)} limit after ${pages}.`;
+  if (s.reason === "pages") return `Stopped at the page limit after ${pages}.`;
+  if (s.reason === "no-more-links") return `Visited every page it could reach: ${pages}.`;
+  return `The whole journey ran: ${pages}.`;
+}
 
 export function lengthLabel(seconds: number): string {
   if (!seconds) return "No limit";

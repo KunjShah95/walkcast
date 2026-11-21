@@ -74,6 +74,16 @@ export function isPrivateAddress(address: string): boolean {
 }
 
 const cache = new Map<string, { at: number; blocked: string | null }>();
+/** Most hosts remembered as blocked: a page that links to endless subdomains must not grow memory. */
+const CACHE_MAX = 500;
+/** Most refused URLs kept for the report: the first ones say what happened, the rest is noise. */
+export const BLOCKED_LIST_MAX = 100;
+
+/** Note a refused URL once, up to the cap. */
+export function noteBlocked(list: string[], url: string): void {
+  if (list.length >= BLOCKED_LIST_MAX || list.includes(url)) return;
+  list.push(url);
+}
 
 /**
  * DNS rebinding mitigation: a name that returned a public address on the first lookup can
@@ -92,8 +102,15 @@ export async function blockedHost(hostname: string): Promise<string | null> {
   const addresses = isIP(host) ? [host] : (await lookup(host, { all: true, verbatim: true }).catch(() => [])).map((a) => a.address);
   const bad = addresses.length === 0 ? null : addresses.find(isPrivateAddress);
   const blocked = addresses.length === 0 ? `Could not resolve ${host}.` : bad ? `${host} resolves to a private or local address (${bad}).` : null;
-  if (blocked !== null) cache.set(host, { at: Date.now(), blocked });
-  else cache.delete(host);
+  if (blocked !== null) {
+    cache.set(host, { at: Date.now(), blocked });
+    // Oldest first (Map keeps insertion order): drop expired entries, then the oldest, past the cap.
+    if (cache.size > CACHE_MAX) {
+      const now = Date.now();
+      for (const [k, v] of cache) if (now - v.at >= BLOCKED_TTL_MS) cache.delete(k);
+      while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
+    }
+  } else cache.delete(host);
   return blocked;
 }
 
@@ -103,7 +120,7 @@ export async function guardContext(context: BrowserContext): Promise<string[]> {
   await context.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if ((url.protocol === "http:" || url.protocol === "https:" || url.protocol === "ws:" || url.protocol === "wss:") && (await blockedHost(url.hostname))) {
-      blocked.push(url.toString());
+      noteBlocked(blocked, url.toString());
       return route.abort("blockedbyclient");
     }
     return route.continue();
@@ -150,7 +167,7 @@ function literalBlocked(host: string): boolean {
  */
 export async function startGuardProxy(): Promise<{ server: string; blocked: string[]; close(): Promise<void> }> {
   const blocked: string[] = [];
-  const refuse = (where: string) => blocked.push(where);
+  const refuse = (where: string) => noteBlocked(blocked, where);
   const server = createServer((req: IncomingMessage, res) => {
     let target: URL;
     try {

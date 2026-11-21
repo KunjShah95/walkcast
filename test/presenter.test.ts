@@ -106,3 +106,20 @@ test("a journey's later steps are spoken as they happened, including the ones th
   assert.equal(lines[4], "Waiting for “Reports”. It never appeared.");
   assert.equal(lines[5], "No control named “Reports” on this page.");
 });
+
+test("a form field that is a question or a sentence is dropped, not read out", async () => {
+  const { formLine, spokenLabel, firstSentence } = await import("../packages/core/src/record/brief.ts");
+  assert.equal(spokenLabel("What a team of 5 people pays in"), "");
+  assert.equal(spokenLabel("How many seats?"), "");
+  assert.equal(spokenLabel("Email address *"), "Email address");
+  assert.equal(spokenLabel("Company name (optional)"), "Company name");
+  assert.equal(spokenLabel("Work email:"), "Work email");
+  assert.equal(formLine({ sections: [], prices: [], fields: ["What a team of 5 people pays in", "Email"] }), "It has a form asking for Email.");
+  assert.equal(formLine({ sections: [], prices: [], fields: ["Email", "Password", "Company", "Phone", "Role"] }), "It has a form asking for Email, Password and Company.");
+  assert.equal(formLine({ sections: [], prices: [], fields: ["How many seats?"] }), null);
+  const long = "Walkcast turns a website into a narrated walkthrough, with captions and a written guide for every page, so a team of any size can";
+  const out = firstSentence(long);
+  assert.ok(out.endsWith("."), out);
+  assert.ok(!/\b(a|of|any|the|and|can)\.$/i.test(out) || /any\.$/.test(out) === false, out);
+  assert.ok(!out.includes("…"));
+});

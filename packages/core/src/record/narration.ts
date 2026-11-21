@@ -178,7 +178,7 @@ export function toWebVtt(captions: Caption[]): string {
   };
   // Cue text comes from the recorded site (page titles): keep it from breaking cue syntax.
   const cue = (t: string) => t.replace(/\s+/g, " ").replace(/-->/g, "→").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return "WEBVTT\n\n" + captions.map((c, i) => `${i + 1}\n${ts(c.start)} --> ${ts(c.end)}\n${cue(c.text)}\n`).join("\n");
+  return "WEBVTT\n\n" + captions.map((c, i) => `${i + 1}\n${ts(c.start)} --> ${ts(Math.max(c.end, c.start + 0.1))}\n${cue(c.text)}\n`).join("\n");
 }
 
 function pathOf(url: string, origin: string): string {

@@ -98,12 +98,46 @@ function safe(s: string | undefined, max: number): string {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), Math.floor(max * 0.6)))}…`;
 }
 
-/** The first sentence of a tagline, at most about 25 words. */
-function firstSentence(s: string): string {
-  const one = s.match(/^[^.!?]{8,}[.!?]/)?.[0] ?? s;
+/** Words a spoken phrase must not end on: "…a team of" is not something a person says. */
+const DANGLING = new Set(["a", "an", "the", "of", "to", "in", "on", "at", "for", "with", "and", "or", "but", "that", "which", "is", "are", "your", "our", "its", "their", "by", "from", "as"]);
+
+/**
+ * The first sentence of a tagline, cut where a person would stop.
+ *
+ * At most about 25 words. A longer one is cut at its last comma, semicolon or dash if that leaves
+ * most of it, else at the 25th word with any dangling article or preposition removed, and always
+ * closed with a full stop rather than an ellipsis the voice reads as a pause.
+ */
+export function firstSentence(s: string): string {
+  const one = (s.match(/^[^.!?]{8,}[.!?]/)?.[0] ?? s).trim();
   const words = one.split(" ");
-  const short = words.length > 25 ? `${words.slice(0, 25).join(" ")}…` : one;
-  return /[.!?…]$/.test(short) ? short : `${short}.`;
+  if (words.length <= 25) return /[.!?]$/.test(one) ? one : `${one}.`;
+  const head = words.slice(0, 25).join(" ");
+  const clause = Math.max(head.lastIndexOf(","), head.lastIndexOf(";"), head.lastIndexOf(" – "), head.lastIndexOf(" — "), head.lastIndexOf(" - "));
+  let cut = clause > head.length * 0.5 ? head.slice(0, clause) : head;
+  const parts = cut.split(" ");
+  while (parts.length > 4 && DANGLING.has(parts.at(-1)!.toLowerCase().replace(/[^a-z]/g, ""))) parts.pop();
+  cut = parts.join(" ").replace(/[,;:\-–—\s]+$/, "");
+  return `${cut}.`;
+}
+
+/**
+ * A page label made fit to say after "asking for" or "you can": the page's own words, trimmed to
+ * the noun. Returns "" for a label that is a question or a sentence rather than a name — "What a
+ * team of 5 people pays in" cannot be the object of "asking for", and is dropped, not mangled.
+ */
+export function spokenLabel(raw: string | undefined): string {
+  let t = (raw ?? "").replace(/\s+/g, " ").trim();
+  // Decoration a screen reader would skip: required markers, "(optional)", trailing colons.
+  t = t.replace(/\s*[*•]+\s*$/, "").replace(/\s*\((optional|required)\)\s*$/i, "").replace(/[:;,.!?\s]+$/, "").replace(/^["“”'‘’]+|["“”'‘’]+$/g, "").trim();
+  if (!t) return "";
+  const words = t.split(" ");
+  // A name is a few words. A question or a sentence ("What a team of 5 people pays in") is not one.
+  if (words.length > 5) return "";
+  if (/\?/.test(raw ?? "")) return "";
+  if (words.length > 2 && /^(what|which|how|why|when|where|who|do|does|are|is|can|would|will|please)$/i.test(words[0]!)) return "";
+  if (DANGLING.has(words.at(-1)!.toLowerCase())) return "";
+  return t;
 }
 
 function list(items: string[]): string {
@@ -153,7 +187,7 @@ export function briefLine(b: Brief, variant = 0): string | null {
 /** The line spoken while the page scrolls: what is further down, and the prices it shows. */
 export function tourLine(b: Brief, variant = 0): string | null {
   // Four sections and three prices: a line that lists everything is a line nobody hears the end of.
-  const sections = b.sections.map((s) => safe(s, 48)).filter(Boolean).slice(0, 4);
+  const sections = b.sections.map((s) => safe(s, 48).replace(/[:;,.!?\s]+$/, "")).filter((s) => s && !DANGLING.has(s.split(" ").at(-1)!.toLowerCase())).slice(0, 4);
   const prices = b.prices.map((p) => safe(p, 24)).filter(Boolean).slice(0, 3);
   const parts: string[] = [];
   if (sections.length) parts.push(SECTIONS_LEAD[Math.abs(variant) % SECTIONS_LEAD.length]!(list(sections.map((s) => s.replace(/[.:!]$/, "")))));
@@ -170,7 +204,8 @@ export function tourLine(b: Brief, variant = 0): string | null {
 const FORM_LEAD = [(f: string) => `It has a form asking for ${f}.`, (f: string) => `The form here wants ${f}.`, (f: string) => `To continue, it asks for ${f}.`];
 
 export function formLine(b: Brief, variant = 0): string | null {
-  const fields = (b.fields ?? []).map((f) => safe(f, 32)).filter(Boolean).slice(0, 4);
+  // At most three, each a noun a person could be asked for; a label that is a sentence is dropped.
+  const fields = (b.fields ?? []).map((f) => spokenLabel(safe(f, 32))).filter(Boolean).filter((f, i, all) => all.indexOf(f) === i).slice(0, 3);
   if (!fields.length) return null;
   return FORM_LEAD[Math.abs(variant) % FORM_LEAD.length]!(fields.length === 1 ? fields[0]! : list(fields));
 }
@@ -185,7 +220,7 @@ const ACTIONS_LEAD = [(a: string) => `On this screen: ${a}.`, (a: string) => `He
 
 export function actionsLine(b: Brief, variant = 0): string | null {
   if (b.sections.length || b.prices.length) return null;
-  const actions = (b.actions ?? []).map((a) => safe(a, 28)).filter(Boolean).slice(0, 4);
+  const actions = (b.actions ?? []).map((a) => spokenLabel(safe(a, 28))).filter(Boolean).filter((a, i, all) => all.indexOf(a) === i).slice(0, 4);
   if (actions.length < 2) return null;
   return ACTIONS_LEAD[Math.abs(variant) % ACTIONS_LEAD.length]!(list(actions));
 }

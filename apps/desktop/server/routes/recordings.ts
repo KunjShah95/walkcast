@@ -6,7 +6,8 @@ import type { TraceEvent } from "../../../../packages/core/src/capture/recorder.
 import { log } from "../../../../packages/core/src/ops/log.ts";
 import { analyzeRecording } from "../../../../packages/core/src/record/insights.ts";
 import { buildSilentCopy, generateCaptionsFromAudio, isVoice, renarrate, voiceover } from "../../../../packages/core/src/record/media.ts";
-import { isShape, socialExport } from "../../../../packages/core/src/record/social.ts";
+import { isCaptionStyle, isShape, socialExport } from "../../../../packages/core/src/record/social.ts";
+import { readSpan, trimRecording } from "../../../../packages/core/src/record/trim.ts";
 import { configuredSttProviders } from "../../../../packages/core/src/record/stt.ts";
 import { toSrt, toVtt, transcriptMarkdown } from "../../../../packages/core/src/record/transcript.ts";
 import { engineFor } from "../../../../packages/core/src/record/voice.ts";
@@ -98,6 +99,9 @@ export const recordingRoutes: Route[] = [
       const id = params[1]!;
       const shape = url.searchParams.get("shape");
       if (!isShape(shape)) return json(400, { error: "shape must be vertical or square" });
+      const askedStyle = url.searchParams.get("style");
+      if (askedStyle !== null && !isCaptionStyle(askedStyle)) return json(400, { error: "style must be clean, bold or minimal" });
+      const captionStyle = askedStyle ?? "clean";
       const row = await findRecording(id);
       if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
       if (media.kind !== "local") return json(501, { error: "Exports need recordings kept on this server's disk." });
@@ -107,7 +111,7 @@ export const recordingRoutes: Route[] = [
       const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
       let made: { file: string; captions: boolean };
       try {
-        made = await socialExport(dir, shape);
+        made = await socialExport(dir, shape, undefined, captionStyle);
       } catch (e) {
         return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
       }
@@ -117,6 +121,36 @@ export const recordingRoutes: Route[] = [
       writeFileSync(file, JSON.stringify(fresh, null, 2));
       await saveRecordingSummary(id, row.owner, fresh);
       return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` }, captions: made.captions });
+    },
+  },
+  // Cut a finished recording to a span: ffmpeg over the MP4, no browser, so a pacing problem
+  // does not cost a new recording. Same shape as export: one file beside the recording.
+  {
+    method: "POST",
+    path: /^\/api\/recordings\/([\w.-]+)\/trim$/,
+    auth: "owner-checked",
+    handler: async ({ url, json, params, canSee, deps: { root, media, findRecording, saveRecordingSummary } }) => {
+      const id = params[1]!;
+      const span = readSpan(url.searchParams.get("from"), url.searchParams.get("to"));
+      if (typeof span === "string") return json(400, { error: span });
+      const row = await findRecording(id);
+      if (!row || !canSee(row.owner)) return json(404, { error: "Recording not found." });
+      if (media.kind !== "local") return json(501, { error: "Cutting needs recordings kept on this server's disk." });
+      const dir = join(root, "recordings", id);
+      const file = join(dir, "recording.json");
+      if (!existsSync(file)) return json(404, { error: "Recording not found." });
+      const summary = JSON.parse(readFileSync(file, "utf8")) as RecordingSummary & Record<string, unknown>;
+      let made: Awaited<ReturnType<typeof trimRecording>>;
+      try {
+        made = await trimRecording(dir, summary.captions ?? [], span);
+      } catch (e) {
+        return json(500, { error: e instanceof Error ? e.message.split("\n").at(-1) : String(e) });
+      }
+      const fresh = rereadSummary(file, summary);
+      fresh.media = { ...fresh.media, trimmed: { ...made, from: span.from, to: span.to } };
+      writeFileSync(file, JSON.stringify(fresh, null, 2));
+      await saveRecordingSummary(id, row.owner, fresh);
+      return json(200, { recording: { ...fresh, id, dir: `recordings/${id}` } });
     },
   },
   // Re-export several existing recordings in one background job: the per-item work is exactly

@@ -51,6 +51,9 @@ export interface ParsedJourney {
   problems: JourneyProblem[];
 }
 
+/** The longest a single `wait` may hold the recording. `wait 600000` is a typo or a trap, not a pause. */
+export const MAX_WAIT_MS = 30_000;
+
 /** The verbs a journey understands, in the order a person is likely to need them. */
 const VERBS = "goto, click, fill, press, select, check, uncheck, hover, wait, waitFor, expect or scroll";
 
@@ -127,7 +130,7 @@ export function parseJourney(text: string): ParsedJourney {
       case "wait": {
         const ms = Number(args[0]);
         if (!Number.isFinite(ms) || ms < 0) return problem("wait needs a number of milliseconds, e.g. wait 500");
-        steps.push({ kind: "wait", ms });
+        steps.push({ kind: "wait", ms: Math.min(ms, MAX_WAIT_MS) });
         return;
       }
       case "waitfor": {

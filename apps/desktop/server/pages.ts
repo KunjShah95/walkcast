@@ -124,6 +124,22 @@ function sentenceCase(text: string): string {
  * the chapters seek the video. The brand is one line at the bottom, because this page is
  * somebody else's property being shown, not the app's.
  */
+/** The public site, where "Made with Walkcast" leads. */
+const PUBLIC_SITE = "https://walkcast.kunjshah.in/";
+
+/**
+ * "Made with Walkcast", as a link to the public site tagged so a visit can be traced to a share.
+ *
+ * The share URL carries the viewing token, so the link sends no Referer (the token must not leak to
+ * the site it points at) and carries only a fixed UTM tag, never the recording's id or address.
+ * WALKCAST_SHARE_BRANDING=off turns it back into plain text for an owner who wants no link.
+ */
+export function madeWith(medium: string): string {
+  if (process.env.WALKCAST_SHARE_BRANDING?.trim().toLowerCase() === "off") return `Recorded with ${NAME}.`;
+  const href = `${PUBLIC_SITE}?utm_source=share&utm_medium=${encodeURIComponent(medium)}&utm_campaign=made-with-walkcast`;
+  return `Made with <a href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${NAME}</a>, a free app that records a website as a narrated video.`;
+}
+
 export function sharePage(o: {
   title: string;
   host: string;
@@ -176,7 +192,7 @@ export function sharePage(o: {
     </section>
   </div>
   ${o.notes && o.notes.length ? `<section class="share-notes"><h2>Notes</h2><ol class="share-list">${o.notes.map((n) => `<li><button type="button" data-start="${n.at}"><span class="mono">${clock(n.at)}</span> ${esc(n.text)}</button></li>`).join("")}</ol></section>` : ""}
-  <p class="fineprint">This link stops working on <b>${esc(o.expiresAt)}</b>. Recorded with ${NAME}.</p>
+  <p class="fineprint">This link stops working on <b>${esc(o.expiresAt)}</b>. ${madeWith("share-footer")}</p>
 </div></section>
 <script>
 (function(){var v=document.getElementById("v");document.querySelectorAll("[data-start]").forEach(function(b){b.addEventListener("click",function(){if(!v)return;v.currentTime=parseFloat(b.getAttribute("data-start"))||0;v.play()})})})();

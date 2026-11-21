@@ -1,3 +1,4 @@
+import { VOICE_STYLES } from "../../../packages/core/src/record/voice-style.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type TaskId, isTaskId, normalizeScenario } from "../../../packages/core/src/app/faults.ts";
@@ -135,6 +136,8 @@ export function validateRecord(b: Record<string, unknown>, exposed: boolean, own
       ...lengthBlock(b),
       ...(b.zoom === false ? { zoom: false } : {}),
       ...(b.narration === "plain" ? { narration: "plain" } : {}),
+    ...(b.scriptWriter === "claude-code" && !exposed ? { scriptWriter: "claude-code" } : {}),
+    ...(typeof b.voiceStyle === "string" && (VOICE_STYLES as readonly string[]).includes(b.voiceStyle) ? { voiceStyle: b.voiceStyle } : {}),
       blockPrivate: false,
     };
   }
@@ -157,6 +160,8 @@ export function validateRecord(b: Record<string, unknown>, exposed: boolean, own
     ...journeyBlock(b),
     ...(b.zoom === false ? { zoom: false } : {}),
     ...(b.narration === "plain" ? { narration: "plain" } : {}),
+    ...(b.scriptWriter === "claude-code" && !exposed ? { scriptWriter: "claude-code" } : {}),
+    ...(typeof b.voiceStyle === "string" && (VOICE_STYLES as readonly string[]).includes(b.voiceStyle) ? { voiceStyle: b.voiceStyle } : {}),
     blockPrivate: exposed && process.env.LAB_ALLOW_PRIVATE !== "1",
     // The "I own this site or am authorized to test it" box, kept as a record of who confirmed
     // it, when, and for which address — not just a boolean the client sent and nobody kept.
