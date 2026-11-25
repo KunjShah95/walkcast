@@ -77,6 +77,24 @@ interface Executable {
   executablePath(sdkLanguage: string): string | undefined;
 }
 
+/** Which of the needed files are missing, for an error that says more than "exited with code 0". */
+function missing(): string[] {
+  try {
+    const require = createRequire(import.meta.url);
+    const { registry } = require("playwright-core/lib/server/registry/index") as { registry: { findExecutable(name: string): Executable | undefined } };
+    return NEEDED.flatMap((name) => {
+      const exe = registry.findExecutable(name);
+      const path = exe?.executablePath("javascript");
+      if (!exe?.directory || !path) return [`${name} (unknown to this Playwright)`];
+      if (!existsSync(path)) return [`${name} (${path})`];
+      if (!existsSync(join(exe.directory, "INSTALLATION_COMPLETE"))) return [`${name} (unpacking never finished)`];
+      return [];
+    });
+  } catch (e) {
+    return [`playwright registry unavailable: ${e instanceof Error ? e.message : String(e)}`];
+  }
+}
+
 /** Everything a recording launches is on disk and finished unpacking. */
 function installed(): boolean {
   try {
@@ -137,14 +155,14 @@ export function installChromium(): BrowserSetup {
   return browserSetup();
 }
 
-function start(stalls: number) {
+function start(stalls: number, force = false) {
   const id = ++run;
   const cli = join(dirname(createRequire(import.meta.url).resolve("playwright-core/package.json")), "cli.js");
   const temp = join(process.env.PLAYWRIGHT_BROWSERS_PATH ?? tmpdir(), ".downloading");
   rmSync(temp, { recursive: true, force: true });
   mkdirSync(temp, { recursive: true });
 
-  const child = spawn(process.execPath, [cli, "install", "chromium", "--only-shell"], {
+  const child = spawn(process.execPath, [cli, "install", ...(force ? ["--force"] : []), ...NEEDED], {
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, TEMP: temp, TMP: temp, TMPDIR: temp },
     detached: process.platform !== "win32", // its own process group, so a stall can kill the fork too
@@ -214,8 +232,14 @@ function start(stalls: number) {
     if (code === 0 && installed()) {
       status = { ...status, state: "ready", percent: 100, error: null };
       log.info("browser.install.ready", {});
+    } else if (code === 0 && !force) {
+      // A clean exit with nothing on disk: a half-finished earlier attempt that Playwright thinks is
+      // complete. Run it once more, forcing a fresh download.
+      log.warn("browser.install.incomplete", { missing: missing() });
+      start(stalls, true);
     } else {
-      const reason = tail.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).at(-1) ?? `installer exited with code ${code}`;
+      const gap = code === 0 ? `the installer finished but ${missing().join(", ")} is still missing` : null;
+      const reason = gap ?? tail.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).at(-1) ?? `installer exited with code ${code}`;
       status = { ...status, state: "failed", percent: null, error: reason };
       log.error("browser.install.failed", { code, error: reason });
     }
