@@ -501,3 +501,8 @@ and a plugin/extension API for custom faults and agent adapters.
 - [`PRODUCT.md`](PRODUCT.md) — product, users, capabilities
 - [`ROADMAP.md`](ROADMAP.md) — milestones
 - [`.env.example`](.env.example) — environment variables
+
+---
+Built by [Kunj Shah](https://kunjshah.in), AI engineer in Ahmedabad.
+[See the shipped-project portfolio and 138+ merged PRs (67 public)](https://kunjshah.in/proof-of-work).
+Available for [fixed-scope AI agent projects](https://kunjshah.in/hire-ai-agent-developer).
